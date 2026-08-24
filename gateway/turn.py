@@ -380,9 +380,9 @@ async def run_turn(
     # into its own sub-turns. The PLAYER turn's pass already sees the whole
     # exchange — the companions' beats are part of what it reads.
     if result is not None and ctx.platform != "companion" and services.settings.scribe.enabled:
-        from agent.scribe_coord import scribe_runtime
+        from agent.scribe_coord import capture_epoch, scribe_runtime
 
-        epoch = scribe_runtime.capture_epoch(ctx.chat_key)
+        epoch = await capture_epoch(services, ctx.chat_key)
         scribe_runtime.schedule(
             ctx.chat_key,
             lambda: run_scribe_pass(hub, services, ctx, text, result, snapshot_epoch=epoch),
@@ -443,7 +443,8 @@ async def run_scribe_pass(
                 await run_director(services, ctx, text, result.reply, beat=outcome.beat, hub=hub)
         # Refresh the LATEST boundary (current chronicle turn), not `result.turn`:
         # companion sub-turns have already photographed the later indexes. Skip
-        # when a later external turn has begun assembling its prompt.
+        # when the counter has moved past the turn this pass was scheduled on —
+        # that boundary belongs to a newer turn now.
         await refresh_latest_snapshot(services, ctx.chat_key, epoch=snapshot_epoch)
     except asyncio.CancelledError:
         raise

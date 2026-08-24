@@ -1,13 +1,17 @@
 """ORACLE for the per-room Scribe coordinator (order, undo, snapshot, recycle).
 
 The post-turn Scribe used to be a bare ``asyncio.create_task``. Same-room
-passes could finish out of LLM order; the next prompt could ``pop_whispers``
-before the previous write; ``.undo`` / reset / import / delete could restore
-a room a still-running pass then wrote back; and ``run_kp_turn`` photographed
-the boundary *before* the pass, so its writes sat in no rewind snapshot.
+passes could finish out of LLM order; ``.undo`` / reset / import / delete
+could restore a room a still-running pass then wrote back; and ``run_kp_turn``
+photographed the boundary *before* the pass, so its writes sat in no rewind
+snapshot.
 
-This file pins the four acceptances the coordinator exists for. Everything
-is offline: a scriptable LLM plus an ``asyncio.Event`` gate, no network.
+It pins one deliberate ABSENCE too: no turn waits on the chain. Ordering the
+passes was the bug; making the next turn park on the previous pass would hand
+the table that turn's Scribe + Director + image latency one turn later.
+
+Everything is offline: a scriptable LLM plus an ``asyncio.Event`` gate, no
+network.
 """
 
 from __future__ import annotations
@@ -20,7 +24,7 @@ import pytest
 from agent.chronicle import CHRONICLE_DOC_TYPE, chronicle_turn
 from agent.context import AgentCtx
 from agent.kp_tools import build_kp_toolset
-from agent.scribe_coord import refresh_latest_snapshot, scribe_runtime
+from agent.scribe_coord import capture_epoch, refresh_latest_snapshot, scribe_runtime
 from agent.services import build_services
 from agent.undo import available_turns, capture, restore
 from core.documents import KEEPER_VIEWER, MODVARS_ID
@@ -125,6 +129,11 @@ def _prompt_blob(messages: list[dict]) -> str:
     return "\n".join(str(message.get("content") or "") for message in messages)
 
 
+def _snapshot_state(raw: str | None) -> dict:
+    """The ``room_state`` rows of one undo snapshot, as a plain key→value map."""
+    return {row["key"]: row["value"] for row in json.loads(raw or "{}").get("room_state") or []}
+
+
 @pytest.fixture(autouse=True)
 async def _isolate_coordinator():
     await scribe_runtime.reset_for_tests()
@@ -132,8 +141,12 @@ async def _isolate_coordinator():
     await scribe_runtime.reset_for_tests()
 
 
-async def test_two_consecutive_player_turns_run_scribes_in_order_and_n_whisper_reaches_n_plus_one(tmp_path):
-    """Turn N's whisper is in turn N+1's prompt; Scribe 2 cannot start before Scribe 1 ends."""
+async def test_the_next_turn_does_not_wait_on_the_previous_turns_scribe(tmp_path):
+    """Order without waiting: turn 2 runs to completion while turn 1's pass is still out.
+
+    The waiting leg was cut in review. What the chain still owes is ORDER — pass 2 does
+    not start until pass 1 has ended — not a promise that the table stands still for it.
+    """
     evidence = "the lantern lights"
     llm = _GatedLLM(whisper="clock drifted", chronicle="They lit the lantern.", evidence=evidence)
     services = _services(llm, tmp_path)
@@ -152,27 +165,22 @@ async def test_two_consecutive_player_turns_run_scribes_in_order_and_n_whisper_r
     assert llm.scribe_finishes == []
     assert len(llm.kp_prompts) == 1
 
-    async def _turn_two() -> None:
-        async with lock:
-            await run_turn(hub, services, ctx, "I step inside", command_router=_NullRouter(), toolset=toolset)
+    # Turn 2 with the gate still shut. It has to finish anyway.
+    async with lock:
+        await run_turn(hub, services, ctx, "I step inside", command_router=_NullRouter(), toolset=toolset)
 
-    second = asyncio.create_task(_turn_two())
-    for _ in range(100):
-        if lock.locked() and not second.done() and len(llm.kp_prompts) == 1:
-            break
-        await asyncio.sleep(0)
-    else:
-        raise AssertionError("second turn never parked on the previous Scribe")
+    assert len(llm.kp_prompts) == 2, "the second turn never ran"
+    assert llm.scribe_finishes == [], "the second turn parked on the first turn's Scribe"
+    assert llm.scribe_starts == [1], "pass 2 jumped the chain instead of queueing behind pass 1"
+    # The consequence the owner accepted: whisper 1 had not been written when turn 2
+    # assembled its prompt, so it lands on a later turn instead of blocking this one.
+    assert "clock drifted-1" not in _prompt_blob(llm.kp_prompts[1])
 
     llm.gate.set()
-    await second
     await scribe_runtime.await_idle(chat_key)
 
     assert llm.scribe_starts == [1, 2]
     assert llm.scribe_finishes == [1, 2]
-    assert len(llm.kp_prompts) == 2
-    assert "clock drifted-1" in _prompt_blob(llm.kp_prompts[1])
-    assert "clock drifted-2" not in _prompt_blob(llm.kp_prompts[1])
 
 
 async def test_undo_during_a_slow_scribe_does_not_write_abandoned_trackers_or_chronicle(tmp_path):
@@ -317,10 +325,45 @@ async def test_story_reset_cancels_but_keeps_the_slot_until_idle_dispose(tmp_pat
     assert await available_turns(services, chat_key) == []
 
 
-async def test_snapshot_refresh_is_skipped_once_the_next_external_turn_has_begun():
+async def test_snapshot_refresh_runs_while_its_own_turn_still_owns_the_boundary(tmp_path):
+    """Direction one: the counter has not moved, so the pass refreshes its boundary."""
+    services = _services(FakeLLM(responder=lambda messages, tools: assistant_text("ok")), tmp_path)
+    chat_key = "scribe-refresh-owner"
+    await services.store.state_set(chat_key, "chronicle_turn", "1")
+    await services.store.state_set(chat_key, "scene", "turn-one")
+    await capture(services, chat_key, 1)
+
+    epoch = await capture_epoch(services, chat_key)
+    assert epoch.chronicle_turn == 1
+
+    await services.store.state_set(chat_key, "scene", "what-the-scribe-wrote")
+    await refresh_latest_snapshot(services, chat_key, epoch=epoch)
+
+    assert _snapshot_state(await services.store.snapshot_get(chat_key, 1)).get("scene") == "what-the-scribe-wrote"
+
+
+async def test_snapshot_refresh_stands_down_once_a_newer_turn_owns_the_boundary(tmp_path):
+    """Direction two: the counter advanced, so a late pass must not write turn N+1's photo."""
+    services = _services(FakeLLM(responder=lambda messages, tools: assistant_text("ok")), tmp_path)
     chat_key = "scribe-refresh-guard"
-    epoch = scribe_runtime.capture_epoch(chat_key)
-    await scribe_runtime.take_external_turn(chat_key)
+    await services.store.state_set(chat_key, "chronicle_turn", "1")
+    await services.store.state_set(chat_key, "scene", "turn-one")
+    await capture(services, chat_key, 1)
+    epoch = await capture_epoch(services, chat_key)
+
+    # A whole new turn lands while pass 1 is still out.
+    await services.store.state_set(chat_key, "chronicle_turn", "2")
+    await services.store.state_set(chat_key, "scene", "turn-two")
+    await capture(services, chat_key, 2)
+
+    await services.store.state_set(chat_key, "scene", "late-write-from-turn-one")
+    await refresh_latest_snapshot(services, chat_key, epoch=epoch)
+
+    assert _snapshot_state(await services.store.snapshot_get(chat_key, 2)).get("scene") == "turn-two"
+    assert _snapshot_state(await services.store.snapshot_get(chat_key, 1)).get("scene") == "turn-one"
+
+    # A cancelled chain stands down too, and the inline CLI path (no epoch) never does.
+    await scribe_runtime.cancel_and_drain(chat_key)
     assert scribe_runtime.may_refresh_snapshot(chat_key, epoch) is False
     assert scribe_runtime.may_refresh_snapshot(chat_key, None) is True
 

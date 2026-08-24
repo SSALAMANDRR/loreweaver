@@ -454,17 +454,6 @@ async def _run_kp_turn_body(
     # or an earlier turn's unconsumed dice payload attach to this turn's trace.
     ctx.consume_dice()
     ctx.consume_npc_lines()
-    # The previous player turn's Scribe is fire-and-forget so its latency never
-    # sits on that turn's already-streamed reply. This is the next *external*
-    # KP turn, and whispers are consumed read-and-clear during prompt assembly
-    # below — wait here, not at the transport choke point (that path also
-    # admits `.undo` / reset, which must cancel the chain rather than wait
-    # for it). Companion sub-turns skip: they are not a new external turn and
-    # the parent has not even scheduled its pass yet.
-    if ctx.platform != "companion":
-        from agent.scribe_coord import scribe_runtime
-
-        await scribe_runtime.take_external_turn(ctx.chat_key)
     # Event hooks (Layer C — core.hooks): one sandboxed engine per turn, inert (None) when
     # nothing is registered. turn_start fires BEFORE prompt assembly so its inject() texts and
     # variable writes shape this very turn; every later phase fires in the finalization block

@@ -51,19 +51,24 @@ names where it bit us; the fix commit is the proof it was paid for.
    else. Read the vendor's own definition before treating any of them as a
    size signal — and remember that a truncated reply arrives as a SUCCESS, so
    nothing downstream will flag it for you.
-7. **The Scribe is outside the turn lock; order is a coordinator, not a hope.**
-   Fire-and-forget hid bookkeeping latency and also hid four races: same-room
-   passes finishing out of LLM order, the next prompt popping whispers that
-   had not been written, undo/reset/import/delete restoring a room a still-
-   running pass then wrote back, and the end-of-turn snapshot being taken
-   *before* the pass so its writes sat in no rewind boundary. The per-room
-   chain lives in `agent/scribe_coord.py`. Wait at the keeper-lane prompt
-   site (`run_kp_turn`, not the transport choke point — that path also
-   admits destructive commands, which must cancel rather than wait, and
-   must not learn command names). Cancel-and-drain at the mutation entries
-   (`agent.undo.restore`, `net.room_backup` reset/import/delete). Refresh
-   the snapshot named by the *current* chronicle counter, never the player
-   turn's `result.turn` (companion sub-turns have already photographed the
-   later indexes). `CancelledError` is not an operational failure and is
-   never folded into `except Exception`. Room delete and `.reset all` drop
-   the in-process slot.
+7. **The Scribe is outside the turn lock; order is a coordinator, not a hope
+   — and ordering is not waiting.** Fire-and-forget hid bookkeeping latency
+   and also hid three races: same-room passes finishing out of LLM order,
+   undo/reset/import/delete restoring a room a still-running pass then wrote
+   back, and the end-of-turn snapshot being taken *before* the pass so its
+   writes sat in no rewind boundary. The per-room chain lives in
+   `agent/scribe_coord.py`. Fixing order is cheap; making anything WAIT on
+   that chain is not — the first draft had the next turn park on the previous
+   pass, which hauls the previous turn's Scribe + Director + image latency
+   onto the next turn's lock and hands the table the same delay one turn
+   later. Serialize the chain, never block a turn on it. Cancel-and-drain at
+   the mutation entries (`agent.undo.restore`, `net.room_backup`
+   reset/import/delete). Refresh the snapshot named by the *current*
+   chronicle counter, never the player turn's `result.turn` (companion
+   sub-turns have already photographed the later indexes) — and stand down
+   when that counter has moved past the turn the pass was scheduled on,
+   because a newer turn owns that boundary. `CancelledError` is a
+   `BaseException`: `except Exception` never sees it, so a cancel cannot be
+   logged as a bookkeeping failure and an `except asyncio.CancelledError:
+   raise` beside one is dead code. Room delete and `.reset all` drop the
+   in-process slot.

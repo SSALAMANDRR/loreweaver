@@ -2,12 +2,13 @@
 
 The post-turn Scribe is fire-and-forget so the just-finished reply can leave the
 room without waiting on a bookkeeping model call. That latency hide is load-bearing
-and stays. What it must not also hide is *order*:
+and stays — and it is why the NEXT turn does not wait for it either: making turn
+N+1 park on turn N's Scribe (plus its Director call and its image) would move all
+of that latency back onto the table, one turn later. What fire-and-forget must not
+also hide is *order*:
 
 - two same-room passes scheduled while the previous LLM is still out can finish
   out of wall-clock order and write the earlier turn's trackers over the later one;
-- the next player turn used to assemble its prompt (and ``pop_whispers``) while
-  the previous whisper was still in flight;
 - ``.undo`` / ``.reset`` / import / delete / ``.save load`` could restore or wipe
   the room under a running pass, which then wrote the abandoned state back;
 - ``run_kp_turn`` photographed the room *before* the pass, so a successful
@@ -15,19 +16,19 @@ and stays. What it must not also hide is *order*:
 
 This module is the single in-process owner of that chain. It lives in ``agent/``
 so the keeper-lane prompt site (``agent.loop``) and the undo restore can call it
-without a gateway/net reverse import. The three operations have three homes, not
-a copy in every command:
+without a gateway/net reverse import. The two operations have two homes, not a
+copy in every command:
 
 - **schedule** — ``gateway.turn`` after a player turn's reply has already streamed;
-- **wait** — ``agent.loop.run_kp_turn`` (non-companion) before prompt assembly;
 - **cancel-and-drain** — ``agent.undo.restore`` and the four ``net.room_backup``
   mutations, *before* they touch documents or room_state.
 
-Companion sub-turns never wait and never schedule: they re-enter the turn flow
-inside the same player turn, and the player's pass already sees the whole
-exchange. They *do* advance the chronicle counter, which is why a completed
-pass refreshes the snapshot named by the *current* counter, never the player
-turn's ``result.turn``.
+Companion sub-turns re-enter the turn flow inside the same player turn, and the
+player's pass already sees the whole exchange. They *do* advance the chronicle
+counter, which is why a completed pass refreshes the snapshot named by the
+*current* counter, never the player turn's ``result.turn`` — and why it stands
+down when that counter has moved past the turn it was scheduled on: a newer turn
+owns that boundary now.
 """
 
 from __future__ import annotations
@@ -45,17 +46,17 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class ScribeEpoch:
-    """The generation pair a scheduled pass captured at enqueue time.
+    """What a scheduled pass captured about the room at enqueue time.
 
     ``cancel_gen`` changes when a destructive lifecycle cancels the chain —
     a queued pass whose generation no longer matches must not start writing.
-    ``turn_gen`` changes when the next *external* KP turn begins assembling
-    its prompt — a completing pass must not refresh a snapshot the new turn
-    already owns.
+    ``chronicle_turn`` is the room's completed-turn counter as it stood when the
+    pass was scheduled — a pass that finishes after the counter has advanced must
+    not refresh a boundary a newer turn already owns.
     """
 
     cancel_gen: int
-    turn_gen: int
+    chronicle_turn: int
 
 
 @dataclass
@@ -63,7 +64,6 @@ class _RoomScribe:
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     tasks: set[asyncio.Task[None]] = field(default_factory=set)
     cancel_gen: int = 0
-    turn_gen: int = 0
 
 
 class ScribeRuntime:
@@ -76,37 +76,42 @@ class ScribeRuntime:
         """True while this process is holding coordinator memory for ``chat_key``."""
         return chat_key in self._rooms
 
-    def capture_epoch(self, chat_key: str) -> ScribeEpoch:
-        """The generation pair a newly scheduled pass should stamp on itself."""
-        state = self._ensure(chat_key)
-        return ScribeEpoch(cancel_gen=state.cancel_gen, turn_gen=state.turn_gen)
+    def cancel_generation(self, chat_key: str) -> int:
+        """The room's current cancel generation, opening the room's slot if it is new.
+
+        Opening it HERE — at epoch capture, not only at ``schedule`` — is what makes
+        the stamp comparable later: a slot that did not exist yet would read as "the
+        chain was disposed" when the finished pass asks whether it may still write.
+        """
+        return self._ensure(chat_key).cancel_gen
 
     def may_refresh_snapshot(self, chat_key: str, epoch: ScribeEpoch | None) -> bool:
-        """False when a later external turn has begun or the chain was cancelled.
+        """False when the chain this pass belongs to has been cancelled since.
 
         ``epoch is None`` is the standalone/CLI path: that caller awaits the pass
-        inline, so the next turn cannot have started.
+        inline, so nothing can have cancelled it out from under itself.
         """
         if epoch is None:
             return True
         state = self._rooms.get(chat_key)
         if state is None:
             return False
-        return state.cancel_gen == epoch.cancel_gen and state.turn_gen == epoch.turn_gen
+        return state.cancel_gen == epoch.cancel_gen
 
     def schedule(self, chat_key: str, factory: Callable[[], Awaitable[None]]) -> asyncio.Task[None]:
         """Enqueue one pass behind any in-flight pass for this room. Returns at once.
 
         The caller must not await the returned task on the turn that produced it —
-        that would put the bookkeeping latency back on the visible reply. The next
-        external KP turn awaits via ``take_external_turn``.
+        that would put the bookkeeping latency back on the visible reply. No later
+        turn awaits it either; the chain only guarantees ORDER, never that the
+        table waits for it.
         """
         state = self._ensure(chat_key)
-        epoch = ScribeEpoch(cancel_gen=state.cancel_gen, turn_gen=state.turn_gen)
+        cancel_gen = state.cancel_gen
 
         async def _run() -> None:
             async with state.lock:
-                if state.cancel_gen != epoch.cancel_gen:
+                if state.cancel_gen != cancel_gen:
                     return
                 await factory()
 
@@ -118,8 +123,8 @@ class ScribeRuntime:
     async def await_idle(self, chat_key: str) -> None:
         """Wait until this room's chain has no running pass. Does not cancel.
 
-        Shields the underlying tasks so a cancelled waiter (a dropped connection)
-        cannot take the bookkeeping pass down with it.
+        Tests and the playtest drain; no turn path calls it. Shields the underlying
+        tasks so a cancelled waiter cannot take the bookkeeping pass down with it.
         """
         while True:
             state = self._rooms.get(chat_key)
@@ -134,18 +139,6 @@ class ScribeRuntime:
         """Wait until every room's chain is idle. Tests and the playtest drain."""
         for chat_key in list(self._rooms):
             await self.await_idle(chat_key)
-
-    async def take_external_turn(self, chat_key: str) -> None:
-        """The next external KP turn's prompt-site entry: wait, then mark started.
-
-        Marking increments ``turn_gen`` so a pass that finishes *after* this turn
-        has begun assembling its prompt will not refresh the previous boundary
-        snapshot out from under it. Companion sub-turns must not call this.
-        """
-        await self.await_idle(chat_key)
-        state = self._rooms.get(chat_key)
-        if state is not None:
-            state.turn_gen += 1
 
     async def cancel_and_drain(self, chat_key: str) -> None:
         """Abort the chain and wait for every task to settle. Idempotent.
@@ -192,6 +185,16 @@ class ScribeRuntime:
 scribe_runtime = ScribeRuntime()
 
 
+async def capture_epoch(services: Any, chat_key: str) -> ScribeEpoch:
+    """What the pass being scheduled right now must remember about the room."""
+    from agent.chronicle import chronicle_turn
+
+    return ScribeEpoch(
+        cancel_gen=scribe_runtime.cancel_generation(chat_key),
+        chronicle_turn=await chronicle_turn(services.store, chat_key),
+    )
+
+
 async def refresh_latest_snapshot(services: Any, chat_key: str, *, epoch: ScribeEpoch | None = None) -> None:
     """Recapture the newest turn-boundary snapshot, if this pass still owns it.
 
@@ -199,6 +202,11 @@ async def refresh_latest_snapshot(services: Any, chat_key: str, *, epoch: Scribe
     ``result.turn``. Companion sub-turns advance that counter and have already
     photographed their own boundaries; writing the player's earlier index would
     fold their state (and this pass's writes) into the wrong snapshot.
+
+    Two ways a pass loses ownership: a destructive lifecycle cancelled the chain
+    (``may_refresh_snapshot``), or the counter has moved PAST the turn this pass
+    was scheduled on — a newer turn photographed that boundary already, and this
+    pass's older view of the room must not be written over it.
     """
     if not scribe_runtime.may_refresh_snapshot(chat_key, epoch):
         return
@@ -207,6 +215,8 @@ async def refresh_latest_snapshot(services: Any, chat_key: str, *, epoch: Scribe
 
     turn = await chronicle_turn(services.store, chat_key)
     if turn <= 0:
+        return
+    if epoch is not None and turn > epoch.chronicle_turn:
         return
     if not scribe_runtime.may_refresh_snapshot(chat_key, epoch):
         return
