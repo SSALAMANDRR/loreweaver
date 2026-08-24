@@ -491,6 +491,13 @@ def test_reload_rulepacks_picks_up_a_newly_written_pack(tmp_path: Path) -> None:
     try:
         assert "late-fixture" not in rulepacks_module.available_systems()
         _write_rulepack(tmp_path, "late-fixture", _USER_DIR_FIXTURE_YAML)
+        # Stamp the rescan throttle instead of inheriting it. "Still cached" is a claim
+        # ABOUT the throttle, and the ambient clock here is whatever the preceding tests
+        # in this file happened to take — when that age landed just under the 2s interval,
+        # the scan the line above pays for pushed the line below over it and the assertion
+        # flipped. The window is one directory scan wide, so it stayed hidden until an
+        # unrelated per-test fixture shifted the file's timing by a few milliseconds.
+        rulepacks_module._LAST_SIGNATURE_CHECK = time.monotonic()
         assert "late-fixture" not in rulepacks_module.available_systems()  # still cached
 
         rulepacks_module.reload_rulepacks()
