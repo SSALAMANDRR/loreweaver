@@ -134,11 +134,8 @@ def _snapshot_state(raw: str | None) -> dict:
     return {row["key"]: row["value"] for row in json.loads(raw or "{}").get("room_state") or []}
 
 
-@pytest.fixture(autouse=True)
-async def _isolate_coordinator():
-    await scribe_runtime.reset_for_tests()
-    yield
-    await scribe_runtime.reset_for_tests()
+# The coordinator singleton is reset around EVERY test in the suite — the autouse
+# `_fresh_scribe_chain` fixture in `tests/conftest.py`, not a local one here.
 
 
 async def test_the_next_turn_does_not_wait_on_the_previous_turns_scribe(tmp_path):
