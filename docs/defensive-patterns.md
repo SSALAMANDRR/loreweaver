@@ -72,3 +72,14 @@ names where it bit us; the fix commit is the proof it was paid for.
    logged as a bookkeeping failure and an `except asyncio.CancelledError:
    raise` beside one is dead code. Room delete and `.reset all` drop the
    in-process slot.
+8. **Cancel is not cleanup, and a native `close()` is often awaitable.**
+   `IrohServer.close` used to `task.cancel()` without awaiting the children and
+   called `endpoint.close()` without `await`. The real iroh `Endpoint.close()`
+   is async (`accept_next` returns `None` only after that await), so the
+   accept loop stayed live and the process logged
+   `RuntimeWarning: coroutine Endpoint.close was never awaited`. Snapshot the
+   tracked-task set first (done callbacks mutate it), cancel, drain
+   `CancelledError`, then `await` the endpoint close. The same class of miss:
+   do not fold `asyncio.TimeoutError` into a silent `except Exception` on a
+   documented handshake — the protocol promises `error{code:'join_timeout'}`,
+   and swallowing it makes clients redial a half-alive QUIC connection.
