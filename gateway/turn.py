@@ -372,14 +372,15 @@ async def run_turn(
     # additionally classifies the turn as a BEAT, which cues the Stage Director
     # (M19) — one extra call on beats only, never per turn.
     #
-    # Gated on `ctx.platform != "companion"` for the SAME structural reason as the
-    # director call-out above (and `gateway.director.run_director`'s own guard): a
-    # companion's own turn re-enters this function, so without it one player turn
-    # with N companions spent 1+N Scribe calls, reconciled the same trackers 1+N
-    # times off the same narrated fact, and drained the keeper whisper channel
-    # into its own sub-turns. The PLAYER turn's pass already sees the whole
-    # exchange — the companions' beats are part of what it reads.
-    if result is not None and ctx.platform != "companion" and services.settings.scribe.enabled:
+    # The companion gate lives in `run_scribe_pass` itself (below), NOT here. It is one
+    # of exactly three structural copies of that guard — `run_scribe_pass`, the director
+    # call-out above, and `gateway.director.run_director` — and AGENTS.md counts them.
+    # A companion's own turn re-enters this function, so without the guard one player
+    # turn with N companions spent 1+N Scribe calls, reconciled the same trackers 1+N
+    # times off the same narrated fact, and drained the keeper whisper channel into its
+    # own sub-turns. The PLAYER turn's pass already sees the whole exchange — the
+    # companions' beats are part of what it reads.
+    if result is not None:
         from agent.scribe_coord import capture_epoch, scribe_runtime
 
         epoch = await capture_epoch(services, ctx.chat_key)
