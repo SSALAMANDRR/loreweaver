@@ -446,8 +446,9 @@ async def run_scribe_pass(
         # when the counter has moved past the turn this pass was scheduled on —
         # that boundary belongs to a newer turn now.
         await refresh_latest_snapshot(services, ctx.chat_key, epoch=snapshot_epoch)
-    except asyncio.CancelledError:
-        raise
+    # No `except asyncio.CancelledError: raise` above this: `CancelledError` is a
+    # `BaseException`, so the guard below never sees it and a lifecycle cancel
+    # propagates on its own.
     except Exception:  # noqa: BLE001 — bookkeeping must never break the table
         logging.getLogger(__name__).debug("scribe pass failed", exc_info=True)
 

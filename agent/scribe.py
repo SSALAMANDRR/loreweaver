@@ -59,7 +59,6 @@ every other claim, and it rides the ordinary whisper channel: observe, never enf
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from dataclasses import dataclass
@@ -239,8 +238,6 @@ async def _npc_watch_section(services: Services, chat_key: str) -> tuple[str, fr
     """
     try:
         records = await list_npcs(services.documents, chat_key)
-    except asyncio.CancelledError:
-        raise
     except Exception:  # noqa: BLE001 — a room whose NPC docs won't load still gets everything else
         return "", frozenset()
     scoped = [record for record in records if record.name.strip() and record.knowledge][:_NPC_WATCH_MAX]
@@ -306,8 +303,6 @@ async def _record_habit(services: Services, ctx: AgentCtx, raw: Any) -> None:
         await services.documents.put(ctx.chat_key, HABITS_DOC_TYPE, HABITS_ID, data)
         if promoted:
             logger.debug("scribe: table habit promoted for %s: %s", ctx.chat_key, summary)
-    except asyncio.CancelledError:
-        raise
     except Exception as exc:  # noqa: BLE001 — bookkeeping must never break the table
         logger.debug("scribe: habit note dropped: %s", exc)
 
@@ -342,8 +337,6 @@ async def _record_auto_chronicle(
         return False  # a quiet turn records nothing — most turns of pure talk land here
     try:
         await record_entry(services, ctx.chat_key, text=text, turn=turn)
-    except asyncio.CancelledError:
-        raise
     except Exception as exc:  # noqa: BLE001 — bookkeeping must never break the table
         logger.debug("scribe: auto chronicle record dropped: %s", exc)
         return False
@@ -361,8 +354,9 @@ async def run_scribe(
     """One reconciliation pass (see :class:`ScribePass`).
 
     Operational failures never raise — bookkeeping must not break the table.
-    ``asyncio.CancelledError`` is not an operational failure and always
-    propagates, so a lifecycle cancel-and-drain can abort mid-write.
+    ``asyncio.CancelledError`` still propagates, so a lifecycle cancel-and-drain
+    can abort mid-write: it is a ``BaseException``, which no ``except Exception``
+    here can catch. That is the whole mechanism — it needs no code.
     """
     settings = services.settings.scribe
     if not settings.enabled:
@@ -377,8 +371,6 @@ async def run_scribe(
     try:
         view = await services.documents.get_view(ctx.chat_key, MODVARS_DOC_TYPE, MODVARS_DOC_ID, KEEPER_VIEWER)
         trackers = wire_entries(view or {}, ctx.locale)
-    except asyncio.CancelledError:
-        raise
     except Exception:  # noqa: BLE001 — a room without trackers still gets whispers
         trackers = []
     tracker_lines = "\n".join(
@@ -400,8 +392,6 @@ async def run_scribe(
     try:
         with lane_scope("scribe", chat_key=ctx.chat_key):
             result = await _scribe_llm(services).chat([{"role": "user", "content": prompt}])
-    except asyncio.CancelledError:
-        raise
     except Exception as exc:  # noqa: BLE001 — bookkeeping must never break the table
         logger.debug("scribe: llm call failed: %s", exc)
         trace_event(SCRIBE_TRACE_KIND, {"outcome": "llm_failed"}, chat_key=ctx.chat_key)
