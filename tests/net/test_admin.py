@@ -1516,7 +1516,11 @@ async def test_import_room_rolls_back_every_component_when_key_persistence_fails
 
 
 async def test_import_room_replaces_live_extras_the_snapshot_does_not_name(tmp_path):
-    """A load is a checkpoint, not a merge: extras added after export must vanish."""
+    """A load is a checkpoint, not a merge: extras added after export must vanish.
+
+    Campaign content, that is. Room wiring — `bound_room.*` bindings, like bearer keys —
+    is restore-only, so a binding made after the save survives the load.
+    """
     services = _services(str(tmp_path))
     keystore = Keystore()
     keystore.add(room="arkham", name="Keeper", role="keeper")
@@ -1567,7 +1571,11 @@ async def test_import_room_replaces_live_extras_the_snapshot_does_not_name(tmp_p
     assert await services.store.state_get(chat_key, "game_clock") == "snapshot-clock"
     assert await services.store.state_get(chat_key, "kp_notes") is None
     assert await services.store.get(store_key="bound_room.discord:group:table") == chat_key
-    assert await services.store.get(store_key="bound_room.discord:group:extra") is None
+    # ... except the bindings, which are RESTORE-ONLY for the same reason bearer keys are:
+    # `bound_room.*` says which platform conversation reaches this room — wiring, not
+    # campaign content. A table connected after the save was taken keeps its way in; the
+    # load replaces the story it walks into, not the door it walks through.
+    assert await services.store.get(store_key="bound_room.discord:group:extra") == chat_key
     assert [point["id"] for point in await room_vector_points(services, chat_key)] == ["kept:0"]
     assert [record.hash for record in await media_store.list_room_records(chat_key)] == [kept_media.hash]
     with pytest.raises(MediaError, match="media_not_found"):
@@ -1623,6 +1631,56 @@ async def test_import_rollback_restores_history_after_a_later_leg_fails(tmp_path
             )
 
     assert await services.store.history_rows(chat_key) == original_history
+
+
+async def test_import_completes_when_one_extra_media_blob_is_unreadable(tmp_path):
+    """One bad EXTRA blob cannot block the repair a `.save load` IS.
+
+    The load was going to drop that blob anyway, so a corrupt one is nothing the load
+    can lose — it is logged and skipped, and everything else still restores.
+    `delete_room_data` keeps the hard failure: there the blob is one the operation
+    promises to be able to hand back, so refusing to start is the only safe answer.
+    """
+    services = _services(str(tmp_path))
+    keystore = Keystore()
+    keystore.add(room="arkham", name="Keeper", role="keeper")
+    chat_key = chat_key_for_room("arkham")
+    await services.documents.put(chat_key, "lore", "kept", {"title": "Kingsport"})
+    await services.store.state_set(chat_key, "game_clock", "snapshot-clock")
+    media_store = MediaStore(
+        services.store,
+        services.settings.data_dir,
+        allowed_mimes=ALLOWED_MEDIA_MIMES,
+    )
+    kept_media = await media_store.register_blob(
+        room=chat_key,
+        data=b"kept handout",
+        mime="image/png",
+        name="kept.png",
+        uploader="keeper",
+    )
+    exported = await export_room(services, keystore, "arkham", "corrupt-extra.json")
+
+    await services.documents.put(chat_key, "lore", "extra", {"title": "after export"})
+    await services.store.state_set(chat_key, "kp_notes", "after-export")
+    extra_media = await media_store.register_blob(
+        room=chat_key,
+        data=b"extra handout",
+        mime="image/png",
+        name="extra.png",
+        uploader="keeper",
+    )
+    # The index row still promises the blob; the bytes on disk no longer match it.
+    media_store._path(chat_key, extra_media.hash).write_bytes(b"tampered bytes")
+
+    await import_room(services, keystore, Path(exported["path"]).name, expected_room="arkham")
+
+    docs = await services.store.doc_list(chat_key)
+    assert {(row["type"], row["id"]) for row in docs} == {("lore", "kept")}
+    assert await services.store.state_get(chat_key, "game_clock") == "snapshot-clock"
+    assert await services.store.state_get(chat_key, "kp_notes") is None
+    assert (await media_store.read_bytes(chat_key, kept_media.hash))[1] == b"kept handout"
+    assert [record.hash for record in await media_store.list_room_records(chat_key)] == [kept_media.hash]
 
 
 async def test_admin_room_ops_are_scoped_to_the_callers_room():

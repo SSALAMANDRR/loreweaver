@@ -98,7 +98,9 @@ _VECTOR_OWNERSHIP_FIELDS = frozenset({"chat_key", "namespace"})
 # architecture test requires every facet storage to appear here or to be export-exempt,
 # and an export-exempt storage must be CLEARED on import (below) instead. A load is a
 # whole-room checkpoint: each carried storage is replaced, not merged, so live rows the
-# snapshot does not name disappear with the export-exempt ones.
+# snapshot does not name disappear with the export-exempt ones. The one exception is the
+# KV section: `bound_room.*` rows are wiring, not campaign content, so — like bearer keys
+# — they are restored, never deleted (see `import_room`).
 EXPORT_SECTIONS: dict[str, str] = {
     STORAGE_DOCUMENTS: "documents",
     STORAGE_ROOM_STATE: "room_state",
@@ -858,8 +860,15 @@ async def _replace_room_content(
     *,
     clear_storages: tuple[str, list[str]] | None = None,
     preserve_foreign_bindings: bool = True,
+    replace_bindings: bool = True,
 ) -> None:
-    current = await room_rows(services, chat_key, enforce_limits=False)
+    """Replace the room's store portion in one transaction.
+
+    ``replace_bindings=False`` makes the KV leg restore-only: the snapshot's
+    ``bound_room.*`` rows are written, and a binding the snapshot does not name is
+    left alone. That is the LOAD posture — see the call in ``import_room``.
+    """
+    current = await room_rows(services, chat_key, enforce_limits=False) if replace_bindings else []
     await _atomic_store_update(
         services,
         delete_rows=current,
@@ -1007,7 +1016,17 @@ async def _stage_room_media(
     services: Services,
     chat_key: str,
     records: list[MediaRecord],
+    *,
+    skip_unreadable: bool = False,
 ) -> tuple[Path, list[_StagedMedia]]:
+    """Hard-link (or copy) each record's blob aside so a failed leg can put it back.
+
+    ``skip_unreadable`` is the LOAD posture. A delete must refuse to start when a blob
+    it promises to restore cannot be read — losing it would be silent data loss. A load
+    only stages the EXTRAS it is about to drop, so one already-missing or already-corrupt
+    blob is nothing the load can lose: it is logged and left out of the staging set
+    rather than blocking the repair the operator asked for.
+    """
     root = _backup_base(services) / ".transactions" / uuid.uuid4().hex
     ensure_private_directory(root)
     media = _media_store(services)
@@ -1020,6 +1039,13 @@ async def _stage_room_media(
                 or original.stat().st_size != record.size
                 or _hash_path(original) != record.hash
             ):
+                if skip_unreadable:
+                    logger.warning(
+                        "room media blob is missing or corrupt; staging skipped for hash=%s room=%s",
+                        record.hash,
+                        chat_key,
+                    )
+                    continue
                 raise ValueError("room media is missing or corrupt")  # i18n-exempt: internal admin op detail
             backup = root / record.hash
             _link_or_copy(original, backup)
@@ -1663,16 +1689,25 @@ async def import_room(
     cleared_storages = sorted(room_registry().storages_not_exported())
     # Live blobs the snapshot does not name are extras: they must leave on a successful
     # load, and they must come back if a later leg fails. Stage them before any mutation
-    # so rollback can put the bytes back after the live copies are removed.
+    # so rollback can put the bytes back after the live copies are removed. An extra whose
+    # bytes are already gone or already corrupt is logged and skipped, never fatal: a load
+    # is the operator's repair, and refusing it over a blob the load was going to drop
+    # anyway would make one bad file lock the whole room out of every snapshot it has.
     extra_media = [record for record in state.media if record.hash not in media_hashes]
     stage_root: Path | None = None
     staged_media: list[_StagedMedia] = []
     if extra_media:
-        stage_root, staged_media = await _stage_room_media(services, new_chat_key, extra_media)
+        stage_root, staged_media = await _stage_room_media(
+            services, new_chat_key, extra_media, skip_unreadable=True
+        )
     created_media_hashes: set[str] = set()
     try:
         # A load is a checkpoint replacement, not a merge: wipe the live room's
-        # exportable rows, then write the snapshot.
+        # exportable rows, then write the snapshot. Campaign content only —
+        # `bound_room.*` rows are restore-only, for the same reason bearer keys
+        # are: a binding is WIRING (which platform conversation reaches this
+        # room), not campaign content, so a table someone connected after the
+        # save was taken keeps reaching the room the load restores.
         await _replace_room_content(
             services,
             new_chat_key,
@@ -1680,6 +1715,7 @@ async def import_room(
             validated_documents,
             validated_state,
             clear_storages=(new_chat_key, cleared_storages),
+            replace_bindings=False,
             # A live binding that already names another room is a conflict, not a
             # merge: fail the load rather than silently drop the snapshot row.
             # Rollback (the default) skips that upsert so a concurrent rebind wins.
