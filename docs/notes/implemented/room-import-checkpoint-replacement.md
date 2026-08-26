@@ -28,6 +28,17 @@
     load was going to drop that blob anyway — one bad file must not lock a room
     out of every snapshot it has. `delete_room_data` keeps the hard failure:
     there the blob is one the operation promises to be able to hand back.
+- **Amendment (2026-08-26): the extras leave the index before the snapshot's
+  media are written.** Staging only moved the extras' BLOBS aside; their
+  `media_index` rows survived until after the snapshot's media had been
+  committed, so they kept counting against the room quota during that write. A
+  room that cleared its media and refilled the quota with new files could
+  therefore no longer load its own older save — the snapshot's hashes were no
+  longer indexed to short-circuit the duplicate check, and the extras the load
+  was about to delete pushed it over `media_quota_exceeded`. The drop now runs
+  first, which keeps it inside the same compensation rather than outside it:
+  `_restore_staged_media` already returns both halves, bytes and index rows, on
+  a later leg's failure. `delete_room_data` is untouched.
 - **Rule home:** `net/room_backup.py` (`import_room`, `_replace_room_*`,
   `_rollback_room_state`); AGENTS.md lifecycle paragraph (`room_backup` owns
   order and atomicity).

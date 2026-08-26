@@ -1749,6 +1749,24 @@ async def import_room(
                 for point_id, vector, payload in validated_vectors
             ],
         )
+        # The extras leave the INDEX *before* the snapshot's own media are written, not
+        # after. Staging moved their BLOBS aside, but their `media_index` rows stayed and
+        # kept counting against the room quota — so a room that cleared its media and
+        # refilled the quota with new files could no longer load its own older save: the
+        # snapshot's hashes were no longer indexed (nothing to short-circuit the duplicate
+        # check) and the extras this load was on its way to delete pushed the write over
+        # `media_quota_exceeded`. Dropping them first does not move them out of the
+        # compensation — it moves them INTO more of it: `_restore_staged_media` puts both
+        # halves back, the bytes and the index rows, if any later leg fails. (An extra
+        # whose blob was already missing or corrupt has no staged copy, so its row does
+        # not come back; it pointed at bytes that were gone either way, and the load was
+        # going to drop it.)
+        if extra_media:
+            await _remove_imported_media(
+                services,
+                new_chat_key,
+                {record.hash for record in extra_media},
+            )
         for pending, data in validated_media:
             file_limit, quota_limit, allowed_mimes = _media_policy(services, pending.mime)
             existing = await media_store.validate_offer(
@@ -1763,12 +1781,6 @@ async def import_room(
             if existing is None:
                 await media_store.commit_bytes(pending, data)
                 created_media_hashes.add(pending.sha256)
-        if extra_media:
-            await _remove_imported_media(
-                services,
-                new_chat_key,
-                {record.hash for record in extra_media},
-            )
 
         imported_keys = 0
         with keystore.persisted_mutation():

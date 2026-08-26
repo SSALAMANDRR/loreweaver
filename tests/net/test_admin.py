@@ -1147,6 +1147,106 @@ async def test_room_vector_restore_preserves_canonical_ids_and_future_upserts(tm
     assert points[0]["payload"]["text"] == "updated clue"
 
 
+def _quota_services(tmp_path, quota: int):
+    """A room whose IMAGE quota is small enough for two files to cross it."""
+    settings = Settings(
+        _env_file=None,
+        locale="en",
+        data_dir=str(tmp_path),
+        llm=LLMSettings(provider="openai", chat_model="gpt-4o"),
+        imagegen=ImageGenSettings(),
+        tui=TuiSettings(media_max_file_bytes=quota, media_room_quota_bytes=quota),
+    )
+    return build_services(settings, llm=FakeLLM(script=[]), embeddings=FakeEmbeddings(64))
+
+
+def _quota_media_store(services, quota: int) -> MediaStore:
+    return MediaStore(
+        services.store,
+        services.settings.data_dir,
+        max_file_bytes=quota,
+        room_quota_bytes=quota,
+        allowed_mimes=ALLOWED_MEDIA_MIMES,
+    )
+
+
+async def test_loading_an_old_save_drops_the_extras_from_the_index_before_writing_its_own_media(tmp_path):
+    """A load must not be refused over media it is on its way to delete.
+
+    Staging only moved the extras' BLOBS aside — their `media_index` rows stayed, and the
+    snapshot's media were written after. So a room that cleared its media and refilled the
+    quota with new files could no longer load its own older save: the snapshot's hashes were
+    no longer in the index to short-circuit the quota check, and the extras it was about to
+    drop counted against them. (Save→upload→load without the clear passes only because the
+    snapshot's hashes ARE still indexed.)
+    """
+    quota = 1024
+    services = _quota_services(tmp_path, quota)
+    keystore = Keystore()
+    room = "arkham"
+    chat_key = chat_key_for_room(room)
+    media_store = _quota_media_store(services, quota)
+
+    saved = await media_store.register_blob(
+        room=chat_key, data=b"S" * 600, mime="image/png", name="handout.png", uploader="keeper"
+    )
+    await services.store.state_set(chat_key, "chat_history", "arkham-v1")
+    exported = await export_room(services, keystore, room, "old.json")
+    assert exported["media_files"] == 1
+
+    # The room moves on: the saved handout is cleared and a new file refills the quota.
+    assert await media_store.delete_room(chat_key) == 1
+    replacement = await media_store.register_blob(
+        room=chat_key, data=b"N" * 600, mime="image/png", name="new.png", uploader="keeper"
+    )
+
+    await import_room(services, keystore, Path(exported["path"]).name, expected_room=room)
+
+    hashes = {record.hash for record in await media_store.list_room_records(chat_key)}
+    assert hashes == {saved.hash}, "the load must end on exactly the snapshot's media"
+    assert replacement.hash not in hashes
+    _, restored = await media_store.read_bytes(chat_key, saved.hash)
+    assert restored == b"S" * 600
+    assert not (Path(services.settings.data_dir) / "media" / chat_key / replacement.hash).exists()
+
+
+async def test_a_failed_leg_after_the_extras_left_the_index_puts_their_rows_and_files_back(tmp_path):
+    """Dropping the extras earlier moves them under the SAME compensation, not out of it.
+
+    The extras' index rows now go before the snapshot's media are written, so a later leg's
+    failure has to restore both halves — rows and bytes — not just the staged files.
+    """
+    quota = 1024
+    services = _quota_services(tmp_path, quota)
+    keystore = Keystore()
+    room = "arkham"
+    chat_key = chat_key_for_room(room)
+    media_store = _quota_media_store(services, quota)
+    keystore.add(room=room, name="Keeper", role="keeper")
+
+    saved = await media_store.register_blob(
+        room=chat_key, data=b"S" * 600, mime="image/png", name="handout.png", uploader="keeper"
+    )
+    await services.store.state_set(chat_key, "chat_history", "arkham-v1")
+    exported = await export_room(services, keystore, room, "rollback.json")
+    assert await media_store.delete_room(chat_key) == 1
+    replacement = await media_store.register_blob(
+        room=chat_key, data=b"N" * 600, mime="image/png", name="new.png", uploader="keeper"
+    )
+
+    # The keys leg runs last, after every media mutation — a clean place to break.
+    with patch.object(keystore_module.Keystore, "restore", side_effect=RuntimeError("keystore is down")):
+        with pytest.raises(Exception):
+            await import_room(services, keystore, Path(exported["path"]).name, expected_room=room)
+
+    records = {record.hash: record for record in await media_store.list_room_records(chat_key)}
+    assert replacement.hash in records, "the extra's index row must come back with its bytes"
+    assert records[replacement.hash].name == "new.png"
+    _, rolled_back = await media_store.read_bytes(chat_key, replacement.hash)
+    assert rolled_back == b"N" * 600
+    assert saved.hash not in records, "the snapshot's media must not survive a failed load"
+
+
 async def test_room_import_rejects_a_vector_id_owned_by_another_room(tmp_path):
     services = _services(str(tmp_path))
     room = "arkham"
