@@ -372,14 +372,16 @@ async def run_turn(
     # additionally classifies the turn as a BEAT, which cues the Stage Director
     # (M19) — one extra call on beats only, never per turn.
     #
-    # The companion gate lives in `run_scribe_pass` itself (below), NOT here. It is one
-    # of exactly three structural copies of that guard — `run_scribe_pass`, the director
-    # call-out above, and `gateway.director.run_director` — and AGENTS.md counts them.
-    # A companion's own turn re-enters this function, so without the guard one player
-    # turn with N companions spent 1+N Scribe calls, reconciled the same trackers 1+N
-    # times off the same narrated fact, and drained the keeper whisper channel into its
-    # own sub-turns. The PLAYER turn's pass already sees the whole exchange — the
-    # companions' beats are part of what it reads.
+    # BOTH gates live in `run_scribe_pass` itself (below), NOT here — the companion one
+    # and the "this turn committed nothing" one (`result.turn <= 0`, the provider-error
+    # early return). The companion gate is one of exactly three structural copies —
+    # `run_scribe_pass`, the director call-out above, and `gateway.director.run_director`
+    # — and AGENTS.md counts them. A companion's own turn re-enters this function, so
+    # without it one player turn with N companions spent 1+N Scribe calls, reconciled the
+    # same trackers 1+N times off the same narrated fact, and drained the keeper whisper
+    # channel into its own sub-turns. The PLAYER turn's pass already sees the whole
+    # exchange — the companions' beats are part of what it reads. Keeping the turn gate
+    # down there too is what makes the inline CLI path (`gateway.runner`) obey it.
     if result is not None:
         from agent.scribe_coord import capture_epoch, scribe_runtime
 
@@ -421,8 +423,22 @@ async def run_scribe_pass(
     without the gate one player turn with N companions spent 1+N Scribe calls and
     drained the whisper channel into its own sub-turns. The PLAYER turn's pass
     already sees the whole exchange.
+
+    Gated on ``result.turn`` for a second one: a turn that committed nothing has no
+    boundary to bookkeep. ``run_kp_turn`` still RETURNS on a provider error — a
+    localized diagnosis carrying ``turn == 0`` — but it persists no history and never
+    advances the chronicle counter. Running the pass anyway pointed
+    `refresh_latest_snapshot` at the UNMOVED counter, so the previous turn's undo
+    snapshot was re-photographed with the dead attempt's `turn_start` hook writes, the
+    tool calls that landed before the provider died, and the pass's own whisper welded
+    into it — and ``.undo`` to that turn could no longer take them out. The
+    auto-chronicle lane (`agent.scribe._record_auto_chronicle`) already refuses
+    ``turn <= 0`` for the same reason; this is that line drawn one level up, where it
+    also covers the model call and the snapshot. It lives HERE, not at the two call
+    sites, so the hub path and the inline CLI path (`gateway.runner`) cannot drift —
+    the same reason the companion gate sits here.
     """
-    if ctx.platform == "companion" or not services.settings.scribe.enabled:
+    if ctx.platform == "companion" or not services.settings.scribe.enabled or result.turn <= 0:
         return
     names = [str(entry.get("name", "")) for entry in result.tool_trace]
     try:

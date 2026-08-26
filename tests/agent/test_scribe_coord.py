@@ -33,7 +33,7 @@ from gateway.hub import RoomHub
 from gateway.turn import run_scribe_pass, run_turn
 from infra.config import Settings
 from infra.embeddings import FakeEmbeddings
-from infra.llm import ChatResult, FakeLLM, assistant_text
+from infra.llm import ChatResult, FakeLLM, assistant_text, assistant_tools, tool_call
 from net.keystore import Keystore
 from net.room_backup import chat_key_for_room, delete_room_data, reset_room_state
 
@@ -87,6 +87,39 @@ class _GatedLLM:
             ),
             tool_calls=[],
         )
+
+
+class _DyingLLM:
+    """Turn one lands. Turn two moves a tracker with a tool, then the provider dies.
+
+    Non-retryable by construction: an injected LLM is never wrapped in ``RetryingLLM``
+    (that wrapper belongs to the real-provider factory), so the raise reaches
+    ``run_kp_turn`` on the first attempt with no backoff to sit through.
+    """
+
+    FATAL_TURN = "I open the ledger"
+
+    def __init__(self) -> None:
+        self.scribe_calls = 0
+        self.rounds_on_the_fatal_turn = 0
+
+    async def chat(self, messages, *, tools=None, **_kwargs):
+        blob = "\n".join(str(message.get("content") or "") for message in messages)
+        if not tools:
+            if "silent ledger clerk" in blob:
+                self.scribe_calls += 1
+            # Write nothing: the only tracker movement in this test is the tool call the
+            # dead turn got through, so a changed value can only have come from there.
+            return ChatResult(
+                content=json.dumps({"ops": [], "whispers": [], "chronicle": "", "beat": "none"}),
+                tool_calls=[],
+            )
+        if self.FATAL_TURN not in blob:
+            return ChatResult(content="The match catches.", tool_calls=[])
+        self.rounds_on_the_fatal_turn += 1
+        if self.rounds_on_the_fatal_turn == 1:
+            return assistant_tools(tool_call("set_variable", var_id="tokens", value="7"))
+        raise RuntimeError("provider went away mid-turn")
 
 
 def _services(llm, tmp_path):
@@ -363,6 +396,51 @@ async def test_snapshot_refresh_stands_down_once_a_newer_turn_owns_the_boundary(
     await scribe_runtime.cancel_and_drain(chat_key)
     assert scribe_runtime.may_refresh_snapshot(chat_key, epoch) is False
     assert scribe_runtime.may_refresh_snapshot(chat_key, None) is True
+
+
+async def test_a_failed_turn_gets_no_pass_and_leaves_the_undo_boundary_where_it_was(tmp_path):
+    """A provider death commits nothing, so it must not re-photograph the boundary.
+
+    ``run_kp_turn`` still RETURNS on a provider error — a localized diagnosis whose
+    ``turn`` stays 0 — and it deliberately persists no history, so the room's chronicle
+    counter does not move. Scheduling the post-turn pass anyway ran
+    ``refresh_latest_snapshot`` against that UNMOVED counter, welding the dead attempt's
+    tool writes into the very snapshot ``.undo`` uses to remove them. The auto-chronicle
+    lane already draws this line at ``turn <= 0``; the pass has to draw the same one.
+    """
+    llm = _DyingLLM()
+    services = _services(llm, tmp_path)
+    chat_key = "scribe-failed-turn"
+    await _with_tracker(services, chat_key)
+    hub = RoomHub()
+    ctx = _ctx(chat_key)
+    toolset = build_kp_toolset(services)
+
+    await run_turn(hub, services, ctx, "I strike the match", command_router=_NullRouter(), toolset=toolset)
+    await scribe_runtime.await_idle(chat_key)
+    assert await chronicle_turn(services.store, chat_key) == 1
+    assert await _tracker_value(services, chat_key) == 0
+    passes_after_the_good_turn = llm.scribe_calls
+    assert passes_after_the_good_turn == 1
+
+    result = await run_turn(
+        hub, services, ctx, _DyingLLM.FATAL_TURN, command_router=_NullRouter(), toolset=toolset
+    )
+    await scribe_runtime.await_idle(chat_key)
+
+    # The turn committed nothing: no history, no counter movement, `turn` still 0 …
+    assert result is not None
+    assert result.turn == 0
+    assert await chronicle_turn(services.store, chat_key) == 1
+    # … but the tool call it got through before the provider died is live in the room.
+    assert await _tracker_value(services, chat_key) == 7
+
+    # THE HARM: turn 1's boundary is still turn 1's, so a rewind can undo the dead attempt.
+    assert await restore(services, chat_key, 1)
+    assert await _tracker_value(services, chat_key) == 0
+
+    # THE CAUSE: a turn that committed nothing gets no pass at all.
+    assert llm.scribe_calls == passes_after_the_good_turn
 
 
 async def test_cancelled_scribe_pass_does_not_swallow_cancellation_as_a_logged_success(tmp_path):

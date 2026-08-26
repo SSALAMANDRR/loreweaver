@@ -31,6 +31,18 @@
   flow inside the same player turn and they advance the counter, which is why
   a refresh must not write `result.turn`. The coordinator stays in `agent/` so
   the undo restore does not grow a gateway/net reverse import.
+- **Amendment (2026-08-26): a turn that committed nothing gets no pass.** The
+  scheduling guard was a bare `if result is not None`, but `run_kp_turn` also
+  RETURNS on a provider error — a diagnosis carrying `turn == 0`, with no
+  history persisted and the chronicle counter unmoved. The pass ran for that
+  dead turn too, and `refresh_latest_snapshot` re-photographed the UNMOVED
+  counter's boundary, welding the failed attempt's `turn_start` hook writes,
+  the tool calls that landed before the provider died, and the pass's own
+  whisper into the previous turn's snapshot — which `.undo` could then no
+  longer remove. `run_scribe_pass` now returns early on `result.turn <= 0`,
+  beside the companion gate rather than at the two call sites, so the hub path
+  and the inline CLI path (`gateway.runner`) cannot drift. Same line the
+  auto-chronicle lane already drew.
 - **`CancelledError` note:** it derives from `BaseException`, so the
   `except Exception` guard around the pass never caught it in the first place.
   The property the note claims is real; the `except asyncio.CancelledError:
