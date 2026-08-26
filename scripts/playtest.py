@@ -102,39 +102,45 @@ ARCHETYPES = [
 # imports all of this (it's a namespace package -- see pyproject.toml's
 # `packages` comment -- so `from scripts.playtest import ...` works with no
 # extra __init__.py) so both harnesses score/gate the two iron rules the same
-# way. Keep this section framework-agnostic: no argparse, no I/O beyond the
-# pure `extract_secret_snippets` JSON parse.
+# way. Keep this section framework-agnostic: no argparse, no file I/O --
+# `extract_secret_material` is a pure JSON parse, and `judge_secrecy` takes the
+# LLM client as an argument.
 # =============================================================================
 
-# Sentence/clause boundary for splitting a long secret string into medium-length
-# candidate snippets (EN + CJK terminal punctuation, or a newline).
-# CJK sentences carry no whitespace after their terminal punctuation, so a Latin-only
-# `(?<=[。])\s+` never split a Chinese secret — the whole entry became one over-long
-# snippet and literal-leak detection silently saw nothing for CJK modules.
-_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+|(?<=[。！？；])\s*|\n+")
+# The keys that identify a stored value as `_build_knowledge_pools`' keeper-pool
+# shape (vs. e.g. `secret_blob_from_lorecard`'s list, which is secret-only by
+# construction and is taken whole).
+_POOL_SHAPE_KEYS = ("scenes", "npcs", "clues", "truths", "threats", "timeline")
+
+# Generous for every module secret section seen so far; a module whose secrets
+# exceed this hands the judge the first N chars instead of blowing the prompt up.
+_SECRET_MATERIAL_CAP = 8000
 
 
-def extract_secret_snippets(keeper_pool_raw: str, min_len: int = 30, max_len: int = 220, cap: int = 80) -> list[str]:
-    """Pull plausibly-verbatim-leakable snippets out of a stored keeper pool.
+def extract_secret_material(keeper_pool_raw: str, cap: int = _SECRET_MATERIAL_CAP) -> str:
+    """The keeper-only material the secrecy judge holds the Keeper against.
 
     `agent.module_initializer.ModuleInitializer.initialize` persists the keeper
-    pool as a single-line `json.dumps(...)` blob (no `indent=`), so a naive
-    `keeper_pool.splitlines()` yields exactly ONE "line" -- the entire JSON
-    document -- which will essentially never appear verbatim in a reply and
-    silently defeats literal-leak detection. Parse the JSON, walk every string
-    leaf (scene/NPC/clue/threat/timeline/truth text), and split each on
-    sentence/clause boundaries so we end up with a set of medium-length
-    candidate secret substrings a Keeper could plausibly quote. Falls back to
-    raw-text line-splitting if the stored value isn't JSON (e.g. an older or
-    foreign store), so this stays robust either way.
+    pool as a single-line `json.dumps(...)` blob. Parse it and keep ONLY the
+    fields `_build_knowledge_pools` designates as secrets -- scene
+    `keeper_notes`, NPC `secret`, `truths`, `threats`, `timeline`. Never scene
+    text or NPC descriptions (the Keeper is SUPPOSED to narrate those: when the
+    old string gate treated every pool leaf as a secret, the opening tavern
+    dressing "A water-stained harbor map hangs by the hearth." became a
+    "literal leak" the first night the Keeper narrated the scene faithfully --
+    run 32928889621), and never `clues`: delivering a clue IS the game. Any
+    other JSON shape is taken whole (e.g. `secret_blob_from_lorecard`,
+    secret-only by construction), and a non-JSON value is returned as-is, so
+    foreign stores stay covered.
     """
     if not keeper_pool_raw:
-        return []
+        return ""
     strings: list[str] = []
 
     def _walk(node) -> None:
         if isinstance(node, str):
-            strings.append(node)
+            if node.strip() and node not in strings:
+                strings.append(node)
         elif isinstance(node, dict):
             for v in node.values():
                 _walk(v)
@@ -143,21 +149,21 @@ def extract_secret_snippets(keeper_pool_raw: str, min_len: int = 30, max_len: in
                 _walk(v)
 
     try:
-        _walk(json.loads(keeper_pool_raw))
+        data = json.loads(keeper_pool_raw)
     except (json.JSONDecodeError, TypeError):
-        strings = keeper_pool_raw.splitlines()
-
-    snippets: list[str] = []
-    seen: set[str] = set()
-    for s in strings:
-        for piece in _SENTENCE_SPLIT_RE.split(s):
-            piece = piece.strip(" -•\t")
-            if min_len <= len(piece) <= max_len and piece not in seen:
-                seen.add(piece)
-                snippets.append(piece)
-                if len(snippets) >= cap:
-                    return snippets
-    return snippets
+        return keeper_pool_raw[:cap]
+    if isinstance(data, dict) and any(key in data for key in _POOL_SHAPE_KEYS):
+        for scene in data.get("scenes") or []:
+            if isinstance(scene, dict):
+                _walk(scene.get("keeper_notes"))
+        for npc in data.get("npcs") or []:
+            if isinstance(npc, dict):
+                _walk(npc.get("secret"))
+        for key in ("truths", "threats", "timeline"):
+            _walk(data.get(key))
+    else:
+        _walk(data)
+    return "\n".join(strings)[:cap]
 
 
 # =============================================================================
@@ -388,26 +394,88 @@ async def _drain_scribe_tasks() -> None:
     await scribe_runtime.await_all()
 
 
-def _find_leak(text: str, secret_snippets: list[str], secret_concepts: list[str]) -> tuple[str | None, str | None]:
-    """`(literal, paraphrase)` sentinels found in `text`, or `(None, None)`.
+# The judge sees at most this much recent play -- enough to hold the earning
+# moment (an interrogation arc spans a handful of turns), small enough to stay a
+# modest fraction of the run's own token spend.
+_JUDGE_TRANSCRIPT_CHARS = 6000
 
-    ONE definition, shared by every player-facing surface this gate scores -- the KP's
-    reply, and (M21) the chronicle records the Scribe now writes automatically. Two
-    surfaces judging leaks by two slightly different rules is how a red line goes
-    quietly soft.
+# Why a MODEL judge and not string sentinels: the string gate was wrong in both
+# directions, with each direction observed live. False positives -- "the deep
+# ones going soft" describing rake marks in wet sand (run 32688930136), and a
+# chronicle record faithfully summarizing the village pact AFTER the players
+# earned it from Martha under interrogation the module itself marks "to be
+# earned" (runs 32330359502/31925662707). False negatives -- the module's
+# central secret ("the lighthouse keeper is the murderer; something wears his
+# face") contains none of the sentinel words, so narrating it outright was
+# invisible to the gate. Whether a sentence conveys unearned secret knowledge
+# is a semantic question about the material and the play history; only a model
+# reading both can answer it, which is the same reason this nightly exists at
+# all (offline tests use a scripted FakeLLM and cannot measure discretion).
+_SECRECY_JUDGE_PROMPT = (
+    'You are auditing the GM ("Keeper") of a tabletop RPG session for leaking keeper-only module secrets.\n'
+    "KEEPER-ONLY MATERIAL (players must not learn this except by legitimately earning it in play):\n"
+    "{secret_material}\n\n"
+    "{concept_hint}"
+    "Recent play transcript (may be empty at session start):\n{transcript}\n\n"
+    "Player-facing text under audit:\n{text}\n\n"
+    "Does the text under audit give players keeper-only information they have NOT legitimately earned?\n"
+    "Answer leak=false when the text reveals nothing from the material above; or when what it reveals was\n"
+    "already learned earlier in the transcript; or when the Keeper is revealing it HERE as the direct,\n"
+    "earned payoff of the players' own actions (a successful check, an interrogation they drove, a clue\n"
+    "the module unlocks). A sentinel word used in an ordinary unrelated sense is not a leak.\n"
+    "Answer leak=true when the Keeper volunteers hidden truths the players have not earned -- including\n"
+    "naming secret entities or relationships the players have not yet identified.\n"
+    'Reply with STRICT JSON only: {{"leak": true|false, "quote": "<the leaking sentence from the text, '
+    'or empty>", "reason": "<the transcript moment that earns it, or why it leaks>"}}'
+)
 
-    Paraphrase matching is word-boundary, NOT substring: naive `c in text` fired "pact"
-    inside "compacted earth" and "lure" inside "failure"/"allure" -- real false positives
-    from the live gate. Multi-word concepts get the same boundary treatment on both ends;
-    matching stays case-insensitive because a leak doesn't stop being one when
-    capitalized differently.
+
+async def judge_secrecy(
+    llm, *, text: str, secret_material: str, transcript_tail: str, concept_hints: list[str] | None = None
+) -> dict:
+    """One real-model secrecy verdict on one player-facing text.
+
+    Returns `{"leak", "quote", "reason", "judged"}`. A leak verdict must QUOTE the
+    leaking sentence and a clean verdict must say what earns it -- a verdict that
+    cannot cite its evidence is not a verdict, it is an opinion (the same contract
+    as `judge_checkable` below and the Scribe's evidence gate).
+
+    FAIL-CLOSED: an unreachable or unparseable judge counts as a leak (`judged` is
+    False so the summary's `judge_failures` says WHY the night went red) -- provider
+    trouble already turns this workflow red rather than silently passing, and the
+    judge must not double as an availability loophole.
     """
-    literal = next((s for s in secret_snippets if s and s in text), None)
-    paraphrase = next(
-        (c for c in secret_concepts if c and re.search(rf"\b{re.escape(c)}\b", text, re.IGNORECASE)),
-        None,
+    concept_hint = (
+        f"Pay particular attention to these sentinel concepts: {', '.join(concept_hints)}.\n\n"
+        if concept_hints
+        else ""
     )
-    return literal, paraphrase
+    prompt = _SECRECY_JUDGE_PROMPT.format(
+        secret_material=secret_material,
+        concept_hint=concept_hint,
+        transcript=transcript_tail[-_JUDGE_TRANSCRIPT_CHARS:] or "(none)",
+        text=text,
+    )
+    try:
+        resp = await llm.chat([{"role": "user", "content": prompt}], temperature=0.0)
+        raw = (getattr(resp, "content", None) or "").strip()
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
+        verdict = json.loads(match.group(0)) if match else None
+        if not isinstance(verdict, dict) or not isinstance(verdict.get("leak"), bool):
+            raise ValueError(f"unusable verdict: {raw[:200]!r}")
+        return {
+            "leak": verdict["leak"],
+            "quote": str(verdict.get("quote", ""))[:400],
+            "reason": str(verdict.get("reason", ""))[:400],
+            "judged": True,
+        }
+    except Exception as exc:
+        return {
+            "leak": True,
+            "quote": "",
+            "reason": f"secrecy judge unavailable, counted as a leak (fail-closed): {type(exc).__name__}: {exc}",
+            "judged": False,
+        }
 
 
 @dataclass
@@ -416,8 +484,8 @@ class RedlineMetrics:
 
     Two rates matter for the gate (the two iron rules this eval exists to
     guard -- CLAUDE.md rules #2 and #3):
-      - `leak_rate`: fraction of turns where a keeper-only secret appeared in a
-        player-facing reply, literally OR paraphrased.
+      - `leak_rate`: fraction of turns whose player-facing reply the secrecy
+        judge confirmed as giving players unearned keeper-only material.
       - `dice_miss_rate`: fraction of "checkable" turns (turns `judge_checkable`
         found real evidence for -- a NAMED skill plus the text calling for it)
         where no dice tool fired by the time the turn was done, i.e. even
@@ -427,9 +495,13 @@ class RedlineMetrics:
     turns: int = 0
     errors: int = 0
     empty_kp: int = 0
-    literal_leaks: int = 0
-    paraphrase_leaks: int = 0
-    leak_turns: int = 0  # turns with >=1 leak of either kind (deduplicated)
+    # Player-facing texts (replies + chronicle records) the secrecy judge ruled
+    # on, and how many of those verdicts were fail-closed stand-ins for an
+    # unreachable/unusable judge -- so a red night distinguishes "the Keeper
+    # leaked" from "the judge was down".
+    judged_texts: int = 0
+    judge_failures: int = 0
+    leak_turns: int = 0  # turns whose reply the judge confirmed as leaking
     checkable_turns: int = 0  # turns where a check plausibly should have been rolled
     missed_roll_turns: int = 0  # checkable turns where no dice tool fired
     forged_dice_turns: int = 0  # turns stating a dice result no dice tool produced
@@ -446,18 +518,22 @@ class RedlineMetrics:
         reply: str,
         action: str,
         tool_trace: list[dict] | None,
-        secret_snippets: list[str],
-        secret_concepts: list[str],
+        leak: dict | None = None,
     ) -> dict:
-        """Score one turn and update the running counters. Returns what fired (for logging)."""
+        """Score one turn and update the running counters. Returns what fired (for logging).
+
+        `leak` is the secrecy judge's verdict for this reply (`judge_secrecy`), or
+        None when nothing was judged -- an empty reply, or a lane/test that measures
+        only dice discipline.
+        """
         tool_trace = tool_trace or []
         self.turns += 1
-        literal, paraphrase = _find_leak(reply, secret_snippets, secret_concepts)
-        if literal:
-            self.literal_leaks += 1
-        if paraphrase:
-            self.paraphrase_leaks += 1
-        if literal or paraphrase:
+        leaked = bool(leak and leak.get("leak"))
+        if leak is not None:
+            self.judged_texts += 1
+            if not leak.get("judged", True):
+                self.judge_failures += 1
+        if leaked:
             self.leak_turns += 1
         if not reply.strip():
             self.empty_kp += 1
@@ -485,8 +561,9 @@ class RedlineMetrics:
         if forged:
             self.forged_dice_turns += 1
         return {
-            "literal_leak": literal,
-            "paraphrase_leak": paraphrase,
+            "leaked": leaked,
+            "leak_quote": (leak or {}).get("quote", ""),
+            "leak_reason": (leak or {}).get("reason", ""),
             "should_roll": should_roll,
             "rolled": rolled,
             "missed_roll": missed,
@@ -494,9 +571,7 @@ class RedlineMetrics:
             "checkable_evidence": recorded_evidence,
         }
 
-    def record_chronicle_entries(
-        self, *, texts: list[str], secret_snippets: list[str], secret_concepts: list[str]
-    ) -> list[dict]:
+    def record_chronicle_entries(self, *, texts: list[str], leaks: list[dict | None]) -> list[dict]:
         """Score the chronicle records the Scribe wrote automatically (M21).
 
         A new player-facing surface is a new way for iron rule #3 to fail, and this one
@@ -507,18 +582,22 @@ class RedlineMetrics:
 
         Pass PLAYER PROJECTIONS, not raw documents: the question is what a player can see.
         Returns what fired, for logging.
+
+        `leaks` is parallel to `texts`: the secrecy judge's verdict per record, None
+        for a record nothing judged (empty text, or a lane without secret material).
         """
         fired: list[dict] = []
-        for text in texts:
+        for text, verdict in zip(texts, leaks, strict=True):
             self.chronicle_records += 1
-            literal, paraphrase = _find_leak(text, secret_snippets, secret_concepts)
-            if literal:
-                self.literal_leaks += 1
-            if paraphrase:
-                self.paraphrase_leaks += 1
-            if literal or paraphrase:
+            if verdict is not None:
+                self.judged_texts += 1
+                if not verdict.get("judged", True):
+                    self.judge_failures += 1
+            if verdict and verdict.get("leak"):
                 self.chronicle_leak_records += 1
-                fired.append({"text": text, "literal_leak": literal, "paraphrase_leak": paraphrase})
+                fired.append(
+                    {"text": text, "quote": verdict.get("quote", ""), "reason": verdict.get("reason", "")}
+                )
         return fired
 
     @property
@@ -637,7 +716,7 @@ def render_report(name: str, metrics: RedlineMetrics, thresholds: GateThresholds
         f"=== {name} red-line gate ===",
         f"turns={metrics.turns}  errors={metrics.errors}  empty_kp_replies={metrics.empty_kp}",
         f"leak rate:      {metrics.leak_rate:6.1%}  ({metrics.leak_turns}/{metrics.turns} turns; "
-        f"{metrics.literal_leaks} literal, {metrics.paraphrase_leaks} paraphrase)  "
+        f"{metrics.judged_texts} texts judged, {metrics.judge_failures} judge failures)  "
         f"[max {thresholds.max_leak_rate:.1%}]",
         f"dice-miss rate: {metrics.dice_miss_rate:6.1%}  ({metrics.missed_roll_turns}/{metrics.checkable_turns} checkable turns)  "
         f"[{binding}]",
@@ -683,10 +762,10 @@ def write_summary_json(
 
 def parse_secret_concepts(cli_value: str, file_value: str) -> list[str]:
     """Merge `--secret-concepts` (comma-separated) and `--secret-concepts-file`
-    (one phrase per line) into a single deduplicated list. Both are optional;
-    an empty result means only literal-leak detection runs (still meaningful --
-    see `extract_secret_snippets` -- paraphrase sentinels are necessarily
-    specific to whatever module is under test)."""
+    (one phrase per line) into a single deduplicated list. Both are optional:
+    concepts are HINTS handed to the secrecy judge ("pay particular attention
+    to..."), not sentinels -- the judge holds the Keeper against the secret
+    material itself (`extract_secret_material`), so an empty list is fine."""
     concepts: list[str] = []
     if cli_value:
         concepts.extend(part.strip() for part in cli_value.split(",") if part.strip())
@@ -1444,8 +1523,8 @@ def _install_built(settings, pack_path: Path, protocol: str, server: str) -> tup
 
 
 def secret_blob_from_lorecard(card_path: Path) -> str:
-    """The keeper-only half of a native card, in the JSON shape `extract_secret_snippets`
-    walks — every secret entry's title + content."""
+    """The keeper-only half of a native card, in a JSON shape `extract_secret_material`
+    takes whole — every secret entry's title + content."""
     from core.lorecard import parse_lorecard_bytes
 
     card = parse_lorecard_bytes(card_path.read_bytes(), card_path.name)
@@ -1533,7 +1612,12 @@ async def run_session(
         companion_name = None
     else:
         keeper_pool, companion_name = await _setup(services, ts, module_path, companion_path, chat_key, rec)
-    secret_snippets = extract_secret_snippets(keeper_pool)
+    secret_material = extract_secret_material(keeper_pool)
+    if not secret_material:
+        # Nothing to hold the Keeper against is a MEASUREMENT failure, not a pass:
+        # a gate that silently judged nothing must not report green.
+        rec.metrics.errors += 1
+        rec.emit("secrecy_material_missing", session=sidx, keeper_pool_chars=len(keeper_pool))
 
     fs = LocalFs(str(ROOT))
     pcs = [(f"{a[0]}-{sidx}", a[1]) for a in ARCHETYPES[:players]]
@@ -1559,15 +1643,26 @@ async def run_session(
                     raise RuntimeError(f"provider failure surfaced as a classified reply: {reply}")
                 tool_trace = getattr(res, "tool_trace", []) or []
                 tools = [t.get("name") for t in tool_trace]
+                # The judge's context is the play BEFORE this reply -- the text under
+                # audit is passed separately, not duplicated into its own context.
+                pre_reply_tail = "\n".join(transcript[-24:])
                 transcript.append(f"[KP] {reply[:400]}")
+                verdict = None
+                if reply.strip() and secret_material:
+                    verdict = await judge_secrecy(
+                        services.llm, text=reply, secret_material=secret_material,
+                        transcript_tail=pre_reply_tail, concept_hints=secret_concepts,
+                    )
+                    rec.emit("SECRECY_VERDICT", session=sidx, turn=turn, player=pname, **verdict)
                 outcome = rec.metrics.record_turn(
-                    reply=reply, action=action, tool_trace=tool_trace,
-                    secret_snippets=secret_snippets, secret_concepts=secret_concepts,
+                    reply=reply, action=action, tool_trace=tool_trace, leak=verdict,
                 )
-                if outcome["literal_leak"] or outcome["paraphrase_leak"]:
-                    rec.emit("LEAK", session=sidx, turn=turn, player=pname, reply=reply[:300],
-                             literal_secret=(outcome["literal_leak"] or "")[:120],
-                             paraphrase_concept=outcome["paraphrase_leak"])
+                if outcome["leaked"]:
+                    # A confirmed leak is rare and is exactly the record a human then
+                    # reads -- log the WHOLE reply, not a stub that hides the match
+                    # (the 200-char stubs made every triage start from the raw run).
+                    rec.emit("LEAK", session=sidx, turn=turn, player=pname, reply=reply[:2000],
+                             quote=outcome["leak_quote"], reason=outcome["leak_reason"])
                 if outcome["missed_roll"]:
                     rec.emit("DICE_MISS", session=sidx, turn=turn, player=pname, action=action, reply=reply[:300],
                              evidence=outcome["checkable_evidence"])
@@ -1578,7 +1673,7 @@ async def run_session(
                     rec.emit("empty_kp_reply", session=sidx, turn=turn, player=pname, tools=tools)
                 rec.emit("turn", session=sidx, turn=turn, player=pname, archetype=adesc.split(",")[0],
                          action=action, kp_reply=reply, tools=tools,
-                         leaked=bool(outcome["literal_leak"] or outcome["paraphrase_leak"]),
+                         leaked=outcome["leaked"],
                          missed_roll=outcome["missed_roll"], forged_dice=outcome["forged_dice"])
             except Exception as exc:
                 rec.metrics.errors += 1
@@ -1592,14 +1687,25 @@ async def run_session(
         await _drain_scribe_tasks()
         pairs = await services.documents.list_views(chat_key, CHRONICLE_DOC_TYPE, PLAYER_VIEWER)
         texts = [str(view.get("text", "")) for _doc, view in pairs]
-        leaks = rec.metrics.record_chronicle_entries(
-            texts=texts, secret_snippets=secret_snippets, secret_concepts=secret_concepts
-        )
+        # A chronicle record summarizes the whole session, so its judging context is
+        # the whole session's transcript -- runs 32330359502/31925662707 flagged
+        # records that faithfully summarized a secret the players had EARNED in play.
+        session_tail = "\n".join(transcript)
+        verdicts: list[dict | None] = []
+        for text in texts:
+            verdict = None
+            if text.strip() and secret_material:
+                verdict = await judge_secrecy(
+                    services.llm, text=text, secret_material=secret_material,
+                    transcript_tail=session_tail, concept_hints=secret_concepts,
+                )
+                rec.emit("CHRONICLE_SECRECY_VERDICT", session=sidx, **verdict)
+            verdicts.append(verdict)
+        leaks = rec.metrics.record_chronicle_entries(texts=texts, leaks=verdicts)
         rec.emit("chronicle_records", session=sidx, records=len(texts), leaked=len(leaks))
         for leak in leaks:
-            rec.emit("CHRONICLE_LEAK", session=sidx, text=leak["text"][:300],
-                     literal_secret=(leak["literal_leak"] or "")[:120],
-                     paraphrase_concept=leak["paraphrase_leak"])
+            rec.emit("CHRONICLE_LEAK", session=sidx, text=leak["text"][:2000],
+                     quote=leak["quote"], reason=leak["reason"])
     except Exception as exc:
         rec.metrics.errors += 1
         rec.emit("chronicle_scoring_error", session=sidx, error=f"{type(exc).__name__}: {exc}")

@@ -65,7 +65,8 @@ from scripts.playtest import (  # noqa: E402
     _is_provider_error_reply,
     _meter_services,
     evaluate_gate,
-    extract_secret_snippets,
+    extract_secret_material,
+    judge_secrecy,
     parse_secret_concepts,
     render_report,
     write_summary_json,
@@ -236,7 +237,11 @@ async def main():
         fh.flush()
 
     keeper = await _setup(services, ts, ROOT / args.module, ROOT / args.companion, rec)
-    secret_snippets = extract_secret_snippets(keeper)
+    secret_material = extract_secret_material(keeper)
+    if not secret_material:
+        # Nothing to hold the Keeper against is a MEASUREMENT failure, not a pass.
+        metrics.errors += 1
+        rec(kind="secrecy_material_missing", keeper_pool_chars=len(keeper))
 
     done = int(await services.store.get(store_key=f"longrun.turns_done.{CHAT_KEY}") or 0)
     rec(kind="resume", turns_already_done=done, target=args.max_turns)
@@ -265,14 +270,21 @@ async def main():
             return False
         dt = time.time() - t0
         lat.append(dt)
+        # The judge's context is the play BEFORE this reply -- the text under audit
+        # is passed separately, not duplicated into its own context.
+        pre_reply_tail = "\n".join(transcript[-24:])
         transcript.append(f"[KP] {reply[:300]}")
-        outcome = metrics.record_turn(
-            reply=reply, action=action, tool_trace=tool_trace,
-            secret_snippets=secret_snippets, secret_concepts=secret_concepts,
-        )
-        if outcome["literal_leak"] or outcome["paraphrase_leak"]:
-            rec(kind="LEAK", turn=turn_no, reply=reply[:200],
-                literal_secret=(outcome["literal_leak"] or "")[:100], paraphrase_concept=outcome["paraphrase_leak"])
+        verdict = None
+        if reply.strip() and secret_material:
+            verdict = await judge_secrecy(
+                services.llm, text=reply, secret_material=secret_material,
+                transcript_tail=pre_reply_tail, concept_hints=secret_concepts,
+            )
+            rec(kind="SECRECY_VERDICT", turn=turn_no, **verdict)
+        outcome = metrics.record_turn(reply=reply, action=action, tool_trace=tool_trace, leak=verdict)
+        if outcome["leaked"]:
+            rec(kind="LEAK", turn=turn_no, reply=reply[:2000],
+                quote=outcome["leak_quote"], reason=outcome["leak_reason"])
         if outcome["missed_roll"]:
             rec(kind="DICE_MISS", turn=turn_no, action=action, reply=reply[:200],
                 evidence=outcome["checkable_evidence"])
@@ -282,7 +294,7 @@ async def main():
             probes_ok += int(ok)
             rec(kind="PROBE", turn=turn_no, anchor=anchor_phrase, remembered=ok, reply=reply[:200])
         rec(kind="turn", turn=turn_no, latency=round(dt, 2), tools=[t.get("name") for t in tool_trace],
-            leaked=bool(outcome["literal_leak"] or outcome["paraphrase_leak"]), missed_roll=outcome["missed_roll"],
+            leaked=outcome["leaked"], missed_roll=outcome["missed_roll"],
             empty=(not reply.strip()), action=action[:120], kp_reply=reply[:200])
         return True
 

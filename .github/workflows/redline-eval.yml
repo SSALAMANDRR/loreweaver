@@ -6,8 +6,10 @@ name: Nightly red-line eval (real model)
 # runs scripts/playtest.py and scripts/longrun.py in `--gate` mode against a
 # real (cheap) model to measure the two claims the offline suite CANNOT prove
 # with a scripted Keeper: the Keeper never leaks a keeper-only secret to
-# players (literal OR paraphrase), and a check rolls real dice before it is
-# narrated. See docs/roadmap.md "Offline tests vs. real-model quality".
+# players (a second real-model judge rules every player-facing text against
+# the module's secret material and the play transcript -- an earned reveal is
+# not a leak), and a check rolls real dice before it is narrated. See
+# docs/roadmap.md "Offline tests vs. real-model quality".
 #
 # Never runs on push/PR -- schedule + manual dispatch only. If the
 # EVAL_LLM_API_KEY secret is absent (e.g. a fork, or before a maintainer wires

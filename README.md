@@ -287,8 +287,10 @@ entire pipeline end to end.
 
 **Measured, not proven.** Whether a *live* model behaves is a different question, and green CI must
 not be read as answering it. A [nightly red-line eval](https://github.com/1A7432/loreweaver/actions/workflows/redline-eval.yml)
-runs scripted players against a real model and scores every turn for secret leakage and dice-first
-misses; threshold violations, provider failures and auth failures all make the run red. Results are
+runs scripted players against a real model; a second real-model judge rules every player-facing text
+for secret leakage against the module's keeper-only material and the play transcript (a legitimately
+earned reveal is not a leak), and every turn is scored for dice-first misses. Threshold violations,
+provider failures, auth failures and an unreachable judge all make the run red. Results are
 per model and per run, not a standing guarantee.
 
 **Young.** Networked multiplayer is comfortable for a table of friends but has rough edges. The

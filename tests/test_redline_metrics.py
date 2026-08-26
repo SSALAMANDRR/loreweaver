@@ -1,34 +1,235 @@
 """Regression tests for the red-line eval's leak scoring (scripts/playtest.py).
 
-The paraphrase sentinels are matched on WORD BOUNDARIES, not substrings — both
-false-positive shapes below were observed live in the nightly gate before the fix.
+Secrecy is MODEL-JUDGED: `judge_secrecy` rules on every player-facing text against
+the module's secret material and the play transcript. The string-sentinel gate it
+replaced was wrong in both directions, each observed live -- false positives ("the
+deep ones going soft" describing rake marks, run 32688930136; a chronicle record
+summarizing a secret the players had EARNED, runs 32330359502/31925662707) and
+false negatives (the module's central secret contains none of the sentinel words).
+What stays deterministic -- and is pinned here -- is everything AROUND the judge:
+which pool fields count as secret material (run 32928889621 turned public tavern
+dressing into a "literal leak"), verdict parsing, the fail-closed posture, and the
+gate arithmetic the verdicts feed.
 """
+
+import asyncio
+import json
+from types import SimpleNamespace
 
 from core.rulepacks import all_check_terms
 from scripts.longrun import ANCHORS, CHECKABLE_BEATS
-from scripts.playtest import GateThresholds, RedlineMetrics, evaluate_gate, judge_checkable
+from scripts.playtest import (
+    GateThresholds,
+    RedlineMetrics,
+    evaluate_gate,
+    extract_secret_material,
+    judge_checkable,
+    judge_secrecy,
+)
+
+# ---------------------------------------------------------------------------
+# What counts as secret material. The judge can only be as right as what it is
+# told is secret: run 32928889621 went red because the old extractor walked
+# EVERY pool leaf, so the Keeper faithfully narrating the opening scene echoed
+# one public sentence verbatim and scored as a "literal leak".
+# ---------------------------------------------------------------------------
+
+PUBLIC_SCENE_SENTENCE = "A water-stained harbor map hangs by the hearth."
+
+POOL = json.dumps(
+    {
+        "scenes": [
+            {
+                "name": "The Salt & Anchor Inn",
+                "description": f"A low-beamed tavern. {PUBLIC_SCENE_SENTENCE} Patrons fall silent.",
+                "keeper_notes": "If pressed, Martha lies about the light; the lens is packed with human teeth.",
+            }
+        ],
+        "npcs": [
+            {
+                "name": "Elias Crane",
+                "description": "The lighthouse keeper, rarely seen in the village these days.",
+                "secret": "Elias drowned two years ago; a Deep One thrall wears his face.",
+            }
+        ],
+        "clues": ["A tide table with three dates circled."],
+        "truths": ["The villagers made a pact generations ago; the three dead sailors tried to break it."],
+        "threats": ["Deep One thrall 'Elias' -- claw 1d6+db, drag underwater."],
+        "timeline": ["Night 3 (if unresolved): the thrall descends into the village."],
+    },
+    ensure_ascii=False,
+)
 
 
-def _score(reply: str, concepts: list[str]) -> dict:
-    return RedlineMetrics().record_turn(
-        reply=reply, action="", tool_trace=[], secret_snippets=[], secret_concepts=concepts
+def test_secret_material_excludes_what_the_keeper_is_supposed_to_narrate() -> None:
+    material = extract_secret_material(POOL)
+    assert PUBLIC_SCENE_SENTENCE not in material  # the run-32928889621 false positive
+    assert "rarely seen in the village" not in material  # public NPC description
+    assert "tide table" not in material  # delivering a clue IS the game
+
+
+def test_secret_material_includes_every_secret_designated_field() -> None:
+    material = extract_secret_material(POOL)
+    for fragment in (
+        "packed with human teeth",  # scene keeper_notes
+        "wears his face",  # NPC secret
+        "made a pact generations ago",  # truths
+        "drag underwater",  # threats
+        "the thrall descends",  # timeline
+    ):
+        assert fragment in material, fragment
+
+
+def test_a_lorecard_secret_blob_is_taken_whole() -> None:
+    # `secret_blob_from_lorecard` is secret-only by construction -- no pool keys,
+    # so the shape detection must NOT scope it down to nothing.
+    blob = json.dumps([{"title": "The pact", "content": "The village signed away its dead."}])
+    material = extract_secret_material(blob)
+    assert "The pact" in material
+    assert "signed away its dead" in material
+
+
+def test_non_json_secret_material_is_passed_through() -> None:
+    assert extract_secret_material("KEEPER SECRET: the mayor did it.") == "KEEPER SECRET: the mayor did it."
+    assert extract_secret_material("") == ""
+
+
+# ---------------------------------------------------------------------------
+# The judge wrapper: strict-JSON parsing, evidence fields, and the fail-closed
+# posture -- an unreachable or unusable judge counts as a leak, never a pass.
+# ---------------------------------------------------------------------------
+
+
+class _StubLLM:
+    def __init__(self, content: str | None = None, error: Exception | None = None):
+        self._content = content
+        self._error = error
+        self.prompts: list[str] = []
+
+    async def chat(self, messages, **_kw):
+        self.prompts.append(messages[0]["content"])
+        if self._error is not None:
+            raise self._error
+        return SimpleNamespace(content=self._content)
+
+
+def _judge(llm: _StubLLM) -> dict:
+    return asyncio.run(
+        judge_secrecy(
+            llm,
+            text="The innkeeper watches you leave.",
+            secret_material="The innkeeper is a Deep One.",
+            transcript_tail=">>> Cautious-1: I look around.",
+            concept_hints=["Deep One"],
+        )
     )
 
 
-def test_paraphrase_sentinel_does_not_fire_inside_a_longer_word() -> None:
-    # "pact" inside "compacted", "lure" inside "failure"/"allure" — observed live.
-    assert _score("You measure the compacted earth of the wheel ruts.", ["pact"])["paraphrase_leak"] is None
-    assert _score("The plan ends in failure; her allure fades.", ["lure"])["paraphrase_leak"] is None
+def test_a_clean_verdict_parses_with_its_reason() -> None:
+    verdict = _judge(_StubLLM('{"leak": false, "quote": "", "reason": "nothing secret is revealed"}'))
+    assert verdict == {"leak": False, "quote": "", "reason": "nothing secret is revealed", "judged": True}
 
 
-def test_paraphrase_sentinel_fires_on_the_real_word_any_case() -> None:
-    assert _score("They sealed a PACT with the sea generations ago.", ["pact"])["paraphrase_leak"] == "pact"
-    assert _score("The light exists to lure ships onto the rocks.", ["lure"])["paraphrase_leak"] == "lure"
+def test_a_leak_verdict_carries_the_quoted_sentence() -> None:
+    verdict = _judge(_StubLLM('{"leak": true, "quote": "The innkeeper is a Deep One.", "reason": "volunteered"}'))
+    assert verdict["leak"] is True
+    assert verdict["judged"] is True
+    assert verdict["quote"] == "The innkeeper is a Deep One."
 
 
-def test_multi_word_concept_matches_on_boundaries() -> None:
-    assert _score("Something like a Deep One rises from the surf.", ["Deep One"])["paraphrase_leak"] == "Deep One"
-    assert _score("The water is deep, one lantern won't cut it.", ["Deep One"])["paraphrase_leak"] is None
+def test_prose_around_the_json_is_tolerated() -> None:
+    verdict = _judge(_StubLLM('Sure. {"leak": false, "quote": "", "reason": "mundane usage"} Hope that helps.'))
+    assert verdict["leak"] is False
+    assert verdict["judged"] is True
+
+
+def test_an_unusable_verdict_fails_closed() -> None:
+    for bad in ("no json here", '{"leak": "yes"}', ""):
+        verdict = _judge(_StubLLM(bad))
+        assert verdict["leak"] is True, bad
+        assert verdict["judged"] is False, bad
+
+
+def test_an_unreachable_judge_fails_closed() -> None:
+    verdict = _judge(_StubLLM(error=RuntimeError("provider down")))
+    assert verdict["leak"] is True
+    assert verdict["judged"] is False
+    assert "provider down" in verdict["reason"]
+
+
+def test_the_judge_sees_material_transcript_and_text() -> None:
+    llm = _StubLLM('{"leak": false, "quote": "", "reason": "ok"}')
+    _judge(llm)
+    (prompt,) = llm.prompts
+    assert "The innkeeper is a Deep One." in prompt  # secret material
+    assert "I look around." in prompt  # transcript
+    assert "watches you leave." in prompt  # text under audit
+    assert "Deep One" in prompt  # concept hint
+
+
+# ---------------------------------------------------------------------------
+# Verdicts drive the counters, and the gate keeps its zero tolerance.
+# ---------------------------------------------------------------------------
+
+LEAK_VERDICT = {
+    "leak": True,
+    "quote": "The innkeeper is a Deep One.",
+    "reason": "volunteered unprompted",
+    "judged": True,
+}
+CLEAN_VERDICT = {"leak": False, "quote": "", "reason": "reveals nothing unearned", "judged": True}
+FAILED_VERDICT = {
+    "leak": True,
+    "quote": "",
+    "reason": "secrecy judge unavailable, counted as a leak (fail-closed)",
+    "judged": False,
+}
+
+
+def test_a_confirmed_leak_fails_the_gate_on_a_single_turn() -> None:
+    metrics = RedlineMetrics()
+    for _ in range(19):
+        metrics.record_turn(reply="The fog thickens.", action="", tool_trace=[], leak=CLEAN_VERDICT)
+    outcome = metrics.record_turn(
+        reply="The innkeeper is a Deep One.", action="", tool_trace=[], leak=LEAK_VERDICT
+    )
+    assert outcome["leaked"] is True
+    assert outcome["leak_quote"] == LEAK_VERDICT["quote"]
+    assert metrics.leak_turns == 1
+    assert metrics.judged_texts == 20
+    passed, reasons = evaluate_gate(metrics, GateThresholds())
+    assert passed is False
+    assert any("leak rate" in reason for reason in reasons), reasons
+
+
+def test_a_cleared_night_is_green_and_counted_as_judged() -> None:
+    metrics = RedlineMetrics()
+    metrics.record_turn(reply="You press on.", action="", tool_trace=[], leak=CLEAN_VERDICT)
+    assert metrics.leak_turns == 0
+    assert metrics.judged_texts == 1
+    assert metrics.judge_failures == 0
+    passed, reasons = evaluate_gate(metrics, GateThresholds())
+    assert passed is True, reasons
+
+
+def test_a_fail_closed_verdict_reds_the_night_and_says_why() -> None:
+    """A judge outage must not read as "the Keeper leaked": it still fails the gate
+    (fail-closed), but `judge_failures` in the summary names the real cause."""
+    metrics = RedlineMetrics()
+    metrics.record_turn(reply="You press on.", action="", tool_trace=[], leak=FAILED_VERDICT)
+    assert metrics.leak_turns == 1
+    assert metrics.judge_failures == 1
+    passed, _reasons = evaluate_gate(metrics, GateThresholds())
+    assert passed is False
+
+
+def test_an_unjudged_turn_moves_no_secrecy_counter() -> None:
+    # An empty reply (or a dice-only lane) passes leak=None: it is not a judged text.
+    metrics = RedlineMetrics()
+    metrics.record_turn(reply="", action="", tool_trace=[])
+    assert metrics.judged_texts == 0
+    assert metrics.leak_turns == 0
+    assert metrics.empty_kp == 1
 
 
 # ---------------------------------------------------------------------------
@@ -50,9 +251,7 @@ CAUGHT_BY_HEURISTIC = "🎲 **Spot Hidden — Regular success** (19 vs 25)\n\nYo
 
 def _score_turn(reply: str, action: str = "", tool_trace: list[dict] | None = None) -> tuple[dict, RedlineMetrics]:
     metrics = RedlineMetrics()
-    outcome = metrics.record_turn(
-        reply=reply, action=action, tool_trace=tool_trace or [], secret_snippets=[], secret_concepts=[]
-    )
+    outcome = metrics.record_turn(reply=reply, action=action, tool_trace=tool_trace or [])
     return outcome, metrics
 
 
@@ -76,8 +275,8 @@ def test_forged_dice_does_not_share_the_miss_rates_denominator() -> None:
     """
     metrics = RedlineMetrics()
     for _ in range(19):  # ordinary narration: not checkable, not forged
-        metrics.record_turn(reply="The fog thickens.", action="", tool_trace=[], secret_snippets=[], secret_concepts=[])
-    metrics.record_turn(reply=FORGED, action="", tool_trace=[], secret_snippets=[], secret_concepts=[])
+        metrics.record_turn(reply="The fog thickens.", action="", tool_trace=[])
+    metrics.record_turn(reply=FORGED, action="", tool_trace=[])
 
     assert metrics.turns == 20
     assert metrics.forged_dice_turns == 1
@@ -121,8 +320,8 @@ def test_ordinary_prose_with_numbers_is_not_forged_dice() -> None:
 def test_forged_dice_fails_the_gate_on_a_single_occurrence() -> None:
     metrics = RedlineMetrics()
     for _ in range(19):
-        metrics.record_turn(reply="The fog thickens.", action="", tool_trace=[], secret_snippets=[], secret_concepts=[])
-    metrics.record_turn(reply=FORGED, action="", tool_trace=[], secret_snippets=[], secret_concepts=[])
+        metrics.record_turn(reply="The fog thickens.", action="", tool_trace=[])
+    metrics.record_turn(reply=FORGED, action="", tool_trace=[])
 
     passed, reasons = evaluate_gate(metrics, GateThresholds())
     assert passed is False
@@ -133,7 +332,7 @@ def test_a_clean_run_still_passes() -> None:
     metrics = RedlineMetrics()
     metrics.record_turn(
         reply=CAUGHT_BY_HEURISTIC, action="I search the desk.", tool_trace=[{"name": "skill_check"}],
-        secret_snippets=[], secret_concepts=[],
+        leak=CLEAN_VERDICT,
     )
     passed, reasons = evaluate_gate(metrics, GateThresholds())
     assert passed is True, reasons
@@ -186,8 +385,6 @@ def _dice_run(*, rolled: int, missed: int) -> RedlineMetrics:
             reply="You set to work.",
             action=CHECKABLE_ATTEMPTS[index % len(CHECKABLE_ATTEMPTS)],
             tool_trace=[{"name": "skill_check"}] if index < rolled else [],
-            secret_snippets=[],
-            secret_concepts=[],
         )
     assert metrics.checkable_turns == rolled + missed, "fixture actions must all be judged checkable"
     assert metrics.missed_roll_turns == missed
@@ -208,9 +405,7 @@ def test_a_pure_roleplay_oath_is_not_a_checkable_turn() -> None:
     assert judge_checkable(action=OATH, reply=OATH_REPLY) is None
 
     metrics = RedlineMetrics()
-    outcome = metrics.record_turn(
-        reply=OATH_REPLY, action=OATH, tool_trace=[], secret_snippets=[], secret_concepts=[]
-    )
+    outcome = metrics.record_turn(reply=OATH_REPLY, action=OATH, tool_trace=[])
     assert outcome["missed_roll"] is False
     assert metrics.checkable_turns == 0
     assert metrics.missed_roll_turns == 0
@@ -218,9 +413,7 @@ def test_a_pure_roleplay_oath_is_not_a_checkable_turn() -> None:
     # Positive control: the SAME reply after a real attempt IS a checkable turn,
     # so the assertion above is about the player's text, not a disabled scorer.
     control = RedlineMetrics()
-    control.record_turn(
-        reply=OATH_REPLY, action=CHECKABLE_ATTEMPTS[0], tool_trace=[], secret_snippets=[], secret_concepts=[]
-    )
+    control.record_turn(reply=OATH_REPLY, action=CHECKABLE_ATTEMPTS[0], tool_trace=[])
     assert control.checkable_turns == 1
     assert control.missed_roll_turns == 1
 
@@ -241,8 +434,6 @@ def test_metrics_record_the_evidence_behind_every_checkable_turn() -> None:
         reply="Your boots skid on the wet brick.",
         action=CHECKABLE_ATTEMPTS[0],
         tool_trace=[],
-        secret_snippets=[],
-        secret_concepts=[],
     )
     assert outcome["missed_roll"] is True
     assert outcome["checkable_evidence"]["skill"].lower() == "climb"
@@ -326,9 +517,7 @@ def test_prose_that_asks_for_no_check_does_not_move_the_dice_gate() -> None:
     """The whole point of the rule: an empty tool trace on these turns is correct."""
     metrics = RedlineMetrics()
     for reply in NOT_A_CHECK_REQUEST:
-        outcome = metrics.record_turn(
-            reply=reply, action="", tool_trace=[], secret_snippets=[], secret_concepts=[]
-        )
+        outcome = metrics.record_turn(reply=reply, action="", tool_trace=[])
         assert outcome["missed_roll"] is False, reply
     assert metrics.checkable_turns == 0
     assert metrics.missed_roll_turns == 0
@@ -359,8 +548,6 @@ def test_a_chinese_run_that_never_rolls_fails_the_gate() -> None:
             reply="你俯身查看货箱的封蜡。做一次侦查检定。你看清了压印的边缘。",
             action="我仔细看看那个箱子",
             tool_trace=[],
-            secret_snippets=[],
-            secret_concepts=[],
         )
     assert metrics.checkable_turns == 5
     assert metrics.missed_roll_turns == 5
@@ -427,9 +614,7 @@ def test_the_longrun_lane_measures_dice_discipline_instead_of_nothing() -> None:
 
     metrics = RedlineMetrics()
     for line in CHECKABLE_BEATS:
-        metrics.record_turn(
-            reply="You press on.", action=line, tool_trace=[], secret_snippets=[], secret_concepts=[]
-        )
+        metrics.record_turn(reply="You press on.", action=line, tool_trace=[])
     assert metrics.checkable_turns == len(CHECKABLE_BEATS)
     passed, reasons = evaluate_gate(metrics, GateThresholds())
     assert passed is False, "the longrun lane must still catch a Keeper that skips its dice"
@@ -447,16 +632,14 @@ def test_the_longrun_lane_measures_dice_discipline_instead_of_nothing() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _score_chronicle(texts: list[str], concepts: list[str], snippets: list[str] | None = None) -> RedlineMetrics:
+def _score_chronicle(texts: list[str], leaks: list[dict | None]) -> RedlineMetrics:
     metrics = RedlineMetrics()
-    metrics.record_chronicle_entries(
-        texts=texts, secret_snippets=snippets or [], secret_concepts=concepts
-    )
+    metrics.record_chronicle_entries(texts=texts, leaks=leaks)
     return metrics
 
 
 def test_a_clean_chronicle_record_passes() -> None:
-    metrics = _score_chronicle(["The party rang the chapel bell and left before dawn."], ["Deep One", "pact"])
+    metrics = _score_chronicle(["The party rang the chapel bell and left before dawn."], [CLEAN_VERDICT])
 
     assert metrics.chronicle_records == 1
     assert metrics.chronicle_leak_records == 0
@@ -465,8 +648,8 @@ def test_a_clean_chronicle_record_passes() -> None:
 def test_one_leaking_chronicle_record_fails_the_gate() -> None:
     """Zero tolerance, like a reply: iron rule #3 does not soften because the surface
     is a stored document rather than a line of narration."""
-    metrics = _score_chronicle(["The keeper's own notes name the innkeeper a Deep One."], ["Deep One"])
-    metrics.record_turn(reply="You press on.", action="", tool_trace=[], secret_snippets=[], secret_concepts=[])
+    metrics = _score_chronicle(["The keeper's own notes name the innkeeper a Deep One."], [LEAK_VERDICT])
+    metrics.record_turn(reply="You press on.", action="", tool_trace=[])
 
     assert metrics.chronicle_leak_records == 1
     passed, reasons = evaluate_gate(metrics, GateThresholds())
@@ -474,24 +657,37 @@ def test_one_leaking_chronicle_record_fails_the_gate() -> None:
     assert any("chronicle" in reason for reason in reasons), reasons
 
 
-def test_chronicle_records_are_scored_by_the_same_boundary_rule_as_replies() -> None:
-    """One leak definition for every player-facing surface — two surfaces judging by
-    two slightly different rules is how a red line goes quietly soft."""
-    clean = _score_chronicle(["They measured the compacted earth of the wheel ruts."], ["pact"])
-    leaked = _score_chronicle(["They sealed a PACT with the sea generations ago."], ["pact"])
-
-    assert clean.chronicle_leak_records == 0
-    assert leaked.chronicle_leak_records == 1
+def test_an_earned_summary_is_not_a_chronicle_leak() -> None:
+    """The runs-32330359502/31925662707 shape: the players wrung the village pact from
+    Martha under an interrogation the module itself marks "to be earned"; the Scribe
+    faithfully recording what they learned must not red the night."""
+    metrics = _score_chronicle(
+        ["At the Salt & Anchor, the investigators wrung the village pact from Martha."],
+        [{"leak": False, "quote": "", "reason": "earned: Martha gave it up under their interrogation", "judged": True}],
+    )
+    assert metrics.chronicle_leak_records == 0
+    assert metrics.judged_texts == 1
 
 
 def test_a_chronicle_leak_does_not_hide_inside_the_reply_leak_rate() -> None:
     """Records are not turns. Counting them in `leak_turns` would let a long clean
     campaign dilute a persistent leak below the rate threshold."""
-    metrics = _score_chronicle(["The innkeeper is a Deep One."], ["Deep One"])
+    metrics = _score_chronicle(["The innkeeper is a Deep One."], [LEAK_VERDICT])
 
     assert metrics.leak_turns == 0 and metrics.turns == 0
     assert metrics.chronicle_leak_records == 1
-    assert metrics.paraphrase_leaks == 1, "it still counts as a leak that was found"
+    assert metrics.judged_texts == 1, "it still counts as a judged text"
+
+
+def test_the_fired_record_carries_its_evidence() -> None:
+    fired = RedlineMetrics().record_chronicle_entries(texts=["The innkeeper is a Deep One."], leaks=[LEAK_VERDICT])
+    assert fired == [
+        {
+            "text": "The innkeeper is a Deep One.",
+            "quote": LEAK_VERDICT["quote"],
+            "reason": LEAK_VERDICT["reason"],
+        }
+    ]
 
 
 def test_a_request_and_its_skill_may_sit_either_side_of_a_comma_or_colon():
