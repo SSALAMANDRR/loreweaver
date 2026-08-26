@@ -122,16 +122,19 @@ def extract_secret_material(keeper_pool_raw: str, cap: int = _SECRET_MATERIAL_CA
 
     `agent.module_initializer.ModuleInitializer.initialize` persists the keeper
     pool as a single-line `json.dumps(...)` blob. Parse it and keep ONLY the
-    fields `_build_knowledge_pools` designates as secrets -- scene
-    `keeper_notes`, NPC `secret`, `truths`, `threats`, `timeline`. Never scene
-    text or NPC descriptions (the Keeper is SUPPOSED to narrate those: when the
-    old string gate treated every pool leaf as a secret, the opening tavern
-    dressing "A water-stained harbor map hangs by the hearth." became a
-    "literal leak" the first night the Keeper narrated the scene faithfully --
-    run 32928889621), and never `clues`: delivering a clue IS the game. Any
-    other JSON shape is taken whole (e.g. `secret_blob_from_lorecard`,
-    secret-only by construction), and a non-JSON value is returned as-is, so
-    foreign stores stay covered.
+    hidden-truth fields -- scene `keeper_notes`, NPC `secret`, `truths`,
+    `threats`. Never scene text or NPC descriptions (the Keeper is SUPPOSED to
+    narrate those: when the old string gate treated every pool leaf as a
+    secret, the opening tavern dressing "A water-stained harbor map hangs by
+    the hearth." became a "literal leak" the first night the Keeper narrated
+    the scene faithfully -- run 32928889621); never `clues`: delivering a clue
+    IS the game; and never `timeline`, even though the pool keeps it
+    keeper-side -- it is the Keeper's event SCHEDULE, and staging or
+    foreshadowing a scheduled event is keeping, not leaking (the judge's first
+    live run, 32953952032, flagged the Night-1 light-shift being staged as a
+    "leak" for exactly this reason). Any other JSON shape is taken whole
+    (e.g. `secret_blob_from_lorecard`, secret-only by construction), and a
+    non-JSON value is returned as-is, so foreign stores stay covered.
     """
     if not keeper_pool_raw:
         return ""
@@ -159,7 +162,7 @@ def extract_secret_material(keeper_pool_raw: str, cap: int = _SECRET_MATERIAL_CA
         for npc in data.get("npcs") or []:
             if isinstance(npc, dict):
                 _walk(npc.get("secret"))
-        for key in ("truths", "threats", "timeline"):
+        for key in ("truths", "threats"):
             _walk(data.get(key))
     else:
         _walk(data)
@@ -411,22 +414,39 @@ _JUDGE_TRANSCRIPT_CHARS = 6000
 # is a semantic question about the material and the play history; only a model
 # reading both can answer it, which is the same reason this nightly exists at
 # all (offline tests use a scripted FakeLLM and cannot measure discretion).
-_SECRECY_JUDGE_PROMPT = (
+# Plain strings assembled by CONCATENATION, never str.format/f-string templating:
+# the material, the transcript and the text under audit are untrusted content full
+# of braces (dice notation like {1D6} in modules, JSON in replies), and a template
+# pass over them is one refactor away from a formatting crash that a whole night
+# would wear as "judge down". Concatenation has no metacharacters to step on.
+#
+# The criteria draw the line at CONTENT-LEVEL disclosure. The judge's first live
+# run (32953952032) proved an "anything from the material, unless earned" framing
+# polices PACING, not secrecy: it flagged the Keeper staging the module's own
+# Night-1 light-shift event, and flagged "the map hangs crooked" signposting that
+# a clue EXISTS -- both ordinary keeping craft. Iron rule #3 guards the hidden
+# truths themselves; when to fire events and how to dangle clues is the Keeper's
+# job. The same run also caught two real leaks (an NPC naming the secret species
+# unprompted; narration naming an unfound clue's content) -- those stay leaks
+# under this line.
+_JUDGE_PREAMBLE = (
     'You are auditing the GM ("Keeper") of a tabletop RPG session for leaking keeper-only module secrets.\n'
-    "KEEPER-ONLY MATERIAL (players must not learn this except by legitimately earning it in play):\n"
-    "{secret_material}\n\n"
-    "{concept_hint}"
-    "Recent play transcript (may be empty at session start):\n{transcript}\n\n"
-    "Player-facing text under audit:\n{text}\n\n"
-    "Does the text under audit give players keeper-only information they have NOT legitimately earned?\n"
-    "Answer leak=false when the text reveals nothing from the material above; or when what it reveals was\n"
-    "already learned earlier in the transcript; or when the Keeper is revealing it HERE as the direct,\n"
-    "earned payoff of the players' own actions (a successful check, an interrogation they drove, a clue\n"
-    "the module unlocks). A sentinel word used in an ordinary unrelated sense is not a leak.\n"
-    "Answer leak=true when the Keeper volunteers hidden truths the players have not earned -- including\n"
-    "naming secret entities or relationships the players have not yet identified.\n"
-    'Reply with STRICT JSON only: {{"leak": true|false, "quote": "<the leaking sentence from the text, '
-    'or empty>", "reason": "<the transcript moment that earns it, or why it leaks>"}}'
+    "KEEPER-ONLY MATERIAL (the module's hidden truths):\n"
+)
+_JUDGE_CRITERIA = (
+    "Does the text under audit disclose the CONTENT of a hidden truth the players have not legitimately\n"
+    "earned? A leak is content-level disclosure: naming a hidden identity, mechanism, solution, secret\n"
+    "entity or relationship, or what an unfound clue says.\n"
+    "The following are legitimate Keeper craft, NOT leaks:\n"
+    "  - staging or foreshadowing a module event (WHEN events fire is the Keeper's call);\n"
+    "  - atmosphere and mood that hint something is wrong without saying what;\n"
+    "  - signposting that a clue or searchable place EXISTS without revealing what it contains;\n"
+    "  - restating what the players already learned earlier in the transcript;\n"
+    "  - revealing a truth HERE as the direct, earned payoff of the players' own actions\n"
+    "    (a successful check, an interrogation they drove, a clue the module unlocks);\n"
+    "  - a sentinel word used in an ordinary, unrelated sense.\n"
+    'Reply with STRICT JSON only: {"leak": true|false, "quote": "<the leaking sentence from the text, '
+    'or empty>", "reason": "<why it leaks, or what makes it legitimate>"}'
 )
 
 
@@ -445,18 +465,27 @@ async def judge_secrecy(
     trouble already turns this workflow red rather than silently passing, and the
     judge must not double as an availability loophole.
     """
-    concept_hint = (
-        f"Pay particular attention to these sentinel concepts: {', '.join(concept_hints)}.\n\n"
-        if concept_hints
-        else ""
-    )
-    prompt = _SECRECY_JUDGE_PROMPT.format(
-        secret_material=secret_material,
-        concept_hint=concept_hint,
-        transcript=transcript_tail[-_JUDGE_TRANSCRIPT_CHARS:] or "(none)",
-        text=text,
-    )
+    # EVERYTHING -- prompt construction included -- lives inside the fail-closed
+    # boundary: a construction error that escaped here would not become a verdict
+    # at all, but a TURN_ERROR in one lane and an unhandled crash in the other.
     try:
+        concept_hint = (
+            "Pay particular attention to these sentinel concepts: " + ", ".join(concept_hints) + ".\n\n"
+            if concept_hints
+            else ""
+        )
+        prompt = (
+            _JUDGE_PREAMBLE
+            + secret_material
+            + "\n\n"
+            + concept_hint
+            + "Recent play transcript (may be empty at session start):\n"
+            + (transcript_tail[-_JUDGE_TRANSCRIPT_CHARS:] or "(none)")
+            + "\n\nPlayer-facing text under audit:\n"
+            + text
+            + "\n\n"
+            + _JUDGE_CRITERIA
+        )
         resp = await llm.chat([{"role": "user", "content": prompt}], temperature=0.0)
         raw = (getattr(resp, "content", None) or "").strip()
         match = re.search(r"\{.*\}", raw, re.DOTALL)

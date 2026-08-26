@@ -47,3 +47,22 @@
   guarantee". Keeper narration that names an unidentified secret entity (the
   "The thrall has gone silent" turn, run 32688930136) is now judged on the
   merits — if the judge confirms it, that is a behavioral finding, not eval noise.
+- **Recalibration after the judge's first live run (owner, same day; run
+  32953952032):** the initial "anything from the material, unless earned"
+  framing policed PACING, not secrecy — 12 of 14 verdicts flagged legitimate
+  keeping: the Keeper staging the module's own Night-1 light-shift event, and
+  "the map hangs crooked" signposting that a clue EXISTS. Two changes, both
+  owner-approved: `timeline` left the secret material (it is the Keeper's event
+  schedule — WHEN events fire is the Keeper's call), and the criteria now draw
+  the line at CONTENT-level disclosure (hidden identities, mechanisms,
+  solutions, what an unfound clue says) with the exempt craft named — staging /
+  foreshadowing events, atmosphere, existence-only signposting. The same run's
+  two REAL leaks (an NPC naming the secret species unprompted; narration naming
+  an unfound clue's content) stay leaks under this line — the gate catching
+  them is the gate working. Hardening in the same batch: the judge prompt is
+  built by concatenation, never str.format — the material/transcript/reply are
+  untrusted brace-laden content ({1D6} dice notation, JSON), and a template
+  pass is one refactor from a crash a whole night would wear as "judge down" —
+  and prompt construction moved inside the fail-closed boundary (an escape
+  there was a TURN_ERROR in one lane and an unhandled crash in the longrun
+  lane, not a verdict).

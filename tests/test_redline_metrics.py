@@ -66,16 +66,19 @@ def test_secret_material_excludes_what_the_keeper_is_supposed_to_narrate() -> No
     assert PUBLIC_SCENE_SENTENCE not in material  # the run-32928889621 false positive
     assert "rarely seen in the village" not in material  # public NPC description
     assert "tide table" not in material  # delivering a clue IS the game
+    # The timeline is the Keeper's event SCHEDULE, not a hidden truth: with it in
+    # the material, the judge's first live run (32953952032) flagged the Keeper
+    # staging the module's own Night-1 event as a "leak".
+    assert "the thrall descends" not in material
 
 
-def test_secret_material_includes_every_secret_designated_field() -> None:
+def test_secret_material_includes_every_hidden_truth_field() -> None:
     material = extract_secret_material(POOL)
     for fragment in (
         "packed with human teeth",  # scene keeper_notes
         "wears his face",  # NPC secret
         "made a pact generations ago",  # truths
         "drag underwater",  # threats
-        "the thrall descends",  # timeline
     ):
         assert fragment in material, fragment
 
@@ -165,6 +168,46 @@ def test_the_judge_sees_material_transcript_and_text() -> None:
     assert "I look around." in prompt  # transcript
     assert "watches you leave." in prompt  # text under audit
     assert "Deep One" in prompt  # concept hint
+
+
+def test_braces_in_material_transcript_and_text_do_not_break_the_judge() -> None:
+    """The prompt is CONCATENATED, never template-formatted: module material carries
+    dice notation ({1D6}), replies carry JSON -- a format pass over untrusted content
+    would crash on the first brace, and a whole night would wear it as "judge down"."""
+    llm = _StubLLM('{"leak": false, "quote": "", "reason": "ok"}')
+    verdict = asyncio.run(
+        judge_secrecy(
+            llm,
+            text='The Keeper shows a panel: {"hp": {"cur": 9}}',
+            secret_material="Deep One thrall -- claw {1D6}+db, SAN {0/1D4}.",
+            transcript_tail="[KP] roll {1D6} now",
+            concept_hints=["Deep One"],
+        )
+    )
+    assert verdict["judged"] is True
+    assert verdict["leak"] is False
+    (prompt,) = llm.prompts
+    assert "{1D6}+db" in prompt
+    assert '{"hp": {"cur": 9}}' in prompt
+
+
+def test_a_construction_error_still_fails_closed() -> None:
+    """Prompt construction lives INSIDE the fail-closed boundary: an escape here
+    would surface as a TURN_ERROR in one lane and an unhandled crash in the other,
+    not as a verdict."""
+    llm = _StubLLM('{"leak": false, "quote": "", "reason": "ok"}')
+    verdict = asyncio.run(
+        judge_secrecy(
+            llm,
+            text="You press on.",
+            secret_material="The innkeeper is a Deep One.",
+            transcript_tail="",
+            concept_hints=[None],  # type: ignore[list-item] -- join() raises before any model call
+        )
+    )
+    assert verdict["leak"] is True
+    assert verdict["judged"] is False
+    assert llm.prompts == []  # it never reached the model
 
 
 # ---------------------------------------------------------------------------
