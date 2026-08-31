@@ -79,7 +79,7 @@ from core.documents import PLAYER_VIEWER  # noqa: E402
 from core.rulepacks import all_check_terms  # noqa: E402
 from gateway.commands import CommandRouter  # noqa: E402
 from gateway.hub import RoomHub  # noqa: E402
-from gateway.turn import run_turn  # noqa: E402
+from gateway.turn import player_line_body, run_turn  # noqa: E402
 from infra.config import get_settings  # noqa: E402
 from infra.embeddings import LocalEmbeddings  # noqa: E402
 from infra.llm import ChatResult, FakeLLM, ToolCall, Usage  # noqa: E402
@@ -1018,8 +1018,11 @@ class BehaviorSmokeLLM(FakeLLM):
     def _respond(self, messages: list[dict], _tools: list[dict] | None) -> ChatResult:
         matched: tuple[int, dict[str, Any]] | None = None
         for index, message in enumerate(messages):
-            if message.get("role") == "user" and message.get("content") in self._turn_by_action:
-                matched = (index, self._turn_by_action[str(message["content"])])
+            if message.get("role") != "user":
+                continue
+            action = player_line_body(str(message.get("content", "")))
+            if action in self._turn_by_action:
+                matched = (index, self._turn_by_action[action])
         smoke_usage = Usage(prompt_tokens=10, completion_tokens=4, total_tokens=14)
         if matched is None:
             return ChatResult(

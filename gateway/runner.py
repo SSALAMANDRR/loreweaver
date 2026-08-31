@@ -27,7 +27,7 @@ from gateway.rooms import (
     session_key_for_room,
 )
 from gateway.session import SessionSource
-from gateway.turn import run_scribe_pass, run_turn
+from gateway.turn import _display_name, attributed_player_line, run_scribe_pass, run_turn
 from infra.i18n import get_i18n
 from infra.media_store import (
     ALLOWED_AUDIO_MIMES,
@@ -196,11 +196,13 @@ class GatewayRunner:
             return ChatMessage(text=command_reply, markdown=False, private=private)
 
         toolset = self.toolset or build_kp_toolset(self.services)
+        i18n = get_i18n(ctx.locale)
+        speaker = await _display_name(None, ctx, self.services)
         result = await run_kp_turn(
             ctx,
             self.services,
             toolset,
-            text,
+            attributed_player_line(i18n, speaker, text),
             output_review=lambda value: self.censor.review(value).cleaned,
         )
         # The same post-turn Scribe pass the hub path runs, awaited inline: durable

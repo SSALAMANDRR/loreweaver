@@ -114,4 +114,7 @@ async def test_a_real_kp_turn_opens_the_session_and_stores_the_exchange_whole():
 
     assert await services.battles.generator.get_current_session(ctx.chat_key) is not None
     chain = await load_chain(services, ctx.chat_key, DEFAULT_HISTORY_KEY)
-    assert [message["content"] for message in chain if message["role"] == "user"] == [action]
+    users = [message["content"] for message in chain if message["role"] == "user"]
+    # No origin member: nickname falls back to ctx.uid() ("u1"); the echo-side
+    # display name still prefixes the Keeper's persisted line, body untruncated.
+    assert users == [f"[Vera (u1)]\n{action}"]

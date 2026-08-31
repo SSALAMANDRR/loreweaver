@@ -528,7 +528,7 @@ async def test_companion_act_inside_a_turn_keeps_the_player_s_line_and_the_live_
 
     chain = await load_chain(services, chat_key, DEFAULT_HISTORY_KEY)
     lines = [(m["role"], m["content"]) for m in chain]
-    assert lines[0] == ("user", "I ask Ada to take point."), lines  # STILL on the path, and first
+    assert lines[0] == ("user", "[p1]\nI ask Ada to take point."), lines  # STILL on the path, and first
     assert ("assistant", "Ada's boot splinters the frame; the cellar breathes out.") == lines[-1]
     # …with the companion's exchange BETWEEN the player's line and the KP's reply.
     middle = lines[1:-1]

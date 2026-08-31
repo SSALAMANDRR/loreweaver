@@ -7,6 +7,7 @@ from itertools import count
 from pathlib import Path
 
 from gateway.demo import is_demo_setup_request, is_guided_demo_request
+from gateway.turn import player_line_body
 from infra.i18n import t
 from infra.llm import ToolCall, assistant_text, assistant_tools
 
@@ -22,7 +23,7 @@ def demo_kp_responder(messages, tools):
         return assistant_text(json.dumps(_demo_analysis()))
 
     last_user = max((index for index, item in enumerate(messages) if item.get("role") == "user"), default=0)
-    user_text = str(messages[last_user].get("content", "")).lower()
+    user_text = player_line_body(str(messages[last_user].get("content", ""))).lower()
     called = _tools_called_this_turn(messages)
 
     # The TUI's first-run button sends a normal, localized player action. Treat

@@ -132,6 +132,7 @@ async def test_inject_trpg_system_prompt_is_localized_and_nonempty_en():
     assert EN.t("prompt.system.intro") in result
     assert EN.t("prompt.system.guidelines_header") in result
     assert EN.t("prompt.system.guidelines") in result
+    assert "do not collapse the table into a single protagonist" in result
     assert "roll_dice(expression)" not in result  # no hand-written tool catalog
 
 
@@ -156,6 +157,10 @@ async def test_inject_interaction_style_prompt_is_localized_and_nonempty():
     assert ZH.t("prompt.style.roll_policy") in zh_result
     assert "at most one check" in en_result
     assert "至多一次检定" in zh_result
+    assert "address the one who just spoke by name" in en_result
+    assert "刚刚发言的那个角色的名字" in zh_result
+    assert "Never recast another player's character as a companion" in en_result
+    assert "绝不要把其他玩家的角色收成 AI 同伴" in zh_result
 
 
 async def test_inject_interaction_style_prompt_asks_for_idiomatic_prose():
