@@ -509,7 +509,11 @@ class AnthropicLLM:
             kwargs["tool_choice"] = choice
         effective_temperature = self._settings.temperature if temperature is None else temperature
         if not thinking and effective_temperature is not None and anthropic_accepts_temperature(kwargs["model"]):
-            kwargs["temperature"] = effective_temperature
+            # anthropic SDK 1.0 dropped temperature/top_p/top_k from messages.create
+            # and messages.stream; passing them as kwargs is a TypeError before the
+            # request leaves the process. extra_body still merges into the JSON, which
+            # older models (Haiku / Opus 4.6) continue to honour.
+            kwargs["extra_body"] = {"temperature": effective_temperature}
 
         if "thinking" in kwargs or on_text_delta is not None:
             # Streaming serves two masters: the SDK refuses non-streaming requests sized

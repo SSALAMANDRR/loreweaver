@@ -365,12 +365,30 @@ async def test_anthropic_chat_drops_temperature_on_models_that_reject_it():
     kwargs = await _anthropic_chat_kwargs("claude-opus-4-8", 0.9)
 
     assert "temperature" not in kwargs
+    assert "temperature" not in (kwargs.get("extra_body") or {})
 
 
 async def test_anthropic_chat_keeps_temperature_on_models_that_accept_it():
+    # SDK 1.0 removed temperature from create/stream signatures (TypeError, not
+    # HTTP 400). Older models still honour it via extra_body.
     kwargs = await _anthropic_chat_kwargs("claude-opus-4-6", 0.9)
 
-    assert kwargs["temperature"] == 0.9
+    assert "temperature" not in kwargs
+    assert kwargs.get("extra_body") == {"temperature": 0.9}
+
+
+async def test_anthropic_stream_sends_temperature_via_extra_body():
+    holder: dict = {}
+    stream = _FakeAnthropicStream(holder, SimpleNamespace(content=[SimpleNamespace(type="text", text="ok")]))
+    fake_client = SimpleNamespace(messages=SimpleNamespace(create=AsyncMock(), stream=stream))
+    llm = AnthropicLLM(LLMSettings(api_key="sk-test", chat_model="claude-haiku-4-5"), client=fake_client)
+
+    await llm.chat([{"role": "user", "content": "act"}], temperature=0.4, on_text_delta=lambda _t: None)
+
+    kwargs = holder["kwargs"]
+    assert "temperature" not in kwargs
+    assert kwargs.get("extra_body") == {"temperature": 0.4}
+    fake_client.messages.create.assert_not_called()
 
 
 def test_anthropic_base_url_drops_openai_style_v1_suffix():
@@ -429,6 +447,7 @@ async def test_anthropic_chat_maps_reasoning_effort_to_extended_thinking():
     assert kwargs["thinking"] == {"type": "enabled", "budget_tokens": 31744}
     assert kwargs["max_tokens"] > 31744
     assert "temperature" not in kwargs
+    assert "temperature" not in (kwargs.get("extra_body") or {})
     assert result.content == "ok"
     fake_client.messages.create.assert_not_called()
 
