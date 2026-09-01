@@ -67,6 +67,7 @@ from agent.kp_tools import build_kp_toolset  # noqa: E402
 # Stop-form runner built on them still fails against a REAL model (the offline
 # suite only proves it against a scripted one). What is NOT shared any more is
 # any judgement about what a player was attempting -- see `judge_checkable`.
+from agent.player_line import player_line_body  # noqa: E402
 from agent.services import build_services  # noqa: E402
 from agent.turn_checks import dice_rolled, reply_states_a_roll  # noqa: E402
 from core import pack as core_pack  # noqa: E402
@@ -79,7 +80,7 @@ from core.documents import PLAYER_VIEWER  # noqa: E402
 from core.rulepacks import all_check_terms  # noqa: E402
 from gateway.commands import CommandRouter  # noqa: E402
 from gateway.hub import RoomHub  # noqa: E402
-from gateway.turn import player_line_body, run_turn  # noqa: E402
+from gateway.turn import run_turn  # noqa: E402
 from infra.config import get_settings  # noqa: E402
 from infra.embeddings import LocalEmbeddings  # noqa: E402
 from infra.llm import ChatResult, FakeLLM, ToolCall, Usage  # noqa: E402

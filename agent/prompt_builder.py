@@ -89,6 +89,7 @@ from dataclasses import dataclass
 
 from agent.context import AgentCtx
 from agent.history import DEFAULT_HISTORY_KEY, load_chain
+from agent.player_line import player_line_body
 from agent.services import Services
 from core.dice_engine import DiceRoller
 from core.ejs_full import create_full_engine
@@ -381,8 +382,14 @@ async def _recent_transcript(services: Services, ctx: AgentCtx) -> str:
         chain = await load_chain(services, ctx.chat_key, DEFAULT_HISTORY_KEY)
     except Exception:  # noqa: BLE001 — retrieval context is best-effort, never a turn's problem
         return ""
-    tail = [str(message.get("content", "")).strip() for message in chain[-_RECENT_CONTEXT_MESSAGES:]]
-    return "\n".join(part for part in tail if part)[-_RECENT_CONTEXT_MAX_CHARS:]
+    tail: list[str] = []
+    for message in chain[-_RECENT_CONTEXT_MESSAGES:]:
+        content = str(message.get("content", "")).strip()
+        if message.get("role") == "user":
+            content = player_line_body(content)
+        if content:
+            tail.append(content)
+    return "\n".join(tail)[-_RECENT_CONTEXT_MAX_CHARS:]
 
 
 async def _module_pool_ready(services: Services, chat_key: str) -> bool:

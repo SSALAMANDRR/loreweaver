@@ -40,8 +40,10 @@ EXTRA_KEY_SOURCES: dict[str, str] = {
 # separate from the map above so an exemption is a decision someone made, not an omission.
 EXTRA_KEY_EXEMPTIONS: dict[str, str] = {
     "user_message": (
-        "it IS this turn's input rather than a derived segment — the caller hands it in, "
-        "and it lands in the history tree as the turn's user message when the turn commits"
+        "it IS this turn's player-authored body rather than a derived segment — the "
+        "caller hands the line in, `player_line_body` strips a speaker tag if the "
+        "gateway prefixed one, and the tagged form (when present) is what lands in "
+        "the history tree for the model"
     ),
 }
 

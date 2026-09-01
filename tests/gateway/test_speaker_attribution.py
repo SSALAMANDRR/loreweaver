@@ -10,12 +10,14 @@ from agent.context import AgentCtx
 from agent.history import DEFAULT_HISTORY_KEY, load_chain
 from agent.kp_tools import build_kp_toolset
 from agent.loop import run_kp_turn
+from agent.player_line import attributed_player_line, player_line_body
 from agent.services import build_services
 from core.character_manager import CharacterSheet
+from core.worldbook import LoreEntry
 from gateway.commands import CommandRouter
 from gateway.hub import Event, RoomHub
 from gateway.runner import GatewayRunner
-from gateway.turn import attributed_player_line, player_line_body, run_turn
+from gateway.turn import run_turn
 from infra.config import Settings
 from infra.embeddings import FakeEmbeddings
 from infra.i18n import I18n
@@ -126,3 +128,44 @@ async def test_standalone_cli_turn_tags_the_caller(tmp_path):
     users = [message["content"] for message in chain if message["role"] == "user"]
     assert users == ["[Nora (Ada)]\nI ring the bell"]
     assert services.llm.calls[0][0][-1]["content"] == users[0]
+
+
+async def test_hub_turn_speaker_tag_does_not_fire_name_keyed_lore():
+    """The live wrap path: character name collides with a lore key, body does not."""
+    captured: list[str] = []
+
+    def responder(messages, tools):
+        captured.append("\n\n".join(str(message.get("content") or "") for message in messages[:-1]))
+        return assistant_text("The pier is quiet.")
+
+    services = build_services(
+        Settings(locale="en"),
+        llm=FakeLLM(responder=responder),
+        embeddings=FakeEmbeddings(8),
+    )
+    hub = RoomHub()
+    member = _Member("m-keeper", "keeper")
+    chat_key = ROOM + "-lore"
+    await hub.subscribe(chat_key, member)
+    ctx = AgentCtx(chat_key=chat_key, user_id=member.id, platform="tui", locale="en")
+    await services.characters.save_character(
+        ctx.uid(), ctx.chat_key, CharacterSheet(name="Lighthouse", system="coc7")
+    )
+    await services.worldbook.add(
+        ctx.chat_key,
+        LoreEntry(id="", title="The Light", content="The lighthouse keeper is the murderer.", keys=["Lighthouse"]),
+    )
+
+    await run_turn(
+        hub,
+        services,
+        ctx,
+        "I walk to the pier.",
+        command_router=CommandRouter(services),
+        toolset=build_kp_toolset(services),
+        origin=member,
+    )
+
+    assert ctx.extra["user_message"] == "I walk to the pier."
+    assert all("lighthouse keeper is the murderer" not in prompt.lower() for prompt in captured)
+    assert services.llm.calls[0][0][-1]["content"] == "[Lighthouse (keeper)]\nI walk to the pier."

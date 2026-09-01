@@ -163,6 +163,7 @@ from agent.history import (
 )
 from agent.hook_runtime import apply_hook_writes, load_room_hook_engine, record_hook_injections
 from agent.kp_tools_subsystems import dispatch_subsystem, subsystem_schemas
+from agent.player_line import player_line_body
 from agent.prompt_builder import build_system_prompt_parts
 from agent.services import Services
 from agent.tool_phase import room_capabilities, room_phase
@@ -470,9 +471,13 @@ async def _run_kp_turn_body(
     # else ever wrote this key, which left live-play lorebook injection retrieving against
     # an empty context (found by the 2026-08-05 imported-card play-test): imported cards'
     # keyword entries could never fire outside archived-session recaps.
-    ctx.extra["user_message"] = user_message
+    # The gateway may have prefixed a speaker tag for the model/history (issue #29);
+    # retrieval and turn_start hooks see only the player-authored body, or a PC name
+    # that collides with a lore key would inject every turn.
+    utterance = player_line_body(user_message)
+    ctx.extra["user_message"] = utterance
     if hook_engine is not None:
-        outcome = hook_engine.fire("turn_start", {"user_message": user_message, "actor": ctx.user_id})
+        outcome = hook_engine.fire("turn_start", {"user_message": utterance, "actor": ctx.user_id})
         hook_writes_this_turn += await apply_hook_writes(services, ctx.chat_key, outcome.writes)
         hook_ui_frames += outcome.ui_blocks
         hook_panel_events += outcome.panel_events

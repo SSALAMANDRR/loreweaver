@@ -29,12 +29,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import re
 import uuid
 from typing import TYPE_CHECKING, Any
 
 from agent.context import AgentCtx
 from agent.loop import KPTurnResult, run_kp_turn
+from agent.player_line import attributed_player_line
 from agent.scribe_coord import ScribeEpoch, refresh_latest_snapshot
 from gateway.hub import Event
 from gateway.ops import is_bot_enabled, room_content_unfiltered
@@ -57,11 +57,6 @@ if TYPE_CHECKING:
 # Strong refs used to live here as a GC keep-alive. The per-room coordinator
 # (`agent.scribe_coord`) now owns the chain — tests and playtest drain through
 # `scribe_runtime.await_idle`.
-
-# Inverse of `prompt.speaker_line` (`[{name}]\n{text}`): a leading `[display]\n` is
-# the engine tag, not player text. Names are `_display_name` values (no `]` / newline).
-_SPEAKER_LINE_PREFIX = re.compile(r"^\[[^\n\]]+\]\n")
-
 
 async def run_turn(
     hub: RoomHub,
@@ -613,30 +608,6 @@ async def state_for_ctx(
     for party_member in snapshot.get("party", []):
         party_member["online"] = party_member.get("name") in connected_names
     return snapshot
-
-
-def attributed_player_line(i18n: I18n, name: str, text: str) -> str:
-    """The player line the Keeper persists and replays — speaker tagged, body intact.
-
-    The room echo carries ``name`` on ``player_action`` separately, so this wrap is
-    for the model only. Empty ``name`` leaves ``text`` unchanged (direct ``run_kp_turn``
-    callers and tests stay verbatim).
-    """
-    speaker = name.strip()
-    if not speaker:
-        return text
-    return i18n.t("prompt.speaker_line", name=speaker, text=text)
-
-
-def player_line_body(text: str) -> str:
-    """The player-authored body of a Keeper user line.
-
-    Inverse of ``attributed_player_line``. Scripted responders (the CLI demo
-    double, the behavior-eval smoke LLM) match on what the player typed, not
-    the engine tag; a line that was never tagged is returned unchanged.
-    """
-    match = _SPEAKER_LINE_PREFIX.match(text)
-    return text[match.end() :] if match else text
 
 
 async def _display_name(origin: Member | None, ctx: AgentCtx, services: Services) -> str:

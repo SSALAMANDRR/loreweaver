@@ -6,12 +6,16 @@ before the fix nothing ever wrote that key and imported lorebooks were a dead zo
 from __future__ import annotations
 
 from agent.context import AgentCtx
+from agent.history import DEFAULT_HISTORY_KEY, append_turn
 from agent.kp_tools import build_kp_toolset
 from agent.loop import run_kp_turn
+from agent.player_line import attributed_player_line
+from agent.prompt_builder import _recent_transcript
 from agent.services import build_services
 from core.worldbook import LoreEntry
 from infra.config import Settings
 from infra.embeddings import FakeEmbeddings
+from infra.i18n import I18n
 from infra.llm import FakeLLM, assistant_text
 
 
@@ -144,3 +148,68 @@ async def test_no_world_lore_means_no_discipline_fold(tmp_path):
 
     i18n = services.i18n.with_locale("en")
     assert i18n.t("prompt.module_fidelity") not in captured_prompts[-1]
+
+
+async def test_speaker_tag_is_not_a_worldbook_keyword():
+    """The gateway prefixes `[display name]\\n` for the model. That tag must not
+    become retrieval context: a PC named after a lore key would otherwise fire
+    every turn. Direct `run_kp_turn` with a tagged line is what the hub passes."""
+    captured_prompts: list[str] = []
+    captured_last: list[str] = []
+
+    def responder(messages, tools):
+        captured_prompts.append(_assembled_prompt(messages))
+        captured_last.append(str(messages[-1].get("content") or ""))
+        return assistant_text("The pier creaks.")
+
+    services = _services(FakeLLM(responder=responder))
+    ctx = AgentCtx(chat_key="wb-tagged-room", user_id="p1", locale="en")
+    await services.worldbook.add(
+        "wb-tagged-room",
+        LoreEntry(id="", title="灯塔的秘密史", content="灯塔曾三次易主，塔顶封存着旧日志。", keys=["灯塔"]),
+    )
+    tagged = attributed_player_line(I18n("en"), "灯塔 (p1)", "我走向海边。")
+
+    await run_kp_turn(ctx, services, build_kp_toolset(services), tagged)
+
+    assert tagged.startswith("[灯塔 (p1)]\n")
+    assert ctx.extra["user_message"] == "我走向海边。"
+    assert captured_last[-1] == tagged
+    assert all("灯塔曾三次易主" not in prompt for prompt in captured_prompts)
+
+
+async def test_speaker_tag_does_not_hide_a_keyword_in_the_body():
+    captured_prompts: list[str] = []
+
+    def responder(messages, tools):
+        captured_prompts.append(_assembled_prompt(messages))
+        return assistant_text("The lighthouse looms.")
+
+    services = _services(FakeLLM(responder=responder))
+    ctx = AgentCtx(chat_key="wb-tagged-body-room", user_id="p1", locale="en")
+    await services.worldbook.add(
+        "wb-tagged-body-room",
+        LoreEntry(id="", title="灯塔的秘密史", content="灯塔曾三次易主，塔顶封存着旧日志。", keys=["灯塔"]),
+    )
+    tagged = attributed_player_line(I18n("en"), "Nora Vance", "我走向灯塔，抬头看塔顶。")
+
+    await run_kp_turn(ctx, services, build_kp_toolset(services), tagged)
+
+    assert ctx.extra["user_message"] == "我走向灯塔，抬头看塔顶。"
+    assert any("灯塔曾三次易主" in prompt for prompt in captured_prompts)
+
+
+async def test_recent_transcript_strips_speaker_tags_from_history():
+    """Prior turns' `[name]\\n` tags sit in history for the model; retrieval must
+    not scan them or a PC name becomes a standing lore keyword."""
+    services = _services(FakeLLM())
+    ctx = AgentCtx(chat_key="wb-transcript-room", user_id="p1", locale="en")
+    tagged = attributed_player_line(I18n("en"), "Lighthouse (p1)", "I walk to the pier.")
+    await append_turn(
+        services, ctx.chat_key, DEFAULT_HISTORY_KEY,
+        user_message=tagged, reply="The pier is quiet.", turn=1,
+    )
+    text = await _recent_transcript(services, ctx)
+    assert "Lighthouse" not in text
+    assert "I walk to the pier." in text
+    assert "The pier is quiet." in text

@@ -6,8 +6,8 @@ import json
 from itertools import count
 from pathlib import Path
 
+from agent.player_line import player_line_body
 from gateway.demo import is_demo_setup_request, is_guided_demo_request
-from gateway.turn import player_line_body
 from infra.i18n import t
 from infra.llm import ToolCall, assistant_text, assistant_tools
 

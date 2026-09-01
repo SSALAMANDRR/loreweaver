@@ -11,12 +11,15 @@
   cache-layout oracle) stay verbatim. Standing style forbids recasting a human
   PC as a companion and tells the model to address the tagged speaker by name.
   No volatile "who is acting" block — that identity now lives on the player
-  line, which joins history next turn and rides the cached prefix.
+  line, which joins history next turn and rides the cached prefix. Retrieval
+  and `turn_start` hooks see only `player_line_body` (the tag is not a lore
+  keyword): `ctx.extra["user_message"]`, the hook payload, and
+  `_recent_transcript`.
 - **Reason:** the engine already knew the speaker; only the model-visible
   conversation dropped it. Old rooms are not rewritten; new turns tag going
   forward.
-- **Rule home:** `gateway.turn.attributed_player_line` / `player_line_body`
-  (hub + CLI; scripted FakeLLM matchers strip the tag);
-  `locales/{en,zh}/prompt.json` (`prompt.speaker_line`, `prompt.style.narrative`,
-  `prompt.style.companions`).
+- **Rule home:** `agent.player_line` (`attributed_player_line` /
+  `player_line_body`); hub + CLI wrap, the loop/assembler strip for
+  retrieval; `locales/{en,zh}/prompt.json` (`prompt.speaker_line`,
+  `prompt.style.narrative`, `prompt.style.companions`).
 - **Date:** 2026-09-01.
