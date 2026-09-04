@@ -101,6 +101,20 @@ def _apply_attributes(character: CharacterSheet, pack: Any, values: Mapping[str,
         set_sheet_value(character, pack, str(canonical), numeric)
 
 
+def _store_rolled_attribute(character: CharacterSheet, pack: Any, canonical: str, value: int) -> None:
+    """Store one rolled canonical attribute without forcing a derived refresh per die.
+
+    Most packs use identical canonical/storage names, but a sheet may map a
+    canonical attribute such as ``Wounds`` to a storage key such as ``WOUNDS``.
+    Profile roll overrides are allowed to introduce such mapped attributes even
+    when they are not part of the base characteristic-generation table.
+    """
+
+    spec = getattr(pack, "sheet_spec", None)
+    storage_key = spec.attr_keys.get(canonical, canonical) if spec is not None else canonical
+    character.attributes[storage_key] = value
+
+
 def _bonus_success(pack: Any, character: CharacterSheet, roll: int, expression: str) -> bool:
     try:
         compiled = compile_expression(expression)
@@ -133,9 +147,11 @@ def generate_profiled_character(
 
     Base attribute rolls come from ``creation_constraints.attributes[*].roll``.
     A profile's ``attribute_rolls`` mapping replaces the expression for selected
-    attributes. ``attributes`` and ``fields`` then write deterministic starting
-    values. Finally each ``bonus_rolls`` row rolls once and, when its safe
-    ``when`` expression succeeds, applies ``add_attributes`` / ``set_attributes``.
+    attributes and may add another declared sheet attribute whose starting value
+    is rolled by the profile. ``attributes`` and ``fields`` then write
+    deterministic starting values. Finally each ``bonus_rolls`` row rolls once
+    and, when its safe ``when`` expression succeeds, applies
+    ``add_attributes`` / ``set_attributes``.
 
     Supported profile keys are deliberately small and closed; unknown keys fail
     loudly instead of becoming silently ignored house rules.
@@ -172,7 +188,7 @@ def generate_profiled_character(
         if not isinstance(expression, str) or not expression.strip():
             raise CreationProfileError(f"creation roll for {key!r} must be a non-empty dice expression")
         total = roller.roll_expression(expression.strip()).total
-        character.attributes[key] = total
+        _store_rolled_attribute(character, pack, key, total)
         attribute_rolls[key] = total
 
     _apply_attributes(character, pack, _mapping(profile_id, raw, "attributes"))
