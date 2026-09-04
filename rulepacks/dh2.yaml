@@ -1,0 +1,174 @@
+# Dark Heresy Second Edition — initial deterministic mechanics kernel.
+#
+# Source of truth for this port is the structured Russian DH2 corpus migrated
+# into the НРИ ВАХА Neon database from DH2_RU_OKP_V1_8.  This first slice is
+# deliberately narrow: characteristic naming/bonuses, the basic percentile
+# check, the complete difficulty ladder, and initiative.  Character creation,
+# skills, combat actions, hit locations, damage, weapons and critical effects
+# are added only after their source sections are mapped and covered by tests.
+
+names:
+  - dh2
+  - darkheresy2
+  - "dark heresy 2e"
+  - "dark heresy second edition"
+  - "тёмная ересь 2"
+  - "темная ересь 2"
+set_keys: [dh2, darkheresy2]
+
+# Missing values intentionally fall back to the legal characteristic floor,
+# not to a fabricated "average acolyte".  Real creation defaults belong to the
+# character-creation slice and will replace these once Chapter II is ported.
+defaults:
+  WS: 1
+  BS: 1
+  S: 1
+  T: 1
+  Ag: 1
+  Int: 1
+  Per: 1
+  WP: 1
+  Fel: 1
+  Inf: 1
+
+# Canonical keys stay compact/ASCII so formulas remain readable.  Russian
+# names and abbreviations are taken from CH01_H004..CH01_H013.
+alias:
+  WS: ["Навык Рукопашной", "Навык Рукопашной (НР)", НР]
+  BS: ["Навык Стрельбы", "Навык Стрельбы (НС)", НС]
+  S: [Сила, "Сила (С)", С]
+  T: [Выносливость, "Выносливость (В)", В]
+  Ag: [Ловкость, "Ловкость (Л)", Л]
+  Int: [Интеллект, "Интеллект (И)", И]
+  Per: [Восприятие, "Восприятие (Вос)", Вос]
+  WP: ["Сила Воли", "Сила Воли (СВ)", СВ]
+  Fel: [Общительность, "Общительность (О)", О]
+  Inf: [Влияние, "Влияние (Вл)", Вл]
+
+# CH01_M03/CH01_M04 + CH01_H018: roll d100 and succeed on a result no greater
+# than the modified characteristic/skill.  DH2 permits effective targets above
+# 100 and below 0, so target transforms are intentionally not clamped here.
+resolution:
+  version: 1
+  roll: 1d100
+  target: skill
+  compare: "<="
+  difficulties:
+    trivial:
+      target: "target + 60"
+      prefixes: {ru: [тривиальная, тривиально], en: [trivial]}
+    elementary:
+      target: "target + 50"
+      prefixes: {ru: [элементарная, элементарно], en: [elementary]}
+    simple:
+      target: "target + 40"
+      prefixes: {ru: [простая, просто], en: [simple]}
+    easy:
+      target: "target + 30"
+      prefixes: {ru: [лёгкая, легко], en: [easy]}
+    routine:
+      target: "target + 20"
+      prefixes: {ru: [обыденная, обыденно], en: [routine]}
+    ordinary:
+      target: "target + 10"
+      prefixes: {ru: [ординарная, ординарно], en: [ordinary]}
+    challenging:
+      prefixes: {ru: [серьёзная, серьёзно], en: [challenging]}
+    difficult:
+      target: "target - 10"
+      prefixes: {ru: [сложная, сложно], en: [difficult]}
+    hard:
+      target: "target - 20"
+      prefixes: {ru: [тяжёлая, тяжело], en: [hard]}
+    very_hard:
+      target: "target - 30"
+      prefixes: {ru: ["очень тяжёлая", "очень тяжело"], en: ["very hard"]}
+    strenuous:
+      target: "target - 40"
+      prefixes: {ru: [напряжённая, напряжённо], en: [strenuous]}
+    punishing:
+      target: "target - 50"
+      prefixes: {ru: [мучительная, мучительно], en: [punishing]}
+    hellish:
+      target: "target - 60"
+      prefixes: {ru: [адская, адски], en: [hellish]}
+  ranks:
+    - {id: success, when: "roll <= target", success: true, tier: 2}
+    - {id: fail, tier: 1}
+
+labels:
+  ru:
+    success: {display: Успех, markers: []}
+    fail: {display: Провал, markers: []}
+  en:
+    success: {display: Success, markers: []}
+    fail: {display: Failure, markers: []}
+
+# CH01_H003: every characteristic bonus is the tens digit of the value.
+derived:
+  WSB: {expr: "floor(WS / 10)"}
+  BSB: {expr: "floor(BS / 10)"}
+  SB: {expr: "floor(S / 10)"}
+  TB: {expr: "floor(T / 10)"}
+  AgB: {expr: "floor(Ag / 10)"}
+  IntB: {expr: "floor(Int / 10)"}
+  PerB: {expr: "floor(Per / 10)"}
+  WPB: {expr: "floor(WP / 10)"}
+  FelB: {expr: "floor(Fel / 10)"}
+  InfB: {expr: "floor(Inf / 10)"}
+
+# CH07_H011: d10 + Agility Bonus.
+initiative:
+  roll: "1d10 + {AgB}"
+
+display:
+  ru:
+    WS: Навык Рукопашной
+    BS: Навык Стрельбы
+    S: Сила
+    T: Выносливость
+    Ag: Ловкость
+    Int: Интеллект
+    Per: Восприятие
+    WP: Сила Воли
+    Fel: Общительность
+    Inf: Влияние
+    WSB: Бонус Навыка Рукопашной
+    BSB: Бонус Навыка Стрельбы
+    SB: Бонус Силы
+    TB: Бонус Выносливости
+    AgB: Бонус Ловкости
+    IntB: Бонус Интеллекта
+    PerB: Бонус Восприятия
+    WPB: Бонус Силы Воли
+    FelB: Бонус Общительности
+    InfB: Бонус Влияния
+  en:
+    WS: WS
+    BS: BS
+    S: S
+    T: T
+    Ag: Ag
+    Int: Int
+    Per: Per
+    WP: WP
+    Fel: Fel
+    Inf: Inf
+    WSB: WSB
+    BSB: BSB
+    SB: SB
+    TB: TB
+    AgB: AgB
+    IntB: IntB
+    PerB: PerB
+    WPB: WPB
+    FelB: FelB
+    InfB: InfB
+
+commands:
+  ra: {action: check}
+  rc: {action: check}
+
+expertise:
+  ru: "# Dark Heresy Second Edition — Ведущий\nИспользуй процентные проверки DH2: бросок d100 должен быть не выше модифицированного значения характеристики или умения. Сложность меняет целевое значение по шкале от +60 до -60. Механику, уже выраженную rulepack-ом, не пересчитывай в прозе и не подменяй результат броска повествованием."
+  en: "# Dark Heresy Second Edition — GM\nUse DH2 percentile checks: d100 must roll at or below the modified characteristic or skill. Difficulty changes the target on the +60 to -60 ladder. Do not recompute mechanics already owned by the rulepack in prose or override a rolled result with narration."
