@@ -1,27 +1,29 @@
 """Generic, pack-sidecar-driven character-creation layers.
 
 Some systems build a character in several independent stages after the initial
-attribute profile: background, role, ancestry, career, faction, etc.  These are
+attribute profile: background, role, ancestry, career, faction, etc. These are
 not dice-resolution rules and they should not force a giant cross-product of
-``creation_constraints.profiles``.  This module provides one generic substrate
+``creation_constraints.profiles``. This module provides one generic substrate
 for such stages.
 
-Built-in sidecars live at ``rulepacks/data/<system>/creation.yaml``.  A user
-rulepack directory may mirror the same ``data/<system>/creation.yaml`` layout.
-The engine never branches on a concrete system id; the id is only the lookup
-key for that system's data directory.
+Built-in sidecars live at ``rulepacks/data/<system>/creation.yaml``. A sidecar
+may be split into additional ``creation.d/*.yaml`` fragments so a large system
+can keep independent creation stages in auditable files. A user rulepack data
+directory may mirror the same layout. The engine never branches on a concrete
+system id; the id is only the lookup key for that system's data directory.
 
 A layer option may apply:
 
 * scalar declared sheet ``fields``;
 * list-like ``append_fields``;
+* rolled sheet attributes through pack-agnostic dice expressions;
 * skill ranks, including ``Family::specialization`` keys;
 * starting equipment;
 * explicit player choice groups, either finite options, a free specialization
   of a declared skill family, or a free specialization interpolated into a
   declared list-like sheet field (for talents/traits/etc.).
 
-Missing choices fail loudly.  The substrate never guesses for the player.
+Missing choices fail loudly. The substrate never guesses for the player.
 """
 
 from __future__ import annotations
@@ -31,6 +33,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from core.dice_engine import DiceRoller
 from core.sheets import refresh_sheet, resolve_skill_family, set_sheet_value
 from core.yaml_safety import safe_load_no_aliases
 
@@ -80,26 +83,53 @@ def _candidate_sidecars(pack: Any, data_root: Path | None = None) -> list[Path]:
     return candidates
 
 
-def load_creation_layers(pack: Any, *, data_root: Path | None = None) -> Mapping[str, Any]:
-    """Load and minimally validate a pack's optional layered-creation sidecar."""
-    path = next((candidate for candidate in _candidate_sidecars(pack, data_root) if candidate.is_file()), None)
-    if path is None:
-        return {}
+def _load_sidecar_file(path: Path) -> Mapping[str, Any]:
     try:
         raw = safe_load_no_aliases(path.read_text(encoding="utf-8")) or {}
     except Exception as exc:
-        raise CreationLayerError(f"could not load creation sidecar: {exc}") from exc
+        raise CreationLayerError(f"could not load creation sidecar {path.name!r}: {exc}") from exc
     if not isinstance(raw, Mapping):
-        raise CreationLayerError("creation sidecar root must be a mapping")
+        raise CreationLayerError(f"creation sidecar {path.name!r} root must be a mapping")
     if int(raw.get("version", 1)) != 1:
-        raise CreationLayerError("unsupported creation sidecar version")
+        raise CreationLayerError(f"unsupported creation sidecar version in {path.name!r}")
     unknown = set(raw) - {"version", "layers"}
     if unknown:
-        raise CreationLayerError(f"creation sidecar has unknown root keys {sorted(unknown)}")
+        raise CreationLayerError(f"creation sidecar {path.name!r} has unknown root keys {sorted(unknown)}")
     layers = raw.get("layers") or {}
     if not isinstance(layers, Mapping):
-        raise CreationLayerError("creation sidecar layers must be a mapping")
+        raise CreationLayerError(f"creation sidecar {path.name!r}.layers must be a mapping")
     return layers
+
+
+def load_creation_layers(pack: Any, *, data_root: Path | None = None) -> Mapping[str, Any]:
+    """Load a pack's base creation sidecar plus sorted ``creation.d`` fragments.
+
+    The same root that supplies ``creation.yaml`` supplies its fragments. This
+    preserves the existing user-sidecar-wins behavior instead of accidentally
+    mixing a user override with built-in fragments. Duplicate layer ids across
+    files are rejected rather than silently merged.
+    """
+
+    path = next((candidate for candidate in _candidate_sidecars(pack, data_root) if candidate.is_file()), None)
+    if path is None:
+        return {}
+
+    merged: dict[str, Any] = {}
+    sources = [path]
+    fragment_dir = path.parent / "creation.d"
+    if fragment_dir.is_dir():
+        sources.extend(sorted(fragment_dir.glob("*.yaml")))
+
+    for source in sources:
+        layers = _load_sidecar_file(source)
+        overlap = set(merged).intersection(str(layer_id) for layer_id in layers)
+        if overlap:
+            raise CreationLayerError(
+                f"creation sidecar {source.name!r} duplicates layer ids {sorted(overlap)}"
+            )
+        for layer_id, layer in layers.items():
+            merged[str(layer_id)] = layer
+    return merged
 
 
 def _resolve_named_option(options: Mapping[str, Any], name: str, where: str) -> tuple[str, Mapping[str, Any]] | None:
@@ -176,12 +206,17 @@ def _apply_skill(pack: Any, character: Any, name: str, rank: Any) -> tuple[str, 
     return canonical, numeric_rank
 
 
-def _apply_effects(pack: Any, character: Any, raw: Any) -> tuple[list[str], dict[str, int]]:
+def _apply_effects(
+    pack: Any,
+    character: Any,
+    raw: Any,
+    roller: DiceRoller,
+) -> tuple[list[str], dict[str, int]]:
     if raw is None:
         return [], {}
     if not isinstance(raw, Mapping):
         raise CreationLayerError("creation effects must be a mapping")
-    unknown = set(raw) - {"fields", "append_fields", "skills", "equipment"}
+    unknown = set(raw) - {"fields", "append_fields", "roll_attributes", "skills", "equipment"}
     if unknown:
         raise CreationLayerError(f"creation effects have unknown keys {sorted(unknown)}")
 
@@ -199,6 +234,16 @@ def _apply_effects(pack: Any, character: Any, raw: Any) -> tuple[list[str], dict
             raise CreationLayerError(f"append_fields.{canonical} must be a list")
         field_name = _declared_field_name(pack, str(canonical))
         setattr(character, field_name, _append_unique(getattr(character, field_name, None), list(values)))
+
+    rolled = raw.get("roll_attributes") or {}
+    if not isinstance(rolled, Mapping):
+        raise CreationLayerError("creation effects.roll_attributes must be a mapping")
+    for canonical, expression_raw in rolled.items():
+        expression = str(expression_raw or "").strip()
+        if not expression:
+            raise CreationLayerError(f"roll_attributes.{canonical} must be a non-empty dice expression")
+        value = roller.roll_expression(expression).total
+        set_sheet_value(character, pack, str(canonical), value)
 
     skills = raw.get("skills") or {}
     if not isinstance(skills, Mapping):
@@ -268,6 +313,7 @@ def _apply_choice_group(
     group_id: str,
     group: Mapping[str, Any],
     selection: Any,
+    roller: DiceRoller,
 ) -> tuple[list[str], dict[str, int]]:
     if "skill_family" in group and "options" not in group:
         canonical, rank = _apply_specialization(pack, character, group, selection)
@@ -297,7 +343,7 @@ def _apply_choice_group(
     if "skill_family" in option and "field_template" in option:
         raise CreationLayerError("choice option cannot combine skill_family and field_template")
 
-    equipment, skills = _apply_effects(pack, character, option.get("effects"))
+    equipment, skills = _apply_effects(pack, character, option.get("effects"), roller)
     if "skill_family" in option:
         canonical, rank = _apply_specialization(pack, character, option, specialization)
         skills[canonical] = rank
@@ -316,6 +362,7 @@ def apply_creation_layer(
     *,
     selections: Mapping[str, Any] | None = None,
     data_root: Path | None = None,
+    roller: DiceRoller | None = None,
 ) -> CreationLayerResult:
     """Apply one selected layer option and all explicit player sub-choices."""
     layers = load_creation_layers(pack, data_root=data_root)
@@ -344,12 +391,13 @@ def apply_creation_layer(
     if extra:
         raise CreationLayerError(f"creation option {option_id!r} got unknown choices {sorted(extra)}")
 
-    equipment_added, skills_set = _apply_effects(pack, character, raw.get("effects"))
+    roller = roller or DiceRoller()
+    equipment_added, skills_set = _apply_effects(pack, character, raw.get("effects"), roller)
     for group_id_raw, group in choices.items():
         group_id = str(group_id_raw)
         if not isinstance(group, Mapping):
             raise CreationLayerError(f"choice group {group_id!r} must be a mapping")
-        equipment, skills = _apply_choice_group(pack, character, group_id, group, provided[group_id])
+        equipment, skills = _apply_choice_group(pack, character, group_id, group, provided[group_id], roller)
         equipment_added.extend(equipment)
         skills_set.update(skills)
 
