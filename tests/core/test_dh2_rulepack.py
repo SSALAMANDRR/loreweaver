@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from core.character_manager import CharacterSheet
 from core.check_outcome import RollDetail
 from core.rulepacks import load_rulepack
+from core.sheets import refresh_sheet, sheet_value, wire_resources
 
 
 DIFFICULTY_DELTAS = {
@@ -26,7 +28,7 @@ def _degrees(roll: int, target: int) -> int:
     """Independent transcription of CH01_H022.
 
     Positive values are degrees of success, negative values are degrees of
-    failure.  A check always starts at one degree on whichever side it lands.
+    failure. A check always starts at one degree on whichever side it lands.
     """
     if roll <= target:
         return 1 + (target - roll) // 10
@@ -42,9 +44,11 @@ def test_dh2_names_and_russian_aliases_resolve():
     assert pack.resolve_skill("Навык Стрельбы") == "BS"
     assert pack.resolve_skill("СВ") == "WP"
     assert pack.resolve_skill("Влияние") == "Inf"
+    assert pack.resolve_skill("Раны") == "Wounds"
+    assert pack.resolve_skill("Усталость") == "Fatigue"
 
 
-def test_dh2_characteristic_bonuses_are_tens_digits():
+def test_dh2_characteristic_bonuses_and_fatigue_threshold():
     pack = load_rulepack("dh2")
     derived = pack.compute_derived(
         {
@@ -72,6 +76,7 @@ def test_dh2_characteristic_bonuses_are_tens_digits():
         "WPB": 7,
         "FelB": 3,
         "InfB": 9,
+        "FatigueThreshold": 10,
     }
 
 
@@ -125,3 +130,36 @@ def test_dh2_initiative_declares_d10_plus_agility_bonus():
     pack = load_rulepack("dh2")
 
     assert pack.initiative_roll == "1d10 + {AgB}"
+
+
+def test_dh2_sheet_tracks_damage_and_fatigue_as_upward_counters():
+    pack = load_rulepack("dh2")
+    sheet = CharacterSheet("Acolyte", "DH2")
+    sheet.attributes.update(
+        {
+            "T": 43,
+            "WP": 39,
+            "WOUNDS": 12,
+            "DAMAGE": 7,
+            "FATIGUE": 3,
+        }
+    )
+
+    refresh_sheet(sheet, pack, preserve_trained=False)
+
+    assert sheet_value(sheet, pack, "Wounds") == 12
+    assert sheet_value(sheet, pack, "Damage") == 7
+    assert sheet_value(sheet, pack, "Fatigue") == 3
+    assert sheet_value(sheet, pack, "FatigueThreshold") == 7  # TB 4 + WPB 3
+
+    meters = {entry["id"]: entry for entry in wire_resources(sheet, pack, "ru")}
+    assert meters["damage"] == {"id": "damage", "label": "Урон", "value": 7, "max": 12}
+    assert meters["fatigue"] == {"id": "fatigue", "label": "Усталость", "value": 3, "max": 7}
+
+    # DH2 counters may exceed their thresholds; they are not Loreweaver vitals
+    # and therefore must never be silently clamped current <= max.
+    sheet.attributes["DAMAGE"] = 15
+    sheet.attributes["FATIGUE"] = 9
+    meters = {entry["id"]: entry for entry in wire_resources(sheet, pack, "en")}
+    assert meters["damage"]["value"] == 15 and meters["damage"]["max"] == 12
+    assert meters["fatigue"]["value"] == 9 and meters["fatigue"]["max"] == 7
