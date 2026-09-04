@@ -32,6 +32,9 @@ The DH2 port is built from the structured Russian rules corpus already stored in
 | `sheet.Wounds` / `sheet.Damage` | `CH07_H098`, `CH07_H099` | Wounds are a threshold; accrued Damage is tracked separately and can exceed it |
 | `derived.FatigueThreshold` | `CH07_H103` | Fatigue Threshold = Toughness Bonus + Willpower Bonus |
 | `sheet.Fatigue` | `CH07_M08`, `CH07_H103` | Fatigue is an upward-counting level; exceeding the threshold causes unconsciousness |
+| `sheet.skills`, `derived.*Target`, `sheet.check_values` | `CH03_H001`, `CH03_H014`, `CH03_H015` | regular-skill training levels 0–4 and their -20/+0/+10/+20/+30 modifiers |
+| regular skill base-characteristic bindings | `CH03_H037` | the 21 non-special skills and their normal governing characteristics |
+| specialized-skill deferral | `CH03_H003`, `CH03_H037` | Special skills require separately acquired and improved specializations |
 
 ## Stage 1 representation notes
 
@@ -49,6 +52,26 @@ Damage and Fatigue deliberately are **not** declared as Loreweaver `vitals`. A v
 
 The meter is presentational only; crossing a threshold is handled by later deterministic combat/state rules and is never silently clamped by the sheet layer.
 
+### Regular skills
+
+The 21 non-special skills from table 3-3 fit the existing generic sheet substrate without any engine changes. Each `sheet.skills` value stores the **training level**, not the final percentile target:
+
+- `0` = untrained, `-20`;
+- `1` = Знает, `+0`;
+- `2` = Обучен, `+10`;
+- `3` = Опытен, `+20`;
+- `4` = Ветеран, `+30`.
+
+A derived `<Skill>Target` combines that modifier with the skill's normal governing characteristic. `sheet.check_values` then redirects a check on the skill to that derived target. This preserves advancement as explicit rank data while using Loreweaver's existing check path unchanged.
+
+`CH03_H016` allows the GM to substitute an alternative characteristic when circumstances justify it. That situational choice is **not** baked into the normal target formula; it needs a generic per-check characteristic override later.
+
+### Special skill families
+
+Seven table-3-3 families are marked Special: Запретные Знания, Лингвистика, Навигация, Общие Знания, Ремесло, Управление and Учёные Знания. `CH03_H003` says every specialization is acquired and improved separately.
+
+They are deliberately not represented as seven ordinary shared scores. Loreweaver currently has no pack-declared wildcard/specialization template such as `Навигация(<specialization>) -> Int + training`. Adding the family name as a normal alias would make every specialization share one rank, which is mechanically wrong. The port therefore leaves these families unresolved until a generic specialization primitive is designed.
+
 ## Deliberately not ported yet
 
 Stage 1 does **not** invent values or mechanics for areas whose source slice has not been mapped and tested. In particular:
@@ -56,11 +79,12 @@ Stage 1 does **not** invent values or mechanics for areas whose source slice has
 - Chapter II character generation and home-world characteristic modifiers;
 - Fate threshold / Fate Point initialization and spending;
 - Insanity and Corruption tracks;
-- the full skill list, training levels and characteristic bindings;
+- the seven Special skill families and their separately trained specializations;
+- situational alternative-characteristic selection for skill checks;
 - action economy;
 - attack modes and rate of fire;
 - hit-location digit reversal;
-- dodge/parry reactions;
+- dodge/parry reaction state;
 - penetration, armor by location and Toughness reduction;
 - weapon qualities, ammunition and reload state;
 - righteous fury and critical-effect tables;
