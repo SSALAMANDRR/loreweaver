@@ -20,15 +20,33 @@ BACKGROUND_ALIASES = {
     "Изгой": "outcast",
 }
 
+ROLE_ALIASES = {
+    "Ассасин": "assassin",
+    "Хирургеон": "chirurgeon",
+    "Десперадо": "desperado",
+    "Иерофант": "hierophant",
+    "Мистик": "mystic",
+    "Мудрец": "sage",
+    "Искатель": "seeker",
+    "Воитель": "warrior",
+}
 
-def test_dh2_creation_sidecar_declares_all_seven_core_backgrounds():
+
+def test_dh2_creation_sidecar_declares_all_core_backgrounds_and_roles():
     pack = load_rulepack("dh2")
     layers = load_creation_layers(pack)
 
-    assert set(layers) == {"background"}
+    assert set(layers) == {"background", "role"}
     assert set(layers["background"]["options"]) == set(BACKGROUND_ALIASES.values())
+    assert set(layers["role"]["options"]) == set(ROLE_ALIASES.values())
+
     for surface, canonical in BACKGROUND_ALIASES.items():
         resolved = resolve_creation_layer_option(pack, "background", surface)
+        assert resolved is not None
+        assert resolved[0] == canonical
+
+    for surface, canonical in ROLE_ALIASES.items():
+        resolved = resolve_creation_layer_option(pack, "role", surface)
         assert resolved is not None
         assert resolved[0] == canonical
 
@@ -123,6 +141,106 @@ def test_astra_militarum_background_uses_separate_navigation_and_operate_special
     assert sheet.skills["Athletics"] == 1
     assert sheet.aptitudes == ["Полевое"]
     assert "лазган" in sheet.equipment
+
+
+def test_assassin_role_applies_fixed_aptitudes_and_keeps_both_player_choices_explicit():
+    pack = load_rulepack("dh2")
+    sheet = CharacterSheet("Acolyte", "dh2")
+
+    result = apply_creation_layer(
+        pack,
+        sheet,
+        "role",
+        "Ассасин",
+        selections={
+            "combat_aptitude": "Навык Стрельбы",
+            "role_talent": "Вскочить",
+        },
+    )
+
+    assert result.option_id == "assassin"
+    assert sheet.role_choice == "Ассасин"
+    assert sheet.aptitudes == ["Ловкость", "Полевое", "Изящество", "Восприятие", "Навык Стрельбы"]
+    assert sheet.talents == ["Вскочить"]
+    assert sheet.role_abilities == ["Уверенное Убийство"]
+
+
+def test_specialized_list_field_choice_records_the_players_actual_talent_specialization():
+    pack = load_rulepack("dh2")
+    sheet = CharacterSheet("Acolyte", "dh2")
+
+    apply_creation_layer(
+        pack,
+        sheet,
+        "role",
+        "Хирургеон",
+        selections={
+            "role_talent": {"option": "Сопротивление", "specialization": "Яды"},
+        },
+    )
+
+    assert sheet.role_choice == "Хирургеон"
+    assert sheet.talents == ["Сопротивление (Яды)"]
+    assert sheet.role_abilities == ["Преданный Целитель"]
+    assert sheet.aptitudes == ["Полевое", "Интеллект", "Познание", "Сила", "Выносливость"]
+
+
+def test_hierophant_hatred_uses_the_same_generic_specialized_field_primitive():
+    pack = load_rulepack("dh2")
+    sheet = CharacterSheet("Acolyte", "dh2")
+
+    apply_creation_layer(
+        pack,
+        sheet,
+        "role",
+        "Иерофант",
+        selections={
+            "role_talent": {"option": "Ненависть", "specialization": "Еретики"},
+        },
+    )
+
+    assert "Ненависть (Еретики)" in sheet.talents
+    assert "Власть над Массами" in sheet.role_abilities
+
+
+def test_mystic_role_records_psyker_elite_advance_without_pretending_to_execute_it_yet():
+    pack = load_rulepack("dh2")
+    sheet = CharacterSheet("Acolyte", "dh2")
+
+    apply_creation_layer(
+        pack,
+        sheet,
+        "role",
+        "Мистик",
+        selections={"role_talent": "Варп-чувство"},
+    )
+
+    assert sheet.role_choice == "Мистик"
+    assert sheet.elite_advances == ["Псайкер"]
+    assert sheet.talents == ["Варп-чувство"]
+    assert sheet.role_abilities == ["Смотрящий в Варп"]
+
+
+def test_all_eight_roles_have_five_role_aptitudes_and_one_role_ability_after_choices():
+    pack = load_rulepack("dh2")
+    selections = {
+        "Ассасин": {"combat_aptitude": "Навык Рукопашной", "role_talent": "Искушённый"},
+        "Хирургеон": {"role_talent": "Нокдаун"},
+        "Десперадо": {"role_talent": "Выхватить Оружие"},
+        "Иерофант": {"role_talent": "Плечом к Плечу"},
+        "Мистик": {"role_talent": "Сопротивление (Психические Силы)"},
+        "Мудрец": {"role_talent": "Амбидекстрия"},
+        "Искатель": {"role_talent": "Разоружение"},
+        "Воитель": {"role_talent": "Железная Челюсть"},
+    }
+
+    for role, role_selections in selections.items():
+        sheet = CharacterSheet(role, "dh2")
+        apply_creation_layer(pack, sheet, "role", role, selections=role_selections)
+        assert sheet.role_choice == role
+        assert len(sheet.aptitudes) == 5
+        assert len(sheet.role_abilities) == 1
+        assert len(sheet.talents) == 1
 
 
 def test_layer_rejects_unknown_or_extra_choice_instead_of_silently_ignoring_it():
