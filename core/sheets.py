@@ -4,8 +4,9 @@ A rulepack's ``sheet:`` section declares everything about how its system's
 character sheets are SHAPED — the fresh-sheet tables, the canonical-name <->
 storage-key bridge, which slots are pure derivations (recomputed on read,
 never trusted from storage), the current-pool vitals and their creation
-initialization, and the generic ``resources`` list the wire/panels render.
-The engine holds none of it: every function here reads the spec.
+initialization, generic skill-family templates, and the generic ``resources``
+list the wire/panels render. The engine holds none of it: every function here
+reads the spec.
 
 The derived pipeline is ``source -> (modifier layer) -> derived`` — the
 modifier layer is the reserved empty insertion point (`RulePack
@@ -17,44 +18,49 @@ the pack DAG before use, and `strip_derived` drops them from what gets saved.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
 MAX_RESOURCES = 8
+_SKILL_FAMILY_SEPARATOR = "::"
+_SKILL_FAMILY_RE = re.compile(r"^\s*(.+?)\s*[（(]\s*(.+?)\s*[）)]\s*$")
+_SPACE_RE = re.compile(r"\s+")
 
 
 class SheetSpecError(ValueError):
     """A malformed ``sheet:`` section (raised at pack load time)."""
 
 
+class UntrainedSkillError(ValueError):
+    """A specialized skill family forbids checks without that specialization."""
+
+    def __init__(self, skill: str):
+        super().__init__(f"specialized skill is not trained: {skill}")
+        self.skill = skill
+
+
 @dataclass(frozen=True)
 class VitalSpec:
     """One current pool: its max slot and how creation initializes it."""
 
-    key: str  # attributes-dict storage key of the CURRENT value
-    max_key: str  # attributes-dict storage key of the maximum
-    start: Any  # "full" | {"expr": ...} (canonical-namespace expression)
+    key: str
+    max_key: str
+    start: Any
 
 
 @dataclass(frozen=True)
 class ResourceSpec:
-    """One wire/panel resource meter.
-
-    ``labels`` maps locale -> display text. A pack may write ``label: HP`` (stored
-    under the ``en`` key) or ``label: {en: HP, zh: 体力}``; the wire build resolves
-    it per VIEWER locale, so one pack's bar reads correctly at every table instead
-    of showing the author's language to everyone (M19 item 8)."""
+    """One wire/panel resource meter."""
 
     id: str
     labels: Mapping[str, str]
-    value_key: str = ""  # attributes-dict key (attribute-backed resources)
+    value_key: str = ""
     max_key: str = ""
-    source: str = "attributes"  # "attributes" | "hit_points"
+    source: str = "attributes"
 
     def label_for(self, locale: str | None) -> str:
-        """This resource's display label for ``locale``: exact match, then ``en``,
-        then any declared locale (an author who wrote only ``zh`` still shows text)."""
         short = (locale or "en").split("-", 1)[0].split("_", 1)[0]
         for candidate in (short, "en"):
             text = self.labels.get(candidate)
@@ -64,28 +70,44 @@ class ResourceSpec:
 
 
 @dataclass(frozen=True)
+class SkillFamilySpec:
+    """A wildcard family of separately stored skills.
+
+    ``Family (specialization)`` resolves to one canonical storage key
+    ``Family::specialization``. Each specialization owns its own rank. ``ranks``
+    maps stored ranks to target modifiers, while ``untrained_modifier=None``
+    means an absent specialization cannot be checked at all.
+    """
+
+    base: str
+    aliases: tuple[str, ...]
+    ranks: Mapping[int, int]
+    untrained_modifier: int | None = None
+
+
+@dataclass(frozen=True)
 class SheetSpec:
     """One pack's declared sheet shape."""
 
     label: str
-    attr_keys: Mapping[str, str] = field(default_factory=dict)  # canonical -> attributes key
-    skill_keys: Mapping[str, str] = field(default_factory=dict)  # canonical -> skills key
-    secondary_keys: Mapping[str, str] = field(default_factory=dict)  # canonical -> secondary key
-    field_keys: Mapping[str, str] = field(default_factory=dict)  # canonical -> sheet field name
-    attributes: Mapping[str, Any] = field(default_factory=dict)  # fresh-sheet attributes
-    skills: Mapping[str, Any] = field(default_factory=dict)  # fresh-sheet skills
-    secondary: Mapping[str, Any] = field(default_factory=dict)  # fresh-sheet secondary attrs
-    fields: Mapping[str, Any] = field(default_factory=dict)  # fresh-sheet meta fields
-    hit_points: Mapping[str, int] | None = None  # field-based HP systems
-    derived_skills: Mapping[str, str] = field(default_factory=dict)  # skills key -> canonical
-    derived_attrs: Mapping[str, str] = field(default_factory=dict)  # attributes key -> canonical
-    derived_secondary: Mapping[str, str] = field(default_factory=dict)  # secondary key -> canonical
-    check_values: Mapping[str, str] = field(default_factory=dict)  # canonical -> canonical fed to checks
+    attr_keys: Mapping[str, str] = field(default_factory=dict)
+    skill_keys: Mapping[str, str] = field(default_factory=dict)
+    secondary_keys: Mapping[str, str] = field(default_factory=dict)
+    field_keys: Mapping[str, str] = field(default_factory=dict)
+    attributes: Mapping[str, Any] = field(default_factory=dict)
+    skills: Mapping[str, Any] = field(default_factory=dict)
+    secondary: Mapping[str, Any] = field(default_factory=dict)
+    fields: Mapping[str, Any] = field(default_factory=dict)
+    hit_points: Mapping[str, int] | None = None
+    derived_skills: Mapping[str, str] = field(default_factory=dict)
+    derived_attrs: Mapping[str, str] = field(default_factory=dict)
+    derived_secondary: Mapping[str, str] = field(default_factory=dict)
+    check_values: Mapping[str, str] = field(default_factory=dict)
+    skill_families: Mapping[str, SkillFamilySpec] = field(default_factory=dict)
     vitals: tuple[VitalSpec, ...] = ()
     resources: tuple[ResourceSpec, ...] = ()
 
     def key_to_canonical(self) -> dict[str, str]:
-        """attributes-storage-key -> canonical name (reverse of attr_keys)."""
         return {key: canonical for canonical, key in self.attr_keys.items()}
 
 
@@ -93,7 +115,7 @@ def _str_map(pack_id: str, where: str, raw: Any) -> dict[str, str]:
     if raw is None:
         return {}
     if not isinstance(raw, Mapping):
-        raise SheetSpecError(f"rulepack '{pack_id}': {where} must be a mapping")  # i18n-exempt: pack-author diagnostic, raised at load time
+        raise SheetSpecError(f"rulepack '{pack_id}': {where} must be a mapping")
     return {str(key): str(value) for key, value in raw.items()}
 
 
@@ -101,51 +123,128 @@ def _any_map(pack_id: str, where: str, raw: Any) -> dict[str, Any]:
     if raw is None:
         return {}
     if not isinstance(raw, Mapping):
-        raise SheetSpecError(f"rulepack '{pack_id}': {where} must be a mapping")  # i18n-exempt: pack-author diagnostic, raised at load time
+        raise SheetSpecError(f"rulepack '{pack_id}': {where} must be a mapping")
     return {str(key): value for key, value in raw.items()}
 
 
 def _resource_labels(pack_id: str, resource_id: Any, raw: Any) -> dict[str, str]:
-    """One ``sheet.resources[].label``: a plain string (the author's own language,
-    stored as ``en``) or a locale map. Accepts any locale key a pack cares to ship —
-    the runtime asks for the viewer's and falls back — so adding a language is pack
-    data, never an engine change."""
     if isinstance(raw, str):
         text = raw.strip()
         if not text:
-            raise SheetSpecError(f"rulepack '{pack_id}': sheet.resource {resource_id} has an empty label")  # i18n-exempt: pack-author diagnostic, raised at load time
+            raise SheetSpecError(f"rulepack '{pack_id}': sheet.resource {resource_id} has an empty label")
         return {"en": text}
     if isinstance(raw, Mapping):
         labels = {str(locale): str(text).strip() for locale, text in raw.items() if str(text).strip()}
         if not labels:
-            raise SheetSpecError(f"rulepack '{pack_id}': sheet.resource {resource_id} has an empty label map")  # i18n-exempt: pack-author diagnostic, raised at load time
+            raise SheetSpecError(f"rulepack '{pack_id}': sheet.resource {resource_id} has an empty label map")
         return labels
-    raise SheetSpecError(f"rulepack '{pack_id}': sheet.resource {resource_id} label must be a string or locale map")  # i18n-exempt: pack-author diagnostic, raised at load time
+    raise SheetSpecError(f"rulepack '{pack_id}': sheet.resource {resource_id} label must be a string or locale map")
+
+
+def _normalize_skill_text(value: str) -> str:
+    return _SPACE_RE.sub(" ", value.strip().casefold().replace("_", " "))
+
+
+def _parse_skill_families(pack_id: str, raw: Any) -> dict[str, SkillFamilySpec]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, Mapping):
+        raise SheetSpecError(f"rulepack '{pack_id}': sheet.skill_families must be a mapping")
+
+    families: dict[str, SkillFamilySpec] = {}
+    claimed_aliases: dict[str, str] = {}
+    for family_id_raw, entry in raw.items():
+        family_id = str(family_id_raw).strip()
+        if not family_id:
+            raise SheetSpecError(f"rulepack '{pack_id}': sheet.skill_families has an empty family id")
+        if _SKILL_FAMILY_SEPARATOR in family_id:
+            raise SheetSpecError(f"rulepack '{pack_id}': skill family id {family_id!r} may not contain '{_SKILL_FAMILY_SEPARATOR}'")
+        if not isinstance(entry, Mapping):
+            raise SheetSpecError(f"rulepack '{pack_id}': sheet.skill_families.{family_id} must be a mapping")
+        unknown = set(entry) - {"base", "aliases", "ranks", "untrained"}
+        if unknown:
+            raise SheetSpecError(
+                f"rulepack '{pack_id}': sheet.skill_families.{family_id} has unknown keys {sorted(unknown)}"
+            )
+
+        base = str(entry.get("base") or "").strip()
+        if not base:
+            raise SheetSpecError(f"rulepack '{pack_id}': sheet.skill_families.{family_id}.base is required")
+
+        aliases_raw = entry.get("aliases") or []
+        if not isinstance(aliases_raw, (list, tuple)) or not all(isinstance(alias, str) for alias in aliases_raw):
+            raise SheetSpecError(f"rulepack '{pack_id}': sheet.skill_families.{family_id}.aliases must be a string list")
+        aliases = tuple(str(alias).strip() for alias in aliases_raw if str(alias).strip())
+
+        ranks_raw = entry.get("ranks")
+        if not isinstance(ranks_raw, Mapping) or not ranks_raw:
+            raise SheetSpecError(f"rulepack '{pack_id}': sheet.skill_families.{family_id}.ranks must be a non-empty mapping")
+        ranks: dict[int, int] = {}
+        for rank_raw, modifier_raw in ranks_raw.items():
+            try:
+                rank = int(rank_raw)
+                modifier = int(modifier_raw)
+            except (TypeError, ValueError) as exc:
+                raise SheetSpecError(
+                    f"rulepack '{pack_id}': sheet.skill_families.{family_id}.ranks must map integer ranks to integer modifiers"
+                ) from exc
+            if rank < 1:
+                raise SheetSpecError(f"rulepack '{pack_id}': sheet.skill_families.{family_id}.ranks start at 1")
+            ranks[rank] = modifier
+
+        untrained_raw = entry.get("untrained", "forbidden")
+        if isinstance(untrained_raw, str) and untrained_raw.strip().casefold() == "forbidden":
+            untrained_modifier = None
+        elif isinstance(untrained_raw, bool):
+            raise SheetSpecError(f"rulepack '{pack_id}': sheet.skill_families.{family_id}.untrained must be an integer or 'forbidden'")
+        else:
+            try:
+                untrained_modifier = int(untrained_raw)
+            except (TypeError, ValueError) as exc:
+                raise SheetSpecError(
+                    f"rulepack '{pack_id}': sheet.skill_families.{family_id}.untrained must be an integer or 'forbidden'"
+                ) from exc
+
+        for surface in (family_id, *aliases):
+            normalized = _normalize_skill_text(surface)
+            previous = claimed_aliases.get(normalized)
+            if previous is not None and previous != family_id:
+                raise SheetSpecError(
+                    f"rulepack '{pack_id}': skill family alias {surface!r} is claimed by both {previous!r} and {family_id!r}"
+                )
+            claimed_aliases[normalized] = family_id
+
+        families[family_id] = SkillFamilySpec(
+            base=base,
+            aliases=aliases,
+            ranks=ranks,
+            untrained_modifier=untrained_modifier,
+        )
+    return families
 
 
 def parse_sheet_section(pack_id: str, raw: Any) -> SheetSpec | None:
-    """Parse a pack's ``sheet:`` section (None when absent)."""
     if raw is None:
         return None
     if not isinstance(raw, Mapping):
-        raise SheetSpecError(f"rulepack '{pack_id}': 'sheet' must be a mapping")  # i18n-exempt: pack-author diagnostic, raised at load time
+        raise SheetSpecError(f"rulepack '{pack_id}': 'sheet' must be a mapping")
     unknown = set(raw) - {
         "label", "attr_keys", "skill_keys", "secondary_keys", "field_keys",
         "attributes", "skills", "secondary", "fields", "hit_points",
         "derived_skills", "derived_attrs", "derived_secondary", "check_values",
-        "vitals", "resources",
+        "skill_families", "vitals", "resources",
     }
     if unknown:
-        raise SheetSpecError(f"rulepack '{pack_id}': sheet has unknown keys {sorted(unknown)}")  # i18n-exempt: pack-author diagnostic, raised at load time
+        raise SheetSpecError(f"rulepack '{pack_id}': sheet has unknown keys {sorted(unknown)}")
     label = str(raw.get("label") or "").strip()
     if not label:
-        raise SheetSpecError(f"rulepack '{pack_id}': sheet.label is required")  # i18n-exempt: pack-author diagnostic, raised at load time
+        raise SheetSpecError(f"rulepack '{pack_id}': sheet.label is required")
 
     hit_points_raw = raw.get("hit_points")
     hit_points: dict[str, int] | None = None
     if hit_points_raw is not None:
         if not isinstance(hit_points_raw, Mapping):
-            raise SheetSpecError(f"rulepack '{pack_id}': sheet.hit_points must be a mapping")  # i18n-exempt: pack-author diagnostic, raised at load time
+            raise SheetSpecError(f"rulepack '{pack_id}': sheet.hit_points must be a mapping")
         hit_points = {
             "current": int(hit_points_raw.get("current", 0)),
             "max": int(hit_points_raw.get("max", 0)),
@@ -153,28 +252,28 @@ def parse_sheet_section(pack_id: str, raw: Any) -> SheetSpec | None:
 
     vitals_raw = raw.get("vitals") or {}
     if not isinstance(vitals_raw, Mapping):
-        raise SheetSpecError(f"rulepack '{pack_id}': sheet.vitals must be a mapping")  # i18n-exempt: pack-author diagnostic, raised at load time
+        raise SheetSpecError(f"rulepack '{pack_id}': sheet.vitals must be a mapping")
     vitals: list[VitalSpec] = []
     for key, spec in vitals_raw.items():
         if not isinstance(spec, Mapping) or not spec.get("max_key"):
-            raise SheetSpecError(f"rulepack '{pack_id}': sheet.vitals.{key} needs a max_key")  # i18n-exempt: pack-author diagnostic, raised at load time
+            raise SheetSpecError(f"rulepack '{pack_id}': sheet.vitals.{key} needs a max_key")
         start = spec.get("start", "full")
         if start != "full" and not (isinstance(start, Mapping) and "expr" in start):
-            raise SheetSpecError(f"rulepack '{pack_id}': sheet.vitals.{key}.start must be 'full' or an expr")  # i18n-exempt: pack-author diagnostic, raised at load time
+            raise SheetSpecError(f"rulepack '{pack_id}': sheet.vitals.{key}.start must be 'full' or an expr")
         vitals.append(VitalSpec(key=str(key), max_key=str(spec["max_key"]), start=start))
 
     resources_raw = raw.get("resources") or []
     if not isinstance(resources_raw, (list, tuple)) or len(resources_raw) > MAX_RESOURCES:
-        raise SheetSpecError(f"rulepack '{pack_id}': sheet.resources must be a short list")  # i18n-exempt: pack-author diagnostic, raised at load time
+        raise SheetSpecError(f"rulepack '{pack_id}': sheet.resources must be a short list")
     resources: list[ResourceSpec] = []
     for entry in resources_raw:
         if not isinstance(entry, Mapping) or not entry.get("id") or not entry.get("label"):
-            raise SheetSpecError(f"rulepack '{pack_id}': each sheet.resource needs id and label")  # i18n-exempt: pack-author diagnostic, raised at load time
+            raise SheetSpecError(f"rulepack '{pack_id}': each sheet.resource needs id and label")
         source = str(entry.get("source") or "attributes")
         if source not in ("attributes", "hit_points"):
-            raise SheetSpecError(f"rulepack '{pack_id}': sheet.resource source must be attributes|hit_points")  # i18n-exempt: pack-author diagnostic, raised at load time
+            raise SheetSpecError(f"rulepack '{pack_id}': sheet.resource source must be attributes|hit_points")
         if source == "attributes" and (not entry.get("value") or not entry.get("max")):
-            raise SheetSpecError(f"rulepack '{pack_id}': attribute-backed resources need value and max keys")  # i18n-exempt: pack-author diagnostic, raised at load time
+            raise SheetSpecError(f"rulepack '{pack_id}': attribute-backed resources need value and max keys")
         resources.append(
             ResourceSpec(
                 id=str(entry["id"]),
@@ -200,14 +299,10 @@ def parse_sheet_section(pack_id: str, raw: Any) -> SheetSpec | None:
         derived_attrs=_str_map(pack_id, "sheet.derived_attrs", raw.get("derived_attrs")),
         derived_secondary=_str_map(pack_id, "sheet.derived_secondary", raw.get("derived_secondary")),
         check_values=_str_map(pack_id, "sheet.check_values", raw.get("check_values")),
+        skill_families=_parse_skill_families(pack_id, raw.get("skill_families")),
         vitals=tuple(vitals),
         resources=tuple(resources),
     )
-
-
-# ---------------------------------------------------------------------------
-# The bridge: sheets <-> the pack's canonical value namespace
-# ---------------------------------------------------------------------------
 
 
 def _int_or(value: Any, default: int = 0) -> int:
@@ -223,13 +318,40 @@ def _int_or(value: Any, default: int = 0) -> int:
     return default
 
 
-def canonical_values(sheet: Any, pack: Any) -> dict[str, Any]:
-    """The sheet's SOURCE values in the pack's canonical namespace.
+def resolve_skill_family(pack: Any, name: str) -> tuple[str, str, SkillFamilySpec, str] | None:
+    """Resolve ``Family (specialization)`` or ``Family::specialization``.
 
-    Attributes/secondary/fields translate through the spec's key maps; skills
-    keep their own names (translated through skill_keys' reverse). Derived
-    slots are deliberately NOT trusted here — they recompute from this.
+    Returns ``(canonical_key, family_id, spec, normalized_specialization)``.
+    The family by itself never resolves: a specialization is part of the skill's
+    identity rather than metadata attached to a shared family score.
     """
+    spec = getattr(pack, "sheet_spec", None)
+    if spec is None or not spec.skill_families:
+        return None
+
+    text = str(name).strip()
+    if _SKILL_FAMILY_SEPARATOR in text:
+        family_text, specialization_text = text.split(_SKILL_FAMILY_SEPARATOR, 1)
+    else:
+        match = _SKILL_FAMILY_RE.match(text)
+        if match is None:
+            return None
+        family_text, specialization_text = match.group(1), match.group(2)
+
+    family_norm = _normalize_skill_text(family_text)
+    specialization = _normalize_skill_text(specialization_text)
+    if not family_norm or not specialization:
+        return None
+
+    for family_id, family in spec.skill_families.items():
+        surfaces = (family_id, *family.aliases)
+        if any(_normalize_skill_text(surface) == family_norm for surface in surfaces):
+            canonical = f"{family_id}{_SKILL_FAMILY_SEPARATOR}{specialization}"
+            return canonical, family_id, family, specialization
+    return None
+
+
+def canonical_values(sheet: Any, pack: Any) -> dict[str, Any]:
     spec = pack.sheet_spec
     values: dict[str, Any] = {}
     if spec is None:
@@ -253,7 +375,11 @@ def canonical_values(sheet: Any, pack: Any) -> dict[str, Any]:
 
 
 def sheet_value(sheet: Any, pack: Any, canonical: str) -> int:
-    """One canonical name's current value for `sheet` (derived recomputed)."""
+    family_match = resolve_skill_family(pack, canonical)
+    if family_match is not None:
+        family_key = family_match[0]
+        return _int_or((getattr(sheet, "skills", {}) or {}).get(family_key), 0)
+
     spec = pack.sheet_spec
     if spec is not None:
         attr_key = spec.attr_keys.get(canonical)
@@ -284,7 +410,11 @@ def sheet_value(sheet: Any, pack: Any, canonical: str) -> int:
 
 
 def set_sheet_value(sheet: Any, pack: Any, canonical: str, value: int) -> None:
-    """Write one canonical name into its declared storage slot."""
+    family_match = resolve_skill_family(pack, canonical)
+    if family_match is not None:
+        sheet.skills[family_match[0]] = value
+        return
+
     spec = pack.sheet_spec
     if spec is None:
         sheet.skills[canonical] = value
@@ -315,12 +445,20 @@ def set_sheet_value(sheet: Any, pack: Any, canonical: str, value: int) -> None:
 
 
 def check_value(sheet: Any, pack: Any, canonical: str) -> int:
-    """The value a CHECK on `canonical` feeds into the roll.
+    family_match = resolve_skill_family(pack, canonical)
+    if family_match is not None:
+        family_key, _family_id, family, _specialization = family_match
+        rank = _int_or((getattr(sheet, "skills", {}) or {}).get(family_key), 0)
+        if rank == 0:
+            if family.untrained_modifier is None:
+                raise UntrainedSkillError(family_key)
+            modifier = family.untrained_modifier
+        else:
+            if rank not in family.ranks:
+                raise ValueError(f"specialized skill rank {rank} is not declared for {family_key}")
+            modifier = family.ranks[rank]
+        return sheet_value(sheet, pack, family.base) + modifier
 
-    Usually the stat's own value; the spec's ``check_values`` bridge redirects
-    names whose check input is another canonical (an ability check rolling its
-    modifier). Derived values recompute through `sheet_value`.
-    """
     spec = pack.sheet_spec
     if spec is not None:
         canonical = spec.check_values.get(canonical, canonical)
@@ -328,13 +466,14 @@ def check_value(sheet: Any, pack: Any, canonical: str) -> int:
 
 
 def has_check_value(sheet: Any, pack: Any, name: str) -> bool:
-    """Whether `name` names something this sheet/system can roll a check on.
+    family_match = resolve_skill_family(pack, name)
+    if family_match is not None:
+        family_key, _family_id, family, _specialization = family_match
+        if family.untrained_modifier is not None:
+            return True
+        rank = _int_or((getattr(sheet, "skills", {}) or {}).get(family_key), 0)
+        return rank in family.ranks
 
-    True when the pack's alias table resolves it (a declared stat) or the sheet
-    itself carries it (a custom skill written via sheet edits). Anything else is
-    an unknown name: refuse the roll rather than run a degenerate target-0
-    check where a minimal roll reads as a critical success.
-    """
     if pack.resolve_skill(name):
         return True
     spec = pack.sheet_spec
@@ -350,15 +489,6 @@ def has_check_value(sheet: Any, pack: Any, name: str) -> bool:
 
 
 def refresh_sheet(sheet: Any, pack: Any, *, initialize_vitals: bool = False, preserve_trained: bool = True) -> None:
-    """Recompute every derived slot from the pack DAG onto `sheet` in place.
-
-    This is the read-side half of "derived values are never persisted": callers
-    refresh before showing/saving so storage copies can never go stale.
-    ``preserve_trained`` keeps a stored skill value that differs from its
-    derived base (a trained skill) — pass False at creation to seed cleanly.
-    ``initialize_vitals`` (creation) sets each current pool per its declared
-    start; edits clamp the existing value to the recomputed max.
-    """
     spec = pack.sheet_spec
     if spec is None:
         return
@@ -375,8 +505,6 @@ def refresh_sheet(sheet: Any, pack: Any, *, initialize_vitals: bool = False, pre
         if preserve_trained and secondary_key in sheet.secondary_attributes and _int_or(
             sheet.secondary_attributes[secondary_key]
         ) != _int_or(derived[canonical]):
-            # A stored value differing from the derivation is a manual override
-            # (armor changing AC, a feature raising passive senses) — keep it.
             continue
         sheet.secondary_attributes.pop(secondary_key, None)
     for skill_key, canonical in spec.derived_skills.items():
@@ -385,11 +513,7 @@ def refresh_sheet(sheet: Any, pack: Any, *, initialize_vitals: bool = False, pre
         if preserve_trained and skill_key in sheet.skills and _int_or(sheet.skills[skill_key]) != _int_or(
             derived[canonical]
         ):
-            # A stored value differing from the derived base is trained — keep it.
             continue
-        # Untrained derived skills are NEVER persisted: drop the slot so reads
-        # recompute through the DAG. Storing the computed copy would turn into
-        # a false "trained" override the moment its source attribute changes.
         sheet.skills.pop(skill_key, None)
 
     for vital in spec.vitals:
@@ -399,7 +523,7 @@ def refresh_sheet(sheet: Any, pack: Any, *, initialize_vitals: bool = False, pre
                 start_value = maximum
             else:
                 start_expr = dict(vital.start)
-                from core.rulepacks import _compile_expr_value  # deliberate: same expr lane
+                from core.rulepacks import _compile_expr_value
 
                 start_value = _int_or(
                     _compile_expr_value(pack.system, f"vitals.{vital.key}", start_expr, pack.defaults)(
@@ -413,11 +537,6 @@ def refresh_sheet(sheet: Any, pack: Any, *, initialize_vitals: bool = False, pre
 
 
 def wire_resources(sheet: Any, pack: Any, locale: str | None = None) -> list[dict[str, Any]]:
-    """The generic ``resources`` meter list for the wire/panels.
-
-    ``locale`` is the VIEWER's, not the process's: labels are resolved here, at the
-    wire boundary, so the same room can serve an ``en`` and a ``zh`` client their own
-    reading of one pack's bars. Omitting it keeps the pack's ``en`` label."""
     spec = pack.sheet_spec
     if spec is None:
         return []
