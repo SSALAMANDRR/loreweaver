@@ -4,10 +4,10 @@
 # into the НРИ ВАХА Neon database from DH2_RU_OKP_V1_8. This slice covers
 # characteristic naming/bonuses, the basic percentile check, the complete
 # difficulty ladder, signed degrees of success/failure, initiative, the first
-# rule-backed character-sheet resources, and the 21 non-special skill families.
-# Character creation, specialized skills, combat actions, hit locations,
-# weapons and critical effects are added only after their source sections are
-# mapped and covered by tests.
+# rule-backed character-sheet resources, all 21 regular skills, and the seven
+# Special skill families with separately trained specializations.
+# Character creation, combat actions, hit locations, weapons and critical
+# effects are added only after their source sections are mapped and tested.
 
 names:
   - dh2
@@ -22,9 +22,10 @@ set_keys: [dh2, darkheresy2]
 # not to a fabricated "average acolyte". Real creation defaults belong to the
 # character-creation slice and will replace these once Chapter II is ported.
 #
-# Skill values are TRAINING LEVELS, not check targets:
+# Regular skill values are TRAINING LEVELS, not check targets:
 #   0 = untrained (-20), 1 = known (+0), 2 = trained (+10),
 #   3 = experienced (+20), 4 = veteran (+30).
+# Special skills use the same 1..4 trained ladder but rank 0 is forbidden.
 defaults:
   WS: 1
   BS: 1
@@ -61,14 +62,6 @@ defaults:
   TechUse: 0
   Dodge: 0
 
-# Canonical keys stay compact/ASCII so formulas remain readable. Russian
-# characteristic names and abbreviations are taken from CH01_H004..CH01_H013;
-# regular skill names/bindings are taken from CH03_H037.
-#
-# The seven Special skill families (Forbidden Lore, Linguistics, Navigation,
-# Common Lore, Trade, Operate, Scholastic Lore) are deliberately absent here:
-# CH03_H003 makes every specialization a separately acquired/improved skill.
-# Treating a whole family as one alias would silently implement the wrong game.
 alias:
   WS: ["Навык Рукопашной", "Навык Рукопашной (НР)", НР]
   BS: ["Навык Стрельбы", "Навык Стрельбы (НС)", НС]
@@ -113,9 +106,7 @@ alias:
 # CH01_H022: a successful check starts at 1 degree of success and gains one for
 # every full 10 points by which target exceeds the roll; failures mirror this.
 # Loreweaver's generic `margin` is the system-defined signed comparison metric,
-# so positive values are DoS and negative values are DoF. This is especially
-# useful for opposed checks because they can compare the native DH2 degree count
-# without teaching core/ anything about Dark Heresy.
+# so positive values are DoS and negative values are DoF.
 resolution:
   version: 1
   roll: 1d100
@@ -212,13 +203,10 @@ derived:
   TechUseTarget: {expr: "Int + if(TechUse == 0, -20, (TechUse - 1) * 10)"}
   DodgeTarget: {expr: "Ag + if(Dodge == 0, -20, (Dodge - 1) * 10)"}
 
-# Skill advancement uses the four levels from CH03_H015. XP costs and
-# aptitude-dependent prices are ported with Chapter II later.
 creation_constraints:
   skills:
     default: {min: 0, max: 4}
 
-# CH07_H011: d10 + Agility Bonus.
 initiative:
   roll: "1d10 + {AgB}"
 
@@ -269,6 +257,13 @@ display:
     Stealth: Скрытность
     TechUse: Техпользование
     Dodge: Уклонение
+    ForbiddenLore: Запретные Знания
+    Linguistics: Лингвистика
+    Navigation: Навигация
+    CommonLore: Общие Знания
+    Trade: Ремесло
+    Operate: Управление
+    ScholasticLore: Учёные Знания
   en:
     WS: WS
     BS: BS
@@ -315,22 +310,22 @@ display:
     Stealth: Stealth
     TechUse: Tech-Use
     Dodge: Dodge
+    ForbiddenLore: Forbidden Lore
+    Linguistics: Linguistics
+    Navigation: Navigation
+    CommonLore: Common Lore
+    Trade: Trade
+    Operate: Operate
+    ScholasticLore: Scholastic Lore
 
 commands:
   ra: {action: check}
   rc: {action: check}
 
 expertise:
-  ru: "# Dark Heresy Second Edition — Ведущий\nИспользуй процентные проверки DH2: бросок d100 должен быть не выше модифицированного значения характеристики или умения. Сложность меняет целевое значение по шкале от +60 до -60. Положительный margin — степени успеха, отрицательный — степени провала. Для обычных умений храни уровень обучения 0–4, а целевое значение проверки выводи из базовой характеристики и уровня: нетренированное -20, Знает +0, Обучен +10, Опытен +20, Ветеран +30. Специальные умения со специализациями пока не своди к одному общему навыку. Раны являются порогом, а полученный Урон накапливается отдельно. Порог Усталости равен сумме бонусов Выносливости и Силы Воли. Механику, уже выраженную rulepack-ом, не пересчитывай в прозе и не подменяй результат броска повествованием."
-  en: "# Dark Heresy Second Edition — GM\nUse DH2 percentile checks: d100 must roll at or below the modified characteristic or skill. Difficulty changes the target on the +60 to -60 ladder. Positive margin is degrees of success; negative margin is degrees of failure. Regular skills store training level 0–4; derive the check target from the base characteristic and level: untrained -20, known +0, trained +10, experienced +20, veteran +30. Do not collapse Special skills with separate specializations into one shared skill. Wounds are a threshold while accrued Damage is tracked separately. Fatigue Threshold equals Toughness Bonus plus Willpower Bonus. Do not recompute mechanics already owned by the rulepack in prose or override a rolled result with narration."
+  ru: "# Dark Heresy Second Edition — Ведущий\nИспользуй процентные проверки DH2: бросок d100 должен быть не выше модифицированного значения характеристики или умения. Сложность меняет целевое значение по шкале от +60 до -60. Положительный margin — степени успеха, отрицательный — степени провала. Для обычных умений храни уровень обучения 0–4: нетренированное -20, Знает +0, Обучен +10, Опытен +20, Ветеран +30. Для Специальных умений каждая специализация хранится и развивается отдельно; без приобретённой специализации проверка невозможна. Раны являются порогом, а полученный Урон накапливается отдельно. Порог Усталости равен сумме бонусов Выносливости и Силы Воли. Механику, уже выраженную rulepack-ом, не пересчитывай в прозе и не подменяй результат броска повествованием."
+  en: "# Dark Heresy Second Edition — GM\nUse DH2 percentile checks: d100 must roll at or below the modified characteristic or skill. Difficulty changes the target on the +60 to -60 ladder. Positive margin is degrees of success; negative margin is degrees of failure. Regular skills store training level 0–4: untrained -20, known +0, trained +10, experienced +20, veteran +30. Every Special-skill specialization is stored and advanced separately, and a specialization cannot be checked before it is acquired. Wounds are a threshold while accrued Damage is tracked separately. Fatigue Threshold equals Toughness Bonus plus Willpower Bonus. Do not recompute mechanics already owned by the rulepack in prose or override a rolled result with narration."
 
-# Sheet substrate. Damage and Fatigue deliberately use ordinary attribute
-# storage rather than `vitals`: both counters grow upward and are allowed to
-# exceed their thresholds, while Loreweaver vitals clamp current <= max.
-#
-# Regular skills store training rank in sheet.skills. check_values redirects a
-# skill check to its derived target. This uses the existing generic sheet bridge
-# rather than adding DH2 knowledge to core code.
 sheet:
   label: DH2
   attr_keys:
@@ -428,6 +423,42 @@ sheet:
     Stealth: StealthTarget
     TechUse: TechUseTarget
     Dodge: DodgeTarget
+  skill_families:
+    ForbiddenLore:
+      base: Int
+      aliases: ["Запретные Знания", "Запретные знания", "Forbidden Lore"]
+      ranks: {1: 0, 2: 10, 3: 20, 4: 30}
+      untrained: forbidden
+    Linguistics:
+      base: Int
+      aliases: [Лингвистика, Linguistics]
+      ranks: {1: 0, 2: 10, 3: 20, 4: 30}
+      untrained: forbidden
+    Navigation:
+      base: Int
+      aliases: [Навигация, Navigation]
+      ranks: {1: 0, 2: 10, 3: 20, 4: 30}
+      untrained: forbidden
+    CommonLore:
+      base: Int
+      aliases: ["Общие Знания", "Общие знания", "Common Lore"]
+      ranks: {1: 0, 2: 10, 3: 20, 4: 30}
+      untrained: forbidden
+    Trade:
+      base: Int
+      aliases: [Ремесло, Trade]
+      ranks: {1: 0, 2: 10, 3: 20, 4: 30}
+      untrained: forbidden
+    Operate:
+      base: Ag
+      aliases: [Управление, Operate]
+      ranks: {1: 0, 2: 10, 3: 20, 4: 30}
+      untrained: forbidden
+    ScholasticLore:
+      base: Int
+      aliases: ["Учёные Знания", "Учёные знания", "Scholastic Lore"]
+      ranks: {1: 0, 2: 10, 3: 20, 4: 30}
+      untrained: forbidden
   derived_attrs:
     FATIGUE_THRESHOLD: FatigueThreshold
   resources:
