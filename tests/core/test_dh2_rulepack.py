@@ -3,7 +3,7 @@ from __future__ import annotations
 from core.character_manager import CharacterSheet
 from core.check_outcome import RollDetail
 from core.rulepacks import load_rulepack
-from core.sheets import refresh_sheet, sheet_value, wire_resources
+from core.sheets import check_value, refresh_sheet, sheet_value, wire_resources
 
 
 DIFFICULTY_DELTAS = {
@@ -22,6 +22,41 @@ DIFFICULTY_DELTAS = {
     "punishing": -50,
     "hellish": -60,
 }
+
+
+REGULAR_SKILLS = {
+    "Acrobatics": "Ag",
+    "Athletics": "S",
+    "Awareness": "Per",
+    "Security": "Int",
+    "Survival": "Per",
+    "Inquiry": "Fel",
+    "Interrogation": "WP",
+    "Intimidate": "S",
+    "Command": "Fel",
+    "Commerce": "Int",
+    "SleightOfHand": "Ag",
+    "Logic": "Int",
+    "Medicae": "Int",
+    "Charm": "Fel",
+    "Deceive": "Fel",
+    "Parry": "WS",
+    "Scrutiny": "Per",
+    "Psyniscience": "Per",
+    "Stealth": "Ag",
+    "TechUse": "Int",
+    "Dodge": "Ag",
+}
+
+SPECIAL_SKILL_FAMILIES = (
+    "Запретные Знания",
+    "Лингвистика",
+    "Навигация",
+    "Общие Знания",
+    "Ремесло",
+    "Управление",
+    "Учёные Знания",
+)
 
 
 def _degrees(roll: int, target: int) -> int:
@@ -65,7 +100,7 @@ def test_dh2_characteristic_bonuses_and_fatigue_threshold():
         }
     )
 
-    assert derived == {
+    expected = {
         "WSB": 4,
         "BSB": 5,
         "SB": 4,
@@ -78,6 +113,7 @@ def test_dh2_characteristic_bonuses_and_fatigue_threshold():
         "InfB": 9,
         "FatigueThreshold": 10,
     }
+    assert {key: derived[key] for key in expected} == expected
 
 
 def test_dh2_difficulty_table_matches_neon_source():
@@ -163,3 +199,58 @@ def test_dh2_sheet_tracks_damage_and_fatigue_as_upward_counters():
     meters = {entry["id"]: entry for entry in wire_resources(sheet, pack, "en")}
     assert meters["damage"]["value"] == 15 and meters["damage"]["max"] == 12
     assert meters["fatigue"]["value"] == 9 and meters["fatigue"]["max"] == 7
+
+
+def test_dh2_regular_skill_aliases_resolve_but_special_families_do_not_collapse():
+    pack = load_rulepack("dh2")
+
+    assert pack.resolve_skill("Акробатика") == "Acrobatics"
+    assert pack.resolve_skill("Бдительность") == "Awareness"
+    assert pack.resolve_skill("Ловкость рук") == "SleightOfHand"
+    assert pack.resolve_skill("Парирование") == "Parry"
+    assert pack.resolve_skill("Уклонение") == "Dodge"
+
+    # CH03_H003: every specialization of a Special skill is a separate skill.
+    # Until the generic specialization primitive exists, a family name must not
+    # resolve to one fake shared score.
+    for family in SPECIAL_SKILL_FAMILIES:
+        assert pack.resolve_skill(family) is None
+
+
+def test_dh2_regular_skill_training_levels_feed_the_check_target():
+    pack = load_rulepack("dh2")
+    sheet = CharacterSheet("Acolyte", "DH2")
+    sheet.attributes["Ag"] = 43
+
+    expected = {0: 23, 1: 43, 2: 53, 3: 63, 4: 73}
+    for rank, target in expected.items():
+        sheet.skills["Acrobatics"] = rank
+        assert check_value(sheet, pack, "Acrobatics") == target
+        assert check_value(sheet, pack, "Акробатика") == target
+
+
+def test_dh2_regular_skill_base_bindings_and_rank_constraints_match_table_3_3():
+    pack = load_rulepack("dh2")
+    sheet = CharacterSheet("Acolyte", "DH2")
+    sheet.attributes.update({"WS": 44, "S": 51, "Ag": 43, "Int": 48, "Per": 37, "WP": 46, "Fel": 39})
+    sheet.skills.update(
+        {
+            "Athletics": 1,
+            "Awareness": 2,
+            "Interrogation": 3,
+            "Charm": 4,
+            "Parry": 1,
+            "TechUse": 2,
+        }
+    )
+
+    assert check_value(sheet, pack, "Athletics") == 51
+    assert check_value(sheet, pack, "Awareness") == 47
+    assert check_value(sheet, pack, "Interrogation") == 66
+    assert check_value(sheet, pack, "Charm") == 69
+    assert check_value(sheet, pack, "Parry") == 44
+    assert check_value(sheet, pack, "TechUse") == 58
+
+    assert set(pack.sheet_spec.skills) == set(REGULAR_SKILLS)
+    assert all(value == 0 for value in pack.sheet_spec.skills.values())
+    assert pack.creation_constraints["skills"]["default"] == {"min": 0, "max": 4}
