@@ -34,7 +34,7 @@ The DH2 port is built from the structured Russian rules corpus already stored in
 | `sheet.Fatigue` | `CH07_M08`, `CH07_H103` | Fatigue is an upward-counting level; exceeding the threshold causes unconsciousness |
 | `sheet.skills`, `derived.*Target`, `sheet.check_values` | `CH03_H001`, `CH03_H014`, `CH03_H015` | regular-skill training levels 0–4 and their -20/+0/+10/+20/+30 modifiers |
 | regular skill base-characteristic bindings | `CH03_H037` | the 21 non-special skills and their normal governing characteristics |
-| specialized-skill deferral | `CH03_H003`, `CH03_H037` | Special skills require separately acquired and improved specializations |
+| `sheet.skill_families` | `CH03_H001`, `CH03_H003`, `CH03_H015`, `CH03_H037` | Special skills require training, every specialization is a separate skill, and trained levels use the same +0/+10/+20/+30 ladder |
 
 ## Stage 1 representation notes
 
@@ -54,7 +54,7 @@ The meter is presentational only; crossing a threshold is handled by later deter
 
 ### Regular skills
 
-The 21 non-special skills from table 3-3 fit the existing generic sheet substrate without any engine changes. Each `sheet.skills` value stores the **training level**, not the final percentile target:
+The 21 non-special skills from table 3-3 fit the existing generic sheet substrate. Each `sheet.skills` value stores the **training level**, not the final percentile target:
 
 - `0` = untrained, `-20`;
 - `1` = Знает, `+0`;
@@ -68,9 +68,18 @@ A derived `<Skill>Target` combines that modifier with the skill's normal governi
 
 ### Special skill families
 
-Seven table-3-3 families are marked Special: Запретные Знания, Лингвистика, Навигация, Общие Знания, Ремесло, Управление and Учёные Знания. `CH03_H003` says every specialization is acquired and improved separately.
+Seven table-3-3 families are marked Special: Запретные Знания, Лингвистика, Навигация, Общие Знания, Ремесло, Управление and Учёные Знания. `CH03_H001` forbids using a Special skill without training, and `CH03_H003` says every specialization is acquired and improved separately.
 
-They are deliberately not represented as seven ordinary shared scores. Loreweaver currently has no pack-declared wildcard/specialization template such as `Навигация(<specialization>) -> Int + training`. Adding the family name as a normal alias would make every specialization share one rank, which is mechanically wrong. The port therefore leaves these families unresolved until a generic specialization primitive is designed.
+Loreweaver now has a generic `sheet.skill_families` primitive for this class of rules. A family declares:
+
+- its base characteristic;
+- user-facing aliases;
+- rank-to-target modifiers;
+- whether an untrained specialization is forbidden or receives a declared modifier.
+
+A surface form such as `Навигация (Варп)` is normalized to a separate canonical storage key such as `Navigation::варп`. `Навигация (Наземная)` is a different key with a different rank. The family name alone remains non-rollable, which prevents the accidental shared-score implementation that would violate DH2.
+
+The primitive is engine-generic. Nothing in `core/` branches on `dh2`, a DH2 family id, or a DH2 rank name.
 
 ## Deliberately not ported yet
 
@@ -79,7 +88,6 @@ Stage 1 does **not** invent values or mechanics for areas whose source slice has
 - Chapter II character generation and home-world characteristic modifiers;
 - Fate threshold / Fate Point initialization and spending;
 - Insanity and Corruption tracks;
-- the seven Special skill families and their separately trained specializations;
 - situational alternative-characteristic selection for skill checks;
 - action economy;
 - attack modes and rate of fire;
