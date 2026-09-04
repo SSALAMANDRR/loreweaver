@@ -8,7 +8,13 @@ from here; monkeypatch a helper where it is DEFINED (e.g. `gateway.commands.llm.
 
 from __future__ import annotations
 
-from gateway.commands.router import CommandRouter
+from gateway.commands.profile_creation import ProfileCreationCommands
+from gateway.commands.router import CommandRouter as _BaseCommandRouter
 from gateway.commands.types import CommandCtx, CommandReply, CommandSpec
+
+
+class CommandRouter(ProfileCreationCommands, _BaseCommandRouter):
+    """Public router plus generic pack-profile creation support."""
+
 
 __all__ = ["CommandCtx", "CommandReply", "CommandRouter", "CommandSpec"]
