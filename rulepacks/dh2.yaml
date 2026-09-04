@@ -1,13 +1,13 @@
 # Dark Heresy Second Edition — deterministic mechanics kernel.
 #
 # Source of truth for this port is the structured Russian DH2 corpus migrated
-# into the НРИ ВАХА Neon database from DH2_RU_OKP_V1_8. This slice covers
-# characteristic naming/bonuses, the basic percentile check, the complete
-# difficulty ladder, signed degrees of success/failure, initiative, the first
-# rule-backed character-sheet resources, all 21 regular skills, and the seven
-# Special skill families with separately trained specializations.
-# Character creation, combat actions, hit locations, weapons and critical
-# effects are added only after their source sections are mapped and tested.
+# into the НРИ ВАХА Neon database from DH2_RU_OKP_V1_8, with Chapter II read
+# directly from the same Russian v1.8 PDF where the Neon import has a gap.
+# This slice covers characteristic naming/bonuses, percentile checks, the full
+# difficulty ladder, degrees, initiative, sheet resources, all skills, and the
+# six core home-world creation profiles through characteristic generation and
+# starting Fate. Combat actions, hit locations, weapons and critical effects
+# are added only after their source sections are mapped and tested.
 
 names:
   - dh2
@@ -18,10 +18,6 @@ names:
   - "темная ересь 2"
 set_keys: [dh2, darkheresy2]
 
-# Missing characteristic values intentionally fall back to the legal floor,
-# not to a fabricated "average acolyte". Real creation defaults belong to the
-# character-creation slice and will replace these once Chapter II is ported.
-#
 # Regular skill values are TRAINING LEVELS, not check targets:
 #   0 = untrained (-20), 1 = known (+0), 2 = trained (+10),
 #   3 = experienced (+20), 4 = veteran (+30).
@@ -40,6 +36,8 @@ defaults:
   Wounds: 0
   Damage: 0
   Fatigue: 0
+  Fate: 0
+  FateThreshold: 0
   Acrobatics: 0
   Athletics: 0
   Awareness: 0
@@ -77,6 +75,8 @@ alias:
   Damage: [Урон]
   Fatigue: [Усталость]
   FatigueThreshold: ["Порог усталости"]
+  Fate: [Судьба, "Очки Судьбы"]
+  FateThreshold: ["Порог Судьбы", "Порог судьбы"]
   Acrobatics: [Акробатика]
   Athletics: [Атлетика]
   Awareness: [Бдительность]
@@ -166,9 +166,6 @@ labels:
 
 # CH01_H003: every characteristic bonus is the tens digit of the value.
 # CH07_H103: fatigue threshold = Toughness Bonus + Willpower Bonus.
-# CH03_H001/H014/H015/H037: a regular skill check uses its base characteristic
-# plus the modifier from its highest training level. The stored skill rank is
-# kept separate from the derived check target, so advancement remains explicit.
 derived:
   WSB: {expr: "floor(WS / 10)"}
   BSB: {expr: "floor(BS / 10)"}
@@ -203,9 +200,105 @@ derived:
   TechUseTarget: {expr: "Int + if(TechUse == 0, -20, (TechUse - 1) * 10)"}
   DodgeTarget: {expr: "Ag + if(Dodge == 0, -20, (Dodge - 1) * 10)"}
 
+# Chapter II, pp. 33-46 (Russian v1.8 PDF): ordinary characteristics roll
+# 2d10+20. A home world's '+' characteristic rolls 3d10 keep highest 2 +20;
+# a '-' characteristic rolls 3d10 keep lowest 2 +20. Fate Threshold starts at
+# the home-world value and Emperor's Blessing adds 1 when its d10 threshold is
+# met. The player's one optional characteristic reroll remains a separate
+# player-choice step and is deliberately not auto-consumed here.
 creation_constraints:
+  attributes:
+    WS: {roll: "2d10+20"}
+    BS: {roll: "2d10+20"}
+    S: {roll: "2d10+20"}
+    T: {roll: "2d10+20"}
+    Ag: {roll: "2d10+20"}
+    Int: {roll: "2d10+20"}
+    Per: {roll: "2d10+20"}
+    WP: {roll: "2d10+20"}
+    Fel: {roll: "2d10+20"}
+    Inf: {roll: "2d10+20"}
   skills:
     default: {min: 0, max: 4}
+  profiles:
+    feral_world:
+      names: ["Дикий мир", "дикий мир", "Feral World"]
+      attribute_rolls:
+        S: "3d10kh2+20"
+        T: "3d10kh2+20"
+        Inf: "3d10kl2+20"
+      attributes: {FateThreshold: 2}
+      fields: {HomeWorld: "Дикий мир"}
+      bonus_rolls:
+        - id: emperors_blessing
+          roll: 1d10
+          when: "roll >= 3"
+          add_attributes: {FateThreshold: 1}
+    forge_world:
+      names: ["Мир-кузница", "мир-кузница", "Forge World"]
+      attribute_rolls:
+        Int: "3d10kh2+20"
+        T: "3d10kh2+20"
+        Fel: "3d10kl2+20"
+      attributes: {FateThreshold: 3}
+      fields: {HomeWorld: "Мир-кузница"}
+      bonus_rolls:
+        - id: emperors_blessing
+          roll: 1d10
+          when: "roll >= 8"
+          add_attributes: {FateThreshold: 1}
+    highborn:
+      names: [Высокородный, высокородный, Highborn]
+      attribute_rolls:
+        Fel: "3d10kh2+20"
+        Inf: "3d10kh2+20"
+        T: "3d10kl2+20"
+      attributes: {FateThreshold: 4}
+      fields: {HomeWorld: Высокородный}
+      bonus_rolls:
+        - id: emperors_blessing
+          roll: 1d10
+          when: "roll >= 10"
+          add_attributes: {FateThreshold: 1}
+    hive_world:
+      names: ["Мир-улей", "мир-улей", "Hive World"]
+      attribute_rolls:
+        Ag: "3d10kh2+20"
+        Per: "3d10kh2+20"
+        WP: "3d10kl2+20"
+      attributes: {FateThreshold: 2}
+      fields: {HomeWorld: "Мир-улей"}
+      bonus_rolls:
+        - id: emperors_blessing
+          roll: 1d10
+          when: "roll >= 6"
+          add_attributes: {FateThreshold: 1}
+    shrine_world:
+      names: ["Мир-храм", "мир-храм", "Shrine World"]
+      attribute_rolls:
+        Fel: "3d10kh2+20"
+        WP: "3d10kh2+20"
+        Per: "3d10kl2+20"
+      attributes: {FateThreshold: 3}
+      fields: {HomeWorld: "Мир-храм"}
+      bonus_rolls:
+        - id: emperors_blessing
+          roll: 1d10
+          when: "roll >= 6"
+          add_attributes: {FateThreshold: 1}
+    voidborn:
+      names: [Пустоторождённый, пустоторождённый, Voidborn]
+      attribute_rolls:
+        Int: "3d10kh2+20"
+        WP: "3d10kh2+20"
+        S: "3d10kl2+20"
+      attributes: {FateThreshold: 3}
+      fields: {HomeWorld: Пустоторождённый}
+      bonus_rolls:
+        - id: emperors_blessing
+          roll: 1d10
+          when: "roll >= 5"
+          add_attributes: {FateThreshold: 1}
 
 initiative:
   roll: "1d10 + {AgB}"
@@ -236,6 +329,9 @@ display:
     Damage: Урон
     Fatigue: Усталость
     FatigueThreshold: Порог усталости
+    Fate: Очки Судьбы
+    FateThreshold: Порог Судьбы
+    HomeWorld: Родной мир
     Acrobatics: Акробатика
     Athletics: Атлетика
     Awareness: Бдительность
@@ -289,6 +385,9 @@ display:
     Damage: Damage
     Fatigue: Fatigue
     FatigueThreshold: Fatigue Threshold
+    Fate: Fate Points
+    FateThreshold: Fate Threshold
+    HomeWorld: Home World
     Acrobatics: Acrobatics
     Athletics: Athletics
     Awareness: Awareness
@@ -323,8 +422,8 @@ commands:
   rc: {action: check}
 
 expertise:
-  ru: "# Dark Heresy Second Edition — Ведущий\nИспользуй процентные проверки DH2: бросок d100 должен быть не выше модифицированного значения характеристики или умения. Сложность меняет целевое значение по шкале от +60 до -60. Положительный margin — степени успеха, отрицательный — степени провала. Для обычных умений храни уровень обучения 0–4: нетренированное -20, Знает +0, Обучен +10, Опытен +20, Ветеран +30. Для Специальных умений каждая специализация хранится и развивается отдельно; без приобретённой специализации проверка невозможна. Раны являются порогом, а полученный Урон накапливается отдельно. Порог Усталости равен сумме бонусов Выносливости и Силы Воли. Механику, уже выраженную rulepack-ом, не пересчитывай в прозе и не подменяй результат броска повествованием."
-  en: "# Dark Heresy Second Edition — GM\nUse DH2 percentile checks: d100 must roll at or below the modified characteristic or skill. Difficulty changes the target on the +60 to -60 ladder. Positive margin is degrees of success; negative margin is degrees of failure. Regular skills store training level 0–4: untrained -20, known +0, trained +10, experienced +20, veteran +30. Every Special-skill specialization is stored and advanced separately, and a specialization cannot be checked before it is acquired. Wounds are a threshold while accrued Damage is tracked separately. Fatigue Threshold equals Toughness Bonus plus Willpower Bonus. Do not recompute mechanics already owned by the rulepack in prose or override a rolled result with narration."
+  ru: "# Dark Heresy Second Edition — Ведущий\nИспользуй процентные проверки DH2: бросок d100 должен быть не выше модифицированного значения характеристики или умения. Сложность меняет целевое значение по шкале от +60 до -60. Положительный margin — степени успеха, отрицательный — степени провала. Для обычных умений храни уровень обучения 0–4: нетренированное -20, Знает +0, Обучен +10, Опытен +20, Ветеран +30. Для Специальных умений каждая специализация хранится и развивается отдельно; без приобретённой специализации проверка невозможна. При создании персонажа профиль родного мира определяет положительные и отрицательную характеристики, стартовый Порог Судьбы и бросок Благословения Императора; не расходуй автоматически положенный игроку один переброс характеристики. Раны являются порогом, а полученный Урон накапливается отдельно. Порог Усталости равен сумме бонусов Выносливости и Силы Воли. Механику, уже выраженную rulepack-ом, не пересчитывай в прозе и не подменяй результат броска повествованием."
+  en: "# Dark Heresy Second Edition — GM\nUse DH2 percentile checks: d100 must roll at or below the modified characteristic or skill. Difficulty changes the target on the +60 to -60 ladder. Positive margin is degrees of success; negative margin is degrees of failure. Regular skills store training level 0–4: untrained -20, known +0, trained +10, experienced +20, veteran +30. Every Special-skill specialization is stored and advanced separately, and a specialization cannot be checked before it is acquired. During character creation the selected home-world profile owns positive/negative characteristic rolls, starting Fate Threshold, and Emperor's Blessing; do not automatically consume the player's one allowed characteristic reroll. Wounds are a threshold while accrued Damage is tracked separately. Fatigue Threshold equals Toughness Bonus plus Willpower Bonus. Do not recompute mechanics already owned by the rulepack in prose or override a rolled result with narration."
 
 sheet:
   label: DH2
@@ -343,6 +442,8 @@ sheet:
     Damage: DAMAGE
     Fatigue: FATIGUE
     FatigueThreshold: FATIGUE_THRESHOLD
+    Fate: FATE
+    FateThreshold: FATE_THRESHOLD
   skill_keys:
     Acrobatics: Acrobatics
     Athletics: Athletics
@@ -365,6 +466,8 @@ sheet:
     Stealth: Stealth
     TechUse: TechUse
     Dodge: Dodge
+  field_keys:
+    HomeWorld: home_world
   attributes:
     WS: 1
     BS: 1
@@ -379,6 +482,10 @@ sheet:
     WOUNDS: 0
     DAMAGE: 0
     FATIGUE: 0
+    FATE: 0
+    FATE_THRESHOLD: 0
+  fields:
+    home_world: ""
   skills:
     Acrobatics: 0
     Athletics: 0
@@ -461,6 +568,10 @@ sheet:
       untrained: forbidden
   derived_attrs:
     FATIGUE_THRESHOLD: FatigueThreshold
+  vitals:
+    FATE:
+      max_key: FATE_THRESHOLD
+      start: full
   resources:
     - id: damage
       label: {ru: Урон, en: Damage}
@@ -470,3 +581,7 @@ sheet:
       label: {ru: Усталость, en: Fatigue}
       value: FATIGUE
       max: FATIGUE_THRESHOLD
+    - id: fate
+      label: {ru: Судьба, en: Fate}
+      value: FATE
+      max: FATE_THRESHOLD
