@@ -1,7 +1,7 @@
 version: 1
 
 # Dark Heresy Second Edition, Russian OKP translation v1.8, Chapter II,
-# pp. 48-63. Starting skills are rank 1 (Знает). Choice groups stay explicit:
+# pp. 48-80. Starting skills are rank 1 (Знает). Choice groups stay explicit:
 # the engine must never pick one for the player.
 layers:
   background:
@@ -412,3 +412,194 @@ layers:
               social:
                 names: [Общение, Social]
                 effects: {append_fields: {Aptitudes: [Общение]}}
+
+  role:
+    options:
+      assassin:
+        names: [Ассасин, Assassin]
+        display: {ru: Ассасин, en: Assassin}
+        source: "DH2 RU v1.8 pp. 65-66"
+        rules:
+          ability: "Уверенное Убийство"
+          ability_ru: "После успешного попадания Ассасин может потратить очко Судьбы, чтобы первое попадание нанесло дополнительный урон, равный степеням успеха проверки атаки."
+        effects:
+          fields: {Role: Ассасин}
+          append_fields:
+            Aptitudes: [Ловкость, Полевое, Изящество, Восприятие]
+            RoleAbilities: ["Уверенное Убийство"]
+        choices:
+          combat_aptitude:
+            options:
+              ballistic_skill:
+                names: ["Навык Стрельбы", НС, "Ballistic Skill"]
+                effects: {append_fields: {Aptitudes: ["Навык Стрельбы"]}}
+              weapon_skill:
+                names: ["Навык Рукопашной", НР, "Weapon Skill"]
+                effects: {append_fields: {Aptitudes: ["Навык Рукопашной"]}}
+          role_talent:
+            options:
+              jaded:
+                names: [Искушённый, Искушенный, Jaded]
+                effects: {append_fields: {Talents: [Искушённый]}}
+              leap_up:
+                names: [Вскочить, "Leap Up"]
+                effects: {append_fields: {Talents: [Вскочить]}}
+
+      chirurgeon:
+        names: [Хирургеон, Chirurgeon]
+        display: {ru: Хирургеон, en: Chirurgeon}
+        source: "DH2 RU v1.8 pp. 67-68"
+        rules:
+          ability: "Преданный Целитель"
+          ability_ru: "После проваленной проверки Первой Помощи Хирургеон может потратить очко Судьбы на автоматический успех со степенями успеха, равными его бонусу Интеллекта."
+        effects:
+          fields: {Role: Хирургеон}
+          append_fields:
+            Aptitudes: [Полевое, Интеллект, Познание, Сила, Выносливость]
+            RoleAbilities: ["Преданный Целитель"]
+        choices:
+          role_talent:
+            options:
+              resistance:
+                names: [Сопротивление, Resistance]
+                field_template:
+                  field: Talents
+                  template: "Сопротивление ({specialization})"
+              takedown:
+                names: [Нокдаун, Takedown]
+                effects: {append_fields: {Talents: [Нокдаун]}}
+
+      desperado:
+        names: [Десперадо, Desperado]
+        display: {ru: Десперадо, en: Desperado}
+        source: "DH2 RU v1.8 pp. 69-70"
+        rules:
+          ability: "Беги и Стреляй"
+          ability_ru: "Один раз за раунд после действия Движения Десперадо может выполнить Стандартную Атаку из оружия типа Пистолет как Свободное действие."
+        effects:
+          fields: {Role: Десперадо}
+          append_fields:
+            Aptitudes: [Ловкость, "Навык Стрельбы", Защита, Общительность, Изящество]
+            RoleAbilities: ["Беги и Стреляй"]
+        choices:
+          role_talent:
+            options:
+              catfall:
+                names: ["Мягкое Приземление", "Мягкое приземление", Catfall]
+                effects: {append_fields: {Talents: ["Мягкое Приземление"]}}
+              quick_draw:
+                names: ["Выхватить Оружие", "Выхватить оружие", "Quick Draw"]
+                effects: {append_fields: {Talents: ["Выхватить Оружие"]}}
+
+      hierophant:
+        names: [Иерофант, Hierophant]
+        display: {ru: Иерофант, en: Hierophant}
+        source: "DH2 RU v1.8 pp. 71-72"
+        rules:
+          ability: "Власть над Массами"
+          ability_ru: "Иерофант может потратить очко Судьбы на автоматический успех проверки Обаяния, Командования или Запугивания со степенями успеха, равными его бонусу Силы Воли."
+        effects:
+          fields: {Role: Иерофант}
+          append_fields:
+            Aptitudes: [Общительность, Нападение, Общение, Выносливость, "Сила Воли"]
+            RoleAbilities: ["Власть над Массами"]
+        choices:
+          role_talent:
+            options:
+              shoulder_to_shoulder:
+                names: ["Плечом к Плечу", "Плечом к плечу"]
+                effects: {append_fields: {Talents: ["Плечом к Плечу"]}}
+              hatred:
+                names: [Ненависть, Hatred]
+                field_template:
+                  field: Talents
+                  template: "Ненависть ({specialization})"
+
+      mystic:
+        names: [Мистик, Mystic]
+        display: {ru: Мистик, en: Mystic}
+        source: "DH2 RU v1.8 pp. 73-74"
+        rules:
+          ability: "Смотрящий в Варп"
+          ability_ru: "Мистик начинает игру с элитным улучшением Псайкер; рекомендуется Сила Воли не менее 35."
+        effects:
+          fields: {Role: Мистик}
+          append_fields:
+            Aptitudes: [Защита, Интеллект, Познание, Восприятие, "Сила Воли"]
+            RoleAbilities: ["Смотрящий в Варп"]
+            EliteAdvances: [Псайкер]
+        choices:
+          role_talent:
+            options:
+              resistance_psychic:
+                names: ["Сопротивление (Психические Силы)", "Сопротивление (Психические силы)"]
+                effects: {append_fields: {Talents: ["Сопротивление (Психические Силы)"]}}
+              warp_sense:
+                names: ["Варп-чувство", "Варп чувство", "Warp Sense"]
+                effects: {append_fields: {Talents: ["Варп-чувство"]}}
+
+      sage:
+        names: [Мудрец, Sage]
+        display: {ru: Мудрец, en: Sage}
+        source: "DH2 RU v1.8 pp. 75-76"
+        rules:
+          ability: "Жажда Знаний"
+          ability_ru: "Мудрец может потратить очко Судьбы на автоматический успех проверки Логики или умения Знания со степенями успеха, равными его бонусу Интеллекта."
+        effects:
+          fields: {Role: Мудрец}
+          append_fields:
+            Aptitudes: [Интеллект, Познание, Восприятие, Техно, "Сила Воли"]
+            RoleAbilities: ["Жажда Знаний"]
+        choices:
+          role_talent:
+            options:
+              ambidextrous:
+                names: [Амбидекстрия, Ambidextrous]
+                effects: {append_fields: {Talents: [Амбидекстрия]}}
+              crowds:
+                names: ["Разговор с Толпой", "Разговор с толпой"]
+                effects: {append_fields: {Talents: ["Разговор с Толпой"]}}
+
+      seeker:
+        names: [Искатель, Seeker]
+        display: {ru: Искатель, en: Seeker}
+        source: "DH2 RU v1.8 pp. 77-78"
+        rules:
+          ability: "Ничто не Ускользнёт от Меня"
+          ability_ru: "Искатель может потратить очко Судьбы на автоматический успех проверки Бдительности или Дознания со степенями успеха, равными его бонусу Восприятия."
+        effects:
+          fields: {Role: Искатель}
+          append_fields:
+            Aptitudes: [Общительность, Интеллект, Восприятие, Общение, Техно]
+            RoleAbilities: ["Ничто не Ускользнёт от Меня"]
+        choices:
+          role_talent:
+            options:
+              keen_intuition:
+                names: ["Чуткая Интуиция", "Чуткая интуиция"]
+                effects: {append_fields: {Talents: ["Чуткая Интуиция"]}}
+              disarm:
+                names: [Разоружение, Disarm]
+                effects: {append_fields: {Talents: [Разоружение]}}
+
+      warrior:
+        names: [Воитель, Warrior]
+        display: {ru: Воитель, en: Warrior}
+        source: "DH2 RU v1.8 pp. 79-80"
+        rules:
+          ability: "Эксперт Насилия"
+          ability_ru: "После успешной проверки атаки, но до определения места попадания, Воитель может потратить очко Судьбы и заменить степени успеха своим бонусом Навыка Стрельбы для стрелковой атаки или бонусом Навыка Рукопашной для рукопашной."
+        effects:
+          fields: {Role: Воитель}
+          append_fields:
+            Aptitudes: ["Навык Стрельбы", Защита, Нападение, Сила, "Навык Рукопашной"]
+            RoleAbilities: ["Эксперт Насилия"]
+        choices:
+          role_talent:
+            options:
+              iron_jaw:
+                names: ["Железная Челюсть", "Железная челюсть", "Iron Jaw"]
+                effects: {append_fields: {Talents: ["Железная Челюсть"]}}
+              rapid_reload:
+                names: ["Быстрая Перезарядка", "Быстрая перезарядка", "Rapid Reload"]
+                effects: {append_fields: {Talents: ["Быстрая Перезарядка"]}}
