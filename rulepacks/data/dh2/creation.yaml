@@ -1,0 +1,414 @@
+version: 1
+
+# Dark Heresy Second Edition, Russian OKP translation v1.8, Chapter II,
+# pp. 48-63. Starting skills are rank 1 (Знает). Choice groups stay explicit:
+# the engine must never pick one for the player.
+layers:
+  background:
+    options:
+      adeptus_administratum:
+        names: ["Адептус Администратум", "Adeptus Administratum", "Администратум"]
+        display: {ru: "Адептус Администратум", en: "Adeptus Administratum"}
+        source: "DH2 RU v1.8 pp. 49-50"
+        rules:
+          ability: "Мастер Бумажной Работы"
+          ability_ru: "Персонаж считает Доступность предметов на один уровень ниже."
+        effects:
+          fields: {Background: "Адептус Администратум"}
+          skills:
+            "CommonLore::Адептус Администратум": 1
+            "Linguistics::Высокий Готик": 1
+            Logic: 1
+          append_fields:
+            BackgroundAbilities: ["Мастер Бумажной Работы"]
+          equipment: ["имперские мантии", "автоперо", "хроно", "инфопланшет", "медпакет"]
+        choices:
+          trained_skill:
+            options:
+              commerce:
+                names: [Коммерция, Commerce]
+                effects: {skills: {Commerce: 1}}
+              medicae:
+                names: [Медика, Medicae]
+                effects: {skills: {Medicae: 1}}
+          scholastic_lore:
+            skill_family: ScholasticLore
+            rank: 1
+          weapon_training:
+            options:
+              las:
+                names: [Лазерное, Las]
+                effects:
+                  append_fields: {Talents: ["Выучка с Оружием (Лазерное)"]}
+              solid_projectile:
+                names: [Твёрдотельное, Твердотельное, "Solid Projectile"]
+                effects:
+                  append_fields: {Talents: ["Выучка с Оружием (Твёрдотельное)"]}
+          starting_weapon:
+            options:
+              laspistol:
+                names: [Лазпистолет, Laspistol]
+                effects: {equipment: [лазпистолет]}
+              autostub:
+                names: ["авто-стаб", Autostub]
+                effects: {equipment: ["авто-стаб"]}
+          aptitude:
+            options:
+              knowledge:
+                names: [Познание, Knowledge]
+                effects: {append_fields: {Aptitudes: [Познание]}}
+              social:
+                names: [Общение, Social]
+                effects: {append_fields: {Aptitudes: [Общение]}}
+
+      adeptus_arbites:
+        names: ["Адептус Арбитрес", "Adeptus Arbites", Арбитрес]
+        display: {ru: "Адептус Арбитрес", en: "Adeptus Arbites"}
+        source: "DH2 RU v1.8 pp. 51-52"
+        rules:
+          ability: "Воплощение Закона"
+          ability_ru: "Можно перебросить проверку Запугивания или Допроса и заменить полученные степени успеха бонусом Силы Воли."
+        effects:
+          fields: {Background: "Адептус Арбитрес"}
+          skills:
+            Awareness: 1
+            "CommonLore::Адептус Арбитрес": 1
+            "CommonLore::Преступность": 1
+            Intimidate: 1
+            Scrutiny: 1
+          append_fields:
+            BackgroundAbilities: ["Воплощение Закона"]
+          equipment: ["3 дозы стимма", наручники, "12 палочек лхо"]
+        choices:
+          trained_skill:
+            options:
+              inquiry:
+                names: [Дознание, Inquiry]
+                effects: {skills: {Inquiry: 1}}
+              interrogation:
+                names: [Допрос, Interrogation]
+                effects: {skills: {Interrogation: 1}}
+          weapon_training:
+            options:
+              shock:
+                names: [Шоковое, Shock]
+                effects: {append_fields: {Talents: ["Выучка с Оружием (Шоковое)"]}}
+              solid_projectile:
+                names: [Твёрдотельное, Твердотельное, "Solid Projectile"]
+                effects: {append_fields: {Talents: ["Выучка с Оружием (Твёрдотельное)"]}}
+          starting_weapon:
+            options:
+              shotgun:
+                names: [Дробовик, Shotgun]
+                effects: {equipment: [дробовик]}
+              shock_maul:
+                names: ["шоковая булава", "Shock Maul"]
+                effects: {equipment: ["шоковая булава"]}
+          armour:
+            options:
+              enforcer_light_carapace:
+                names: ["лёгкий панцирь силовика", "легкий панцирь силовика"]
+                effects: {equipment: ["лёгкий панцирь силовика"]}
+              carapace_chestplate:
+                names: ["панцирный нагрудник", "Carapace Chestplate"]
+                effects: {equipment: ["панцирный нагрудник"]}
+          aptitude:
+            options:
+              offence:
+                names: [Нападение, Offence]
+                effects: {append_fields: {Aptitudes: [Нападение]}}
+              defence:
+                names: [Защита, Defence]
+                effects: {append_fields: {Aptitudes: [Защита]}}
+
+      adeptus_astra_telepathica:
+        names: ["Адептус Астра Телепатика", "Adeptus Astra Telepathica", "Астра Телепатика"]
+        display: {ru: "Адептус Астра Телепатика", en: "Adeptus Astra Telepathica"}
+        source: "DH2 RU v1.8 pp. 53-54"
+        rules:
+          ability: "Постоянная Угроза"
+          ability_ru: "Когда персонаж или союзник в 10 метрах бросает по таблице Психических феноменов, персонаж может изменить результат на свой бонус Силы Воли."
+          tested_on_terra_ru: "Если при создании персонаж получает элитное улучшение Псайкер, он также получает черту Санкционированный."
+        effects:
+          fields: {Background: "Адептус Астра Телепатика"}
+          skills:
+            Awareness: 1
+            "CommonLore::Адептус Астра Телепатика": 1
+            "ForbiddenLore::Варп": 1
+          append_fields:
+            Talents: ["Выучка с Оружием (Лазерное, Низкотехнологичное)"]
+            BackgroundAbilities: ["Постоянная Угроза", "Проверен Террой"]
+          equipment: [лазпистолет]
+        choices:
+          social_skill:
+            options:
+              deceive:
+                names: [Обман, Deceive]
+                effects: {skills: {Deceive: 1}}
+              interrogation:
+                names: [Допрос, Interrogation]
+                effects: {skills: {Interrogation: 1}}
+          psychic_skill:
+            options:
+              psyniscience:
+                names: [Психонаука, Psyniscience]
+                effects: {skills: {Psyniscience: 1}}
+              scrutiny:
+                names: [Проницательность, Scrutiny]
+                effects: {skills: {Scrutiny: 1}}
+          melee_weapon:
+            options:
+              staff:
+                names: [Посох, Staff]
+                effects: {equipment: [посох]}
+              whip:
+                names: [Кнут, Whip]
+                effects: {equipment: [кнут]}
+          armour:
+            options:
+              light_flak_cloak:
+                names: ["лёгкий флак-плащ", "легкий флак-плащ"]
+                effects: {equipment: ["лёгкий флак-плащ"]}
+              flak_vest:
+                names: ["флак-жилет", "Flak Vest"]
+                effects: {equipment: ["флак-жилет"]}
+          focus:
+            options:
+              micro_bead:
+                names: ["микро-наушник", "Micro-bead"]
+                effects: {equipment: ["микро-наушник"]}
+              psy_focus:
+                names: ["пси-фокус", "Psy Focus"]
+                effects: {equipment: ["пси-фокус"]}
+          aptitude:
+            options:
+              defence:
+                names: [Защита, Defence]
+                effects: {append_fields: {Aptitudes: [Защита]}}
+              psyker:
+                names: [Псайкер, Psyker]
+                effects: {append_fields: {Aptitudes: [Псайкер]}}
+
+      adeptus_mechanicus:
+        names: ["Адептус Механикус", "Adeptus Mechanicus", Механикус]
+        display: {ru: "Адептус Механикус", en: "Adeptus Mechanicus"}
+        source: "DH2 RU v1.8 pp. 55-56"
+        rules:
+          ability: "Замена Слабой Плоти"
+          ability_ru: "Персонаж считает Доступность всей кибернетики на два уровня ниже."
+        effects:
+          fields: {Background: "Адептус Механикус"}
+          skills:
+            "CommonLore::Адептус Механикус": 1
+            Logic: 1
+            Security: 1
+            TechUse: 1
+          append_fields:
+            Talents: ["Использование Механодендритов (Вспомогательный)", "Выучка с Оружием (Твёрдотельное)"]
+            Traits: ["Имплантаты Механикус"]
+            BackgroundAbilities: ["Замена Слабой Плоти"]
+          equipment: ["имперские мантии", "2 фиала священной смазки"]
+        choices:
+          trained_skill:
+            options:
+              awareness:
+                names: [Бдительность, Awareness]
+                effects: {skills: {Awareness: 1}}
+              operate:
+                names: [Управление, Operate]
+                skill_family: Operate
+                rank: 1
+          starting_weapon:
+            options:
+              autogun:
+                names: [Автоган, Autogun]
+                effects: {equipment: [автоган]}
+              hand_cannon:
+                names: ["ручная пушка", "Hand Cannon"]
+                effects: {equipment: ["ручная пушка"]}
+          augment:
+            options:
+              utility_servo_skull:
+                names: ["монозадачный серво-череп (Инструментальный)", "монозадачный серво-череп (инструментальный)"]
+                effects: {equipment: ["монозадачный серво-череп (Инструментальный)"]}
+              optical_mechadendrite:
+                names: ["оптический механодендрит", "Optical Mechadendrite"]
+                effects: {equipment: ["оптический механодендрит"]}
+          aptitude:
+            options:
+              knowledge:
+                names: [Познание, Knowledge]
+                effects: {append_fields: {Aptitudes: [Познание]}}
+              tech:
+                names: [Техно, Tech]
+                effects: {append_fields: {Aptitudes: [Техно]}}
+
+      adeptus_ministorum:
+        names: ["Адептус Министорум", "Adeptus Ministorum", Министорум]
+        display: {ru: "Адептус Министорум", en: "Adeptus Ministorum"}
+        source: "DH2 RU v1.8 pp. 57-58"
+        rules:
+          ability: "Вера есть Всё"
+          ability_ru: "При трате очка Судьбы ради +10 к проверке персонаж вместо этого получает +20."
+        effects:
+          fields: {Background: "Адептус Министорум"}
+          skills:
+            Charm: 1
+            Command: 1
+            "CommonLore::Адептус Министорум": 1
+            "Linguistics::Высокий Готик": 1
+          append_fields:
+            BackgroundAbilities: ["Вера есть Всё"]
+          equipment: [рюкзак, "свето-шар", "монозадачный серво-череп (громкоговоритель)"]
+        choices:
+          trained_skill:
+            options:
+              inquiry:
+                names: [Дознание, Inquiry]
+                effects: {skills: {Inquiry: 1}}
+              scrutiny:
+                names: [Проницательность, Scrutiny]
+                effects: {skills: {Scrutiny: 1}}
+          weapon_training:
+            options:
+              flame:
+                names: [Зажигательное, Flame]
+                effects: {append_fields: {Talents: ["Выучка с Оружием (Зажигательное)"]}}
+              lowtech_solid:
+                names: ["Низкотехнологичное, Твёрдотельное", "Низкотехнологичное, Твердотельное"]
+                effects: {append_fields: {Talents: ["Выучка с Оружием (Низкотехнологичное, Твёрдотельное)"]}}
+          weapon_package:
+            options:
+              hand_flamer:
+                names: ["ручной огнемёт", "ручной огнемет", "Hand Flamer"]
+                effects: {equipment: ["ручной огнемёт"]}
+              hammer_stub:
+                names: ["боевой молот и стаб-револьвер"]
+                effects: {equipment: ["боевой молот", "стаб-револьвер"]}
+          armour:
+            options:
+              robes:
+                names: ["имперские мантии"]
+                effects: {equipment: ["имперские мантии"]}
+              flak_vest:
+                names: ["флак-жилет", "Flak Vest"]
+                effects: {equipment: ["флак-жилет"]}
+          aptitude:
+            options:
+              leadership:
+                names: [Лидерство, Leadership]
+                effects: {append_fields: {Aptitudes: [Лидерство]}}
+              social:
+                names: [Общение, Social]
+                effects: {append_fields: {Aptitudes: [Общение]}}
+
+      astra_militarum:
+        names: ["Астра Милитарум", "Astra Militarum", "Имперская Гвардия"]
+        display: {ru: "Астра Милитарум", en: "Astra Militarum"}
+        source: "DH2 RU v1.8 pp. 59-60"
+        rules:
+          ability: "Молот Императора"
+          ability_ru: "Если цель в прошлом ходу атаковал союзник, персонаж может перебрасывать результаты 1 и 2 на броске урона."
+        effects:
+          fields: {Background: "Астра Милитарум"}
+          skills:
+            Athletics: 1
+            Command: 1
+            "CommonLore::Астра Милитарум": 1
+            "Navigation::Наземная": 1
+          append_fields:
+            Talents: ["Выучка с Оружием (Лазерное, Низкотехнологичное)"]
+            BackgroundAbilities: ["Молот Императора"]
+          equipment: ["разгрузочный жилет", "флак-броня Астра Милитарум", "кошка и трос", "12 палочек лхо", магнокуляры]
+        choices:
+          trained_skill:
+            options:
+              medicae:
+                names: [Медика, Medicae]
+                effects: {skills: {Medicae: 1}}
+              operate_surface:
+                names: ["Управление (Наземная)", "Operate (Surface)"]
+                effects: {skills: {"Operate::Наземная": 1}}
+          weapon_package:
+            options:
+              lasgun:
+                names: [Лазган, Lasgun]
+                effects: {equipment: [лазган]}
+              laspistol_sword:
+                names: ["лазпистолет и меч"]
+                effects: {equipment: [лазпистолет, меч]}
+          aptitude:
+            options:
+              fieldcraft:
+                names: [Полевое, Fieldcraft]
+                effects: {append_fields: {Aptitudes: [Полевое]}}
+              leadership:
+                names: [Лидерство, Leadership]
+                effects: {append_fields: {Aptitudes: [Лидерство]}}
+
+      outcast:
+        names: [Изгой, Изгои, Outcast]
+        display: {ru: Изгой, en: Outcast}
+        source: "DH2 RU v1.8 pp. 61-62"
+        rules:
+          ability: "Некогда Отдыхать"
+          ability_ru: "При определении Усталости персонаж считает свой бонус Выносливости в два раза большим."
+        effects:
+          fields: {Background: Изгой}
+          skills:
+            "CommonLore::Преступность": 1
+            Deceive: 1
+            Dodge: 1
+            Stealth: 1
+          append_fields:
+            BackgroundAbilities: ["Некогда Отдыхать"]
+          equipment: ["цепной меч", инъектор]
+        choices:
+          trained_skill:
+            options:
+              acrobatics:
+                names: [Акробатика, Acrobatics]
+                effects: {skills: {Acrobatics: 1}}
+              sleight_of_hand:
+                names: ["Ловкость Рук", "Ловкость рук", "Sleight of Hand"]
+                effects: {skills: {SleightOfHand: 1}}
+          weapon_training:
+            options:
+              chain_las:
+                names: ["Цепное и Лазерное"]
+                effects: {append_fields: {Talents: ["Выучка с Оружием (Цепное, Лазерное)"]}}
+              solid_projectile:
+                names: [Твёрдотельное, Твердотельное, "Solid Projectile"]
+                effects: {append_fields: {Talents: ["Выучка с Оружием (Твёрдотельное)"]}}
+          pistol:
+            options:
+              autopistol:
+                names: [Автопистолет, Autopistol]
+                effects: {equipment: [автопистолет]}
+              laspistol:
+                names: [Лазпистолет, Laspistol]
+                effects: {equipment: [лазпистолет]}
+          armour:
+            options:
+              armoured_bodyglove:
+                names: ["бронированный комбинезон", "Armoured Bodyglove"]
+                effects: {equipment: ["бронированный комбинезон"]}
+              flak_vest:
+                names: ["флак-жилет", "Flak Vest"]
+                effects: {equipment: ["флак-жилет"]}
+          drug:
+            options:
+              obscura:
+                names: [Обскура, Obscura]
+                effects: {equipment: ["2 дозы обскуры"]}
+              slaught:
+                names: [Забой, Slaught]
+                effects: {equipment: ["2 дозы забоя"]}
+          aptitude:
+            options:
+              fieldcraft:
+                names: [Полевое, Fieldcraft]
+                effects: {append_fields: {Aptitudes: [Полевое]}}
+              social:
+                names: [Общение, Social]
+                effects: {append_fields: {Aptitudes: [Общение]}}
