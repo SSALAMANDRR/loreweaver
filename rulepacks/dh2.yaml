@@ -1,13 +1,13 @@
-# Dark Heresy Second Edition — initial deterministic mechanics kernel.
+# Dark Heresy Second Edition — deterministic mechanics kernel.
 #
 # Source of truth for this port is the structured Russian DH2 corpus migrated
-# into the НРИ ВАХА Neon database from DH2_RU_OKP_V1_8.  This slice covers
+# into the НРИ ВАХА Neon database from DH2_RU_OKP_V1_8. This slice covers
 # characteristic naming/bonuses, the basic percentile check, the complete
-# difficulty ladder, signed degrees of success/failure, initiative, and the
-# first rule-backed character-sheet resources (wounds, damage, fatigue).
-# Character creation, skills, combat actions, hit locations, weapons and
-# critical effects are added only after their source sections are mapped and
-# covered by tests.
+# difficulty ladder, signed degrees of success/failure, initiative, the first
+# rule-backed character-sheet resources, and the 21 non-special skill families.
+# Character creation, specialized skills, combat actions, hit locations,
+# weapons and critical effects are added only after their source sections are
+# mapped and covered by tests.
 
 names:
   - dh2
@@ -19,8 +19,12 @@ names:
 set_keys: [dh2, darkheresy2]
 
 # Missing characteristic values intentionally fall back to the legal floor,
-# not to a fabricated "average acolyte".  Real creation defaults belong to the
+# not to a fabricated "average acolyte". Real creation defaults belong to the
 # character-creation slice and will replace these once Chapter II is ported.
+#
+# Skill values are TRAINING LEVELS, not check targets:
+#   0 = untrained (-20), 1 = known (+0), 2 = trained (+10),
+#   3 = experienced (+20), 4 = veteran (+30).
 defaults:
   WS: 1
   BS: 1
@@ -35,9 +39,36 @@ defaults:
   Wounds: 0
   Damage: 0
   Fatigue: 0
+  Acrobatics: 0
+  Athletics: 0
+  Awareness: 0
+  Security: 0
+  Survival: 0
+  Inquiry: 0
+  Interrogation: 0
+  Intimidate: 0
+  Command: 0
+  Commerce: 0
+  SleightOfHand: 0
+  Logic: 0
+  Medicae: 0
+  Charm: 0
+  Deceive: 0
+  Parry: 0
+  Scrutiny: 0
+  Psyniscience: 0
+  Stealth: 0
+  TechUse: 0
+  Dodge: 0
 
-# Canonical keys stay compact/ASCII so formulas remain readable.  Russian
-# characteristic names and abbreviations are taken from CH01_H004..CH01_H013.
+# Canonical keys stay compact/ASCII so formulas remain readable. Russian
+# characteristic names and abbreviations are taken from CH01_H004..CH01_H013;
+# regular skill names/bindings are taken from CH03_H037.
+#
+# The seven Special skill families (Forbidden Lore, Linguistics, Navigation,
+# Common Lore, Trade, Operate, Scholastic Lore) are deliberately absent here:
+# CH03_H003 makes every specialization a separately acquired/improved skill.
+# Treating a whole family as one alias would silently implement the wrong game.
 alias:
   WS: ["Навык Рукопашной", "Навык Рукопашной (НР)", НР]
   BS: ["Навык Стрельбы", "Навык Стрельбы (НС)", НС]
@@ -53,15 +84,36 @@ alias:
   Damage: [Урон]
   Fatigue: [Усталость]
   FatigueThreshold: ["Порог усталости"]
+  Acrobatics: [Акробатика]
+  Athletics: [Атлетика]
+  Awareness: [Бдительность]
+  Security: [Безопасность]
+  Survival: [Выживание]
+  Inquiry: [Дознание]
+  Interrogation: [Допрос]
+  Intimidate: [Запугивание]
+  Command: [Командование]
+  Commerce: [Коммерция]
+  SleightOfHand: ["Ловкость Рук", "Ловкость рук"]
+  Logic: [Логика]
+  Medicae: [Медика]
+  Charm: [Обаяние]
+  Deceive: [Обман]
+  Parry: [Парирование]
+  Scrutiny: [Проницательность]
+  Psyniscience: [Психонаука]
+  Stealth: [Скрытность]
+  TechUse: [Техпользование]
+  Dodge: [Уклонение]
 
 # CH01_M03/CH01_M04 + CH01_H018: roll d100 and succeed on a result no greater
-# than the modified characteristic/skill.  DH2 permits effective targets above
+# than the modified characteristic/skill. DH2 permits effective targets above
 # 100 and below 0, so target transforms are intentionally not clamped here.
 #
 # CH01_H022: a successful check starts at 1 degree of success and gains one for
 # every full 10 points by which target exceeds the roll; failures mirror this.
 # Loreweaver's generic `margin` is the system-defined signed comparison metric,
-# so positive values are DoS and negative values are DoF.  This is especially
+# so positive values are DoS and negative values are DoF. This is especially
 # useful for opposed checks because they can compare the native DH2 degree count
 # without teaching core/ anything about Dark Heresy.
 resolution:
@@ -123,6 +175,9 @@ labels:
 
 # CH01_H003: every characteristic bonus is the tens digit of the value.
 # CH07_H103: fatigue threshold = Toughness Bonus + Willpower Bonus.
+# CH03_H001/H014/H015/H037: a regular skill check uses its base characteristic
+# plus the modifier from its highest training level. The stored skill rank is
+# kept separate from the derived check target, so advancement remains explicit.
 derived:
   WSB: {expr: "floor(WS / 10)"}
   BSB: {expr: "floor(BS / 10)"}
@@ -135,6 +190,33 @@ derived:
   FelB: {expr: "floor(Fel / 10)"}
   InfB: {expr: "floor(Inf / 10)"}
   FatigueThreshold: {expr: "TB + WPB"}
+  AcrobaticsTarget: {expr: "Ag + if(Acrobatics == 0, -20, (Acrobatics - 1) * 10)"}
+  AthleticsTarget: {expr: "S + if(Athletics == 0, -20, (Athletics - 1) * 10)"}
+  AwarenessTarget: {expr: "Per + if(Awareness == 0, -20, (Awareness - 1) * 10)"}
+  SecurityTarget: {expr: "Int + if(Security == 0, -20, (Security - 1) * 10)"}
+  SurvivalTarget: {expr: "Per + if(Survival == 0, -20, (Survival - 1) * 10)"}
+  InquiryTarget: {expr: "Fel + if(Inquiry == 0, -20, (Inquiry - 1) * 10)"}
+  InterrogationTarget: {expr: "WP + if(Interrogation == 0, -20, (Interrogation - 1) * 10)"}
+  IntimidateTarget: {expr: "S + if(Intimidate == 0, -20, (Intimidate - 1) * 10)"}
+  CommandTarget: {expr: "Fel + if(Command == 0, -20, (Command - 1) * 10)"}
+  CommerceTarget: {expr: "Int + if(Commerce == 0, -20, (Commerce - 1) * 10)"}
+  SleightOfHandTarget: {expr: "Ag + if(SleightOfHand == 0, -20, (SleightOfHand - 1) * 10)"}
+  LogicTarget: {expr: "Int + if(Logic == 0, -20, (Logic - 1) * 10)"}
+  MedicaeTarget: {expr: "Int + if(Medicae == 0, -20, (Medicae - 1) * 10)"}
+  CharmTarget: {expr: "Fel + if(Charm == 0, -20, (Charm - 1) * 10)"}
+  DeceiveTarget: {expr: "Fel + if(Deceive == 0, -20, (Deceive - 1) * 10)"}
+  ParryTarget: {expr: "WS + if(Parry == 0, -20, (Parry - 1) * 10)"}
+  ScrutinyTarget: {expr: "Per + if(Scrutiny == 0, -20, (Scrutiny - 1) * 10)"}
+  PsyniscienceTarget: {expr: "Per + if(Psyniscience == 0, -20, (Psyniscience - 1) * 10)"}
+  StealthTarget: {expr: "Ag + if(Stealth == 0, -20, (Stealth - 1) * 10)"}
+  TechUseTarget: {expr: "Int + if(TechUse == 0, -20, (TechUse - 1) * 10)"}
+  DodgeTarget: {expr: "Ag + if(Dodge == 0, -20, (Dodge - 1) * 10)"}
+
+# Skill advancement uses the four levels from CH03_H015. XP costs and
+# aptitude-dependent prices are ported with Chapter II later.
+creation_constraints:
+  skills:
+    default: {min: 0, max: 4}
 
 # CH07_H011: d10 + Agility Bonus.
 initiative:
@@ -166,6 +248,27 @@ display:
     Damage: Урон
     Fatigue: Усталость
     FatigueThreshold: Порог усталости
+    Acrobatics: Акробатика
+    Athletics: Атлетика
+    Awareness: Бдительность
+    Security: Безопасность
+    Survival: Выживание
+    Inquiry: Дознание
+    Interrogation: Допрос
+    Intimidate: Запугивание
+    Command: Командование
+    Commerce: Коммерция
+    SleightOfHand: Ловкость Рук
+    Logic: Логика
+    Medicae: Медика
+    Charm: Обаяние
+    Deceive: Обман
+    Parry: Парирование
+    Scrutiny: Проницательность
+    Psyniscience: Психонаука
+    Stealth: Скрытность
+    TechUse: Техпользование
+    Dodge: Уклонение
   en:
     WS: WS
     BS: BS
@@ -191,18 +294,43 @@ display:
     Damage: Damage
     Fatigue: Fatigue
     FatigueThreshold: Fatigue Threshold
+    Acrobatics: Acrobatics
+    Athletics: Athletics
+    Awareness: Awareness
+    Security: Security
+    Survival: Survival
+    Inquiry: Inquiry
+    Interrogation: Interrogation
+    Intimidate: Intimidate
+    Command: Command
+    Commerce: Commerce
+    SleightOfHand: Sleight of Hand
+    Logic: Logic
+    Medicae: Medicae
+    Charm: Charm
+    Deceive: Deceive
+    Parry: Parry
+    Scrutiny: Scrutiny
+    Psyniscience: Psyniscience
+    Stealth: Stealth
+    TechUse: Tech-Use
+    Dodge: Dodge
 
 commands:
   ra: {action: check}
   rc: {action: check}
 
 expertise:
-  ru: "# Dark Heresy Second Edition — Ведущий\nИспользуй процентные проверки DH2: бросок d100 должен быть не выше модифицированного значения характеристики или умения. Сложность меняет целевое значение по шкале от +60 до -60. Положительный margin — степени успеха, отрицательный — степени провала. Раны являются порогом, а полученный Урон накапливается отдельно. Порог Усталости равен сумме бонусов Выносливости и Силы Воли. Механику, уже выраженную rulepack-ом, не пересчитывай в прозе и не подменяй результат броска повествованием."
-  en: "# Dark Heresy Second Edition — GM\nUse DH2 percentile checks: d100 must roll at or below the modified characteristic or skill. Difficulty changes the target on the +60 to -60 ladder. Positive margin is degrees of success; negative margin is degrees of failure. Wounds are a threshold while accrued Damage is tracked separately. Fatigue Threshold equals Toughness Bonus plus Willpower Bonus. Do not recompute mechanics already owned by the rulepack in prose or override a rolled result with narration."
+  ru: "# Dark Heresy Second Edition — Ведущий\nИспользуй процентные проверки DH2: бросок d100 должен быть не выше модифицированного значения характеристики или умения. Сложность меняет целевое значение по шкале от +60 до -60. Положительный margin — степени успеха, отрицательный — степени провала. Для обычных умений храни уровень обучения 0–4, а целевое значение проверки выводи из базовой характеристики и уровня: нетренированное -20, Знает +0, Обучен +10, Опытен +20, Ветеран +30. Специальные умения со специализациями пока не своди к одному общему навыку. Раны являются порогом, а полученный Урон накапливается отдельно. Порог Усталости равен сумме бонусов Выносливости и Силы Воли. Механику, уже выраженную rulepack-ом, не пересчитывай в прозе и не подменяй результат броска повествованием."
+  en: "# Dark Heresy Second Edition — GM\nUse DH2 percentile checks: d100 must roll at or below the modified characteristic or skill. Difficulty changes the target on the +60 to -60 ladder. Positive margin is degrees of success; negative margin is degrees of failure. Regular skills store training level 0–4; derive the check target from the base characteristic and level: untrained -20, known +0, trained +10, experienced +20, veteran +30. Do not collapse Special skills with separate specializations into one shared skill. Wounds are a threshold while accrued Damage is tracked separately. Fatigue Threshold equals Toughness Bonus plus Willpower Bonus. Do not recompute mechanics already owned by the rulepack in prose or override a rolled result with narration."
 
-# Sheet substrate.  Damage and Fatigue deliberately use ordinary attribute
+# Sheet substrate. Damage and Fatigue deliberately use ordinary attribute
 # storage rather than `vitals`: both counters grow upward and are allowed to
 # exceed their thresholds, while Loreweaver vitals clamp current <= max.
+#
+# Regular skills store training rank in sheet.skills. check_values redirects a
+# skill check to its derived target. This uses the existing generic sheet bridge
+# rather than adding DH2 knowledge to core code.
 sheet:
   label: DH2
   attr_keys:
@@ -234,6 +362,50 @@ sheet:
     WOUNDS: 0
     DAMAGE: 0
     FATIGUE: 0
+  skills:
+    Acrobatics: 0
+    Athletics: 0
+    Awareness: 0
+    Security: 0
+    Survival: 0
+    Inquiry: 0
+    Interrogation: 0
+    Intimidate: 0
+    Command: 0
+    Commerce: 0
+    SleightOfHand: 0
+    Logic: 0
+    Medicae: 0
+    Charm: 0
+    Deceive: 0
+    Parry: 0
+    Scrutiny: 0
+    Psyniscience: 0
+    Stealth: 0
+    TechUse: 0
+    Dodge: 0
+  check_values:
+    Acrobatics: AcrobaticsTarget
+    Athletics: AthleticsTarget
+    Awareness: AwarenessTarget
+    Security: SecurityTarget
+    Survival: SurvivalTarget
+    Inquiry: InquiryTarget
+    Interrogation: InterrogationTarget
+    Intimidate: IntimidateTarget
+    Command: CommandTarget
+    Commerce: CommerceTarget
+    SleightOfHand: SleightOfHandTarget
+    Logic: LogicTarget
+    Medicae: MedicaeTarget
+    Charm: CharmTarget
+    Deceive: DeceiveTarget
+    Parry: ParryTarget
+    Scrutiny: ScrutinyTarget
+    Psyniscience: PsyniscienceTarget
+    Stealth: StealthTarget
+    TechUse: TechUseTarget
+    Dodge: DodgeTarget
   derived_attrs:
     FATIGUE_THRESHOLD: FatigueThreshold
   resources:
