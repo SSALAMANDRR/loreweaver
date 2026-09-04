@@ -103,7 +103,7 @@ alias:
   Scrutiny: [Проницательность]
   Psyniscience: [Психонаука]
   Stealth: [Скрытность]
-  TechUse: [Техпользование]
+  TechUse: [Техпользование, "Тех-пользование"]
   Dodge: [Уклонение]
 
 # CH01_M03/CH01_M04 + CH01_H018: roll d100 and succeed on a result no greater
@@ -348,6 +348,28 @@ sheet:
     Damage: DAMAGE
     Fatigue: FATIGUE
     FatigueThreshold: FATIGUE_THRESHOLD
+  skill_keys:
+    Acrobatics: Acrobatics
+    Athletics: Athletics
+    Awareness: Awareness
+    Security: Security
+    Survival: Survival
+    Inquiry: Inquiry
+    Interrogation: Interrogation
+    Intimidate: Intimidate
+    Command: Command
+    Commerce: Commerce
+    SleightOfHand: SleightOfHand
+    Logic: Logic
+    Medicae: Medicae
+    Charm: Charm
+    Deceive: Deceive
+    Parry: Parry
+    Scrutiny: Scrutiny
+    Psyniscience: Psyniscience
+    Stealth: Stealth
+    TechUse: TechUse
+    Dodge: Dodge
   attributes:
     WS: 1
     BS: 1
