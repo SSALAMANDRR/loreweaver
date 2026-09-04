@@ -17,8 +17,9 @@ A layer option may apply:
 * list-like ``append_fields``;
 * skill ranks, including ``Family::specialization`` keys;
 * starting equipment;
-* explicit player choice groups, either finite options or a free
-  specialization of a declared skill family.
+* explicit player choice groups, either finite options, a free specialization
+  of a declared skill family, or a free specialization interpolated into a
+  declared list-like sheet field (for talents/traits/etc.).
 
 Missing choices fail loudly.  The substrate never guesses for the player.
 """
@@ -239,6 +240,28 @@ def _apply_specialization(pack: Any, character: Any, group: Mapping[str, Any], s
     return canonical, numeric_rank
 
 
+def _apply_field_template(pack: Any, character: Any, raw: Any, specialization: Any) -> str:
+    """Append one player-specialized value to a declared list-like sheet field."""
+    if not isinstance(raw, Mapping):
+        raise CreationLayerError("field_template must be a mapping")
+    unknown = set(raw) - {"field", "template"}
+    if unknown:
+        raise CreationLayerError(f"field_template has unknown keys {sorted(unknown)}")
+    canonical_field = str(raw.get("field") or "").strip()
+    template = str(raw.get("template") or "").strip()
+    text = str(specialization or "").strip()
+    if not canonical_field or not template:
+        raise CreationLayerError("field_template needs field and template")
+    if "{specialization}" not in template:
+        raise CreationLayerError("field_template.template must contain {specialization}")
+    if not text:
+        raise CreationLayerError(f"specialization for field {canonical_field!r} is required")
+    value = template.replace("{specialization}", text)
+    field_name = _declared_field_name(pack, canonical_field)
+    setattr(character, field_name, _append_unique(getattr(character, field_name, None), [value]))
+    return value
+
+
 def _apply_choice_group(
     pack: Any,
     character: Any,
@@ -268,14 +291,18 @@ def _apply_choice_group(
     if resolved is None:
         raise CreationLayerError(f"unknown option {option_name!r} for choice {group_id!r}")
     _option_id, option = resolved
-    unknown = set(option) - {"names", "effects", "skill_family", "rank", "display", "rules"}
+    unknown = set(option) - {"names", "effects", "skill_family", "rank", "field_template", "display", "rules"}
     if unknown:
         raise CreationLayerError(f"choice option has unknown keys {sorted(unknown)}")
+    if "skill_family" in option and "field_template" in option:
+        raise CreationLayerError("choice option cannot combine skill_family and field_template")
 
     equipment, skills = _apply_effects(pack, character, option.get("effects"))
     if "skill_family" in option:
         canonical, rank = _apply_specialization(pack, character, option, specialization)
         skills[canonical] = rank
+    elif "field_template" in option:
+        _apply_field_template(pack, character, option["field_template"], specialization)
     elif specialization not in (None, ""):
         raise CreationLayerError(f"choice {group_id!r} does not accept a specialization")
     return equipment, skills
