@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 import pytest
 
 from core.character_manager import CharacterSheet
@@ -8,7 +10,17 @@ from core.creation_layers import (
     resolve_creation_layer_option,
 )
 from core.rulepacks import load_rulepack
+from core.sheets import sheet_value
 
+
+HOME_WORLD_ALIASES = {
+    "Дикий мир": "feral_world",
+    "Мир-кузница": "forge_world",
+    "Высокородный": "highborn",
+    "Мир-улей": "hive_world",
+    "Мир-храм": "shrine_world",
+    "Пустоторождённый": "voidborn",
+}
 
 BACKGROUND_ALIASES = {
     "Адептус Администратум": "adeptus_administratum",
@@ -32,13 +44,34 @@ ROLE_ALIASES = {
 }
 
 
-def test_dh2_creation_sidecar_declares_all_core_backgrounds_and_roles():
+@dataclass
+class _Roll:
+    total: int
+
+
+class _FixedLayerRoller:
+    def __init__(self, value: int):
+        self.value = value
+        self.calls: list[str] = []
+
+    def roll_expression(self, expression: str) -> _Roll:
+        self.calls.append(expression)
+        return _Roll(self.value)
+
+
+def test_dh2_creation_sidecars_declare_home_worlds_backgrounds_and_roles():
     pack = load_rulepack("dh2")
     layers = load_creation_layers(pack)
 
-    assert set(layers) == {"background", "role"}
+    assert set(layers) == {"home_world", "background", "role"}
+    assert set(layers["home_world"]["options"]) == set(HOME_WORLD_ALIASES.values())
     assert set(layers["background"]["options"]) == set(BACKGROUND_ALIASES.values())
     assert set(layers["role"]["options"]) == set(ROLE_ALIASES.values())
+
+    for surface, canonical in HOME_WORLD_ALIASES.items():
+        resolved = resolve_creation_layer_option(pack, "home_world", surface)
+        assert resolved is not None
+        assert resolved[0] == canonical
 
     for surface, canonical in BACKGROUND_ALIASES.items():
         resolved = resolve_creation_layer_option(pack, "background", surface)
@@ -49,6 +82,57 @@ def test_dh2_creation_sidecar_declares_all_core_backgrounds_and_roles():
         resolved = resolve_creation_layer_option(pack, "role", surface)
         assert resolved is not None
         assert resolved[0] == canonical
+
+
+def test_feral_home_world_applies_wounds_aptitude_and_ability_without_core_knowing_dh2():
+    pack = load_rulepack("dh2")
+    sheet = CharacterSheet("Acolyte", "dh2")
+    roller = _FixedLayerRoller(12)
+
+    result = apply_creation_layer(pack, sheet, "home_world", "Дикий мир", roller=roller)
+
+    assert result.option_id == "feral_world"
+    assert roller.calls == ["1d5+9"]
+    assert sheet_value(sheet, pack, "Wounds") == 12
+    assert sheet.aptitudes == ["Выносливость"]
+    assert sheet.background_abilities == ["Старые Пути"]
+
+
+def test_forge_home_world_refuses_to_guess_omnissiah_talent_then_applies_player_choice():
+    pack = load_rulepack("dh2")
+    sheet = CharacterSheet("Acolyte", "dh2")
+
+    with pytest.raises(CreationLayerError, match="requires choices"):
+        apply_creation_layer(pack, sheet, "home_world", "Мир-кузница", roller=_FixedLayerRoller(11))
+
+    assert sheet.talents == []
+    assert sheet.aptitudes == []
+
+    apply_creation_layer(
+        pack,
+        sheet,
+        "home_world",
+        "Мир-кузница",
+        selections={"home_world_talent": "Длань Омниссии"},
+        roller=_FixedLayerRoller(11),
+    )
+
+    assert sheet_value(sheet, pack, "Wounds") == 11
+    assert sheet.aptitudes == ["Интеллект"]
+    assert sheet.background_abilities == ["Избранный Омниссии"]
+    assert sheet.talents == ["Длань Омниссии"]
+
+
+def test_voidborn_home_world_grants_fixed_unyielding_talent_and_seven_plus_d5_wounds():
+    pack = load_rulepack("dh2")
+    sheet = CharacterSheet("Acolyte", "dh2")
+
+    apply_creation_layer(pack, sheet, "home_world", "Пустоторождённый", roller=_FixedLayerRoller(9))
+
+    assert sheet_value(sheet, pack, "Wounds") == 9
+    assert sheet.aptitudes == ["Интеллект"]
+    assert sheet.talents == ["Непреклонный"]
+    assert sheet.background_abilities == ["Дитя Темноты"]
 
 
 def test_layer_application_refuses_to_guess_missing_player_choices():
