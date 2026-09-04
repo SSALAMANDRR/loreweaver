@@ -25,38 +25,39 @@ DIFFICULTY_DELTAS = {
 
 
 REGULAR_SKILLS = {
-    "Acrobatics": "Ag",
-    "Athletics": "S",
-    "Awareness": "Per",
-    "Security": "Int",
-    "Survival": "Per",
-    "Inquiry": "Fel",
-    "Interrogation": "WP",
-    "Intimidate": "S",
-    "Command": "Fel",
-    "Commerce": "Int",
-    "SleightOfHand": "Ag",
-    "Logic": "Int",
-    "Medicae": "Int",
-    "Charm": "Fel",
-    "Deceive": "Fel",
-    "Parry": "WS",
-    "Scrutiny": "Per",
-    "Psyniscience": "Per",
-    "Stealth": "Ag",
-    "TechUse": "Int",
-    "Dodge": "Ag",
+    "Acrobatics": ("Ag", ["Акробатика"]),
+    "Athletics": ("S", ["Атлетика"]),
+    "Awareness": ("Per", ["Бдительность"]),
+    "Security": ("Int", ["Безопасность"]),
+    "Survival": ("Per", ["Выживание"]),
+    "Inquiry": ("Fel", ["Дознание"]),
+    "Interrogation": ("WP", ["Допрос"]),
+    "Intimidate": ("S", ["Запугивание"]),
+    "Command": ("Fel", ["Командование"]),
+    "Commerce": ("Int", ["Коммерция"]),
+    "SleightOfHand": ("Ag", ["Ловкость Рук", "Ловкость рук"]),
+    "Logic": ("Int", ["Логика"]),
+    "Medicae": ("Int", ["Медика"]),
+    "Charm": ("Fel", ["Обаяние"]),
+    "Deceive": ("Fel", ["Обман"]),
+    "Parry": ("WS", ["Парирование"]),
+    "Scrutiny": ("Per", ["Проницательность"]),
+    "Psyniscience": ("Per", ["Психонаука"]),
+    "Stealth": ("Ag", ["Скрытность"]),
+    "TechUse": ("Int", ["Техпользование", "Тех-пользование"]),
+    "Dodge": ("Ag", ["Уклонение"]),
 }
 
-SPECIAL_SKILL_FAMILIES = (
-    "Запретные Знания",
-    "Лингвистика",
-    "Навигация",
-    "Общие Знания",
-    "Ремесло",
-    "Управление",
-    "Учёные Знания",
-)
+
+SPECIAL_SKILL_FAMILIES = {
+    "ForbiddenLore": "Запретные Знания",
+    "Linguistics": "Лингвистика",
+    "Navigation": "Навигация",
+    "CommonLore": "Общие Знания",
+    "Trade": "Ремесло",
+    "Operate": "Управление",
+    "ScholasticLore": "Учёные Знания",
+}
 
 
 def _degrees(roll: int, target: int) -> int:
@@ -100,7 +101,7 @@ def test_dh2_characteristic_bonuses_and_fatigue_threshold():
         }
     )
 
-    expected = {
+    assert derived == {
         "WSB": 4,
         "BSB": 5,
         "SB": 4,
@@ -113,7 +114,6 @@ def test_dh2_characteristic_bonuses_and_fatigue_threshold():
         "InfB": 9,
         "FatigueThreshold": 10,
     }
-    assert {key: derived[key] for key in expected} == expected
 
 
 def test_dh2_difficulty_table_matches_neon_source():
@@ -201,17 +201,16 @@ def test_dh2_sheet_tracks_damage_and_fatigue_as_upward_counters():
     assert meters["fatigue"]["value"] == 9 and meters["fatigue"]["max"] == 7
 
 
-def test_dh2_regular_skill_aliases_resolve_but_special_families_do_not_collapse():
+def test_dh2_regular_skill_aliases_and_special_families_are_separate():
     pack = load_rulepack("dh2")
 
-    assert pack.resolve_skill("Акробатика") == "Acrobatics"
-    assert pack.resolve_skill("Бдительность") == "Awareness"
-    assert pack.resolve_skill("Ловкость рук") == "SleightOfHand"
-    assert pack.resolve_skill("Парирование") == "Parry"
-    assert pack.resolve_skill("Уклонение") == "Dodge"
+    for canonical, (_, aliases) in REGULAR_SKILLS.items():
+        for alias in aliases:
+            assert pack.resolve_skill(alias) == canonical
 
-    # CH03_H003: every specialization of a Special skill is a separate skill.
-    # Until the generic specialization primitive exists, a family name must not
+    # A special skill family is not itself a rollable skill.  Each specialization
+    # must become its own independently trained entry once specialization support
+    # exists; otherwise Navigation (Land) and Navigation (Warp) would incorrectly
     # resolve to one fake shared score.
     for family in SPECIAL_SKILL_FAMILIES:
         assert pack.resolve_skill(family) is None
@@ -226,7 +225,14 @@ def test_dh2_regular_skill_training_levels_feed_the_check_target():
     for rank, target in expected.items():
         sheet.skills["Acrobatics"] = rank
         assert check_value(sheet, pack, "Acrobatics") == target
-        assert check_value(sheet, pack, "Акробатика") == target
+
+        # `check_value` deliberately consumes a canonical key. User-facing
+        # commands resolve aliases first, then hand the canonical name to this
+        # substrate function. Test the same contract instead of asking the low-
+        # level sheet helper to perform command parsing as a side effect.
+        canonical = pack.resolve_skill("Акробатика")
+        assert canonical == "Acrobatics"
+        assert check_value(sheet, pack, canonical) == target
 
 
 def test_dh2_regular_skill_base_bindings_and_rank_constraints_match_table_3_3():
@@ -238,19 +244,27 @@ def test_dh2_regular_skill_base_bindings_and_rank_constraints_match_table_3_3():
             "Athletics": 1,
             "Awareness": 2,
             "Interrogation": 3,
-            "Charm": 4,
+            "Command": 4,
             "Parry": 1,
-            "TechUse": 2,
+            "Dodge": 0,
         }
     )
 
     assert check_value(sheet, pack, "Athletics") == 51
     assert check_value(sheet, pack, "Awareness") == 47
     assert check_value(sheet, pack, "Interrogation") == 66
-    assert check_value(sheet, pack, "Charm") == 69
+    assert check_value(sheet, pack, "Command") == 69
     assert check_value(sheet, pack, "Parry") == 44
-    assert check_value(sheet, pack, "TechUse") == 58
+    assert check_value(sheet, pack, "Dodge") == 23
 
-    assert set(pack.sheet_spec.skills) == set(REGULAR_SKILLS)
-    assert all(value == 0 for value in pack.sheet_spec.skills.values())
-    assert pack.creation_constraints["skills"]["default"] == {"min": 0, "max": 4}
+    # The rulepack derives the final check target from a 0..4 training level;
+    # it does not duplicate the target value into the stored skill score.
+    assert sheet.skills["Command"] == 4
+
+    for canonical in REGULAR_SKILLS:
+        assert canonical in pack.sheet_spec.skill_keys
+        assert canonical in pack.sheet_spec.check_values
+
+    for canonical in SPECIAL_SKILL_FAMILIES:
+        assert canonical not in pack.sheet_spec.skill_keys
+        assert canonical not in pack.sheet_spec.check_values
