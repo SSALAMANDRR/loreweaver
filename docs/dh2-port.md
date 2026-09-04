@@ -27,8 +27,17 @@ The DH2 port is built from the structured Russian rules corpus already stored in
 | `resolution.roll/compare` | `CH01_M03`, `CH01_M04` | percentile roll-under core mechanic |
 | `resolution.difficulties` | `CH01_H024` | complete +60 ... -60 difficulty ladder |
 | situational target handling | `CH01_H018` | sum modifiers into the target |
-| future DoS/DoF | `CH01_H022` | degree-of-success/failure calculation |
+| `resolution.margin` | `CH01_H022` | positive DoS / negative DoF, starting at one and stepping per full 10 points |
 | `initiative.roll` | `CH07_H011` | `1d10 + Agility Bonus` |
+
+## Stage 1 representation notes
+
+Loreweaver already treats `CheckOutcome.margin` as a system-defined signed comparison metric. DH2 uses that field for degrees rather than raw numeric distance:
+
+- `+1`, `+2`, ... = degrees of success;
+- `-1`, `-2`, ... = degrees of failure.
+
+This lets generic opposed checks compare native DH2 degree counts without adding system-specific conditionals to core code.
 
 ## Deliberately not ported yet
 
