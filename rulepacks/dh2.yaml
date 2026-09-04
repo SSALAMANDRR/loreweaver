@@ -333,10 +333,13 @@ display:
     FateThreshold: Порог Судьбы
     HomeWorld: Родной мир
     Background: Предыстория
+    Role: Роль
     Aptitudes: Склонности
     Talents: Таланты
     Traits: Черты
     BackgroundAbilities: Способности предыстории
+    RoleAbilities: Способности роли
+    EliteAdvances: Элитные улучшения
     Acrobatics: Акробатика
     Athletics: Атлетика
     Awareness: Бдительность
@@ -394,10 +397,13 @@ display:
     FateThreshold: Fate Threshold
     HomeWorld: Home World
     Background: Background
+    Role: Role
     Aptitudes: Aptitudes
     Talents: Talents
     Traits: Traits
     BackgroundAbilities: Background Abilities
+    RoleAbilities: Role Abilities
+    EliteAdvances: Elite Advances
     Acrobatics: Acrobatics
     Athletics: Athletics
     Awareness: Awareness
@@ -433,8 +439,8 @@ commands:
   dh2: {action: make_char}
 
 expertise:
-  ru: "# Dark Heresy Second Edition — Ведущий\nИспользуй процентные проверки DH2: бросок d100 должен быть не выше модифицированного значения характеристики или умения. Сложность меняет целевое значение по шкале от +60 до -60. Положительный margin — степени успеха, отрицательный — степени провала. Для обычных умений храни уровень обучения 0–4: нетренированное -20, Знает +0, Обучен +10, Опытен +20, Ветеран +30. Для Специальных умений каждая специализация хранится и развивается отдельно; без приобретённой специализации проверка невозможна. При создании персонажа профиль родного мира определяет положительные и отрицательную характеристики, стартовый Порог Судьбы и бросок Благословения Императора; не расходуй автоматически положенный игроку один переброс характеристики. Предыстория применяется отдельным слоем и все её варианты выбора должен явно сделать игрок. Раны являются порогом, а полученный Урон накапливается отдельно. Порог Усталости равен сумме бонусов Выносливости и Силы Воли. Механику, уже выраженную rulepack-ом, не пересчитывай в прозе и не подменяй результат броска повествованием."
-  en: "# Dark Heresy Second Edition — GM\nUse DH2 percentile checks: d100 must roll at or below the modified characteristic or skill. Difficulty changes the target on the +60 to -60 ladder. Positive margin is degrees of success; negative margin is degrees of failure. Regular skills store training level 0–4: untrained -20, known +0, trained +10, experienced +20, veteran +30. Every Special-skill specialization is stored and advanced separately, and a specialization cannot be checked before it is acquired. During character creation the selected home-world profile owns positive/negative characteristic rolls, starting Fate Threshold, and Emperor's Blessing; do not automatically consume the player's one allowed characteristic reroll. Background is a separate creation layer and every sub-choice must be made explicitly by the player. Wounds are a threshold while accrued Damage is tracked separately. Fatigue Threshold equals Toughness Bonus plus Willpower Bonus. Do not recompute mechanics already owned by the rulepack in prose or override a rolled result with narration."
+  ru: "# Dark Heresy Second Edition — Ведущий\nИспользуй процентные проверки DH2: бросок d100 должен быть не выше модифицированного значения характеристики или умения. Сложность меняет целевое значение по шкале от +60 до -60. Положительный margin — степени успеха, отрицательный — степени провала. Для обычных умений храни уровень обучения 0–4: нетренированное -20, Знает +0, Обучен +10, Опытен +20, Ветеран +30. Для Специальных умений каждая специализация хранится и развивается отдельно; без приобретённой специализации проверка невозможна. При создании персонажа профиль родного мира определяет положительные и отрицательную характеристики, стартовый Порог Судьбы и бросок Благословения Императора; не расходуй автоматически положенный игроку один переброс характеристики. Предыстория и роль применяются отдельными слоями, и все их варианты выбора должен явно сделать игрок. Раны являются порогом, а полученный Урон накапливается отдельно. Порог Усталости равен сумме бонусов Выносливости и Силы Воли. Механику, уже выраженную rulepack-ом, не пересчитывай в прозе и не подменяй результат броска повествованием."
+  en: "# Dark Heresy Second Edition — GM\nUse DH2 percentile checks: d100 must roll at or below the modified characteristic or skill. Difficulty changes the target on the +60 to -60 ladder. Positive margin is degrees of success; negative margin is degrees of failure. Regular skills store training level 0–4: untrained -20, known +0, trained +10, experienced +20, veteran +30. Every Special-skill specialization is stored and advanced separately, and a specialization cannot be checked before it is acquired. During character creation the selected home-world profile owns positive/negative characteristic rolls, starting Fate Threshold, and Emperor's Blessing; do not automatically consume the player's one allowed characteristic reroll. Background and role are separate creation layers and every sub-choice must be made explicitly by the player. Wounds are a threshold while accrued Damage is tracked separately. Fatigue Threshold equals Toughness Bonus plus Willpower Bonus. Do not recompute mechanics already owned by the rulepack in prose or override a rolled result with narration."
 
 sheet:
   label: DH2
@@ -480,10 +486,13 @@ sheet:
   field_keys:
     HomeWorld: home_world
     Background: background_choice
+    Role: role_choice
     Aptitudes: aptitudes
     Talents: talents
     Traits: traits
     BackgroundAbilities: background_abilities
+    RoleAbilities: role_abilities
+    EliteAdvances: elite_advances
   attributes:
     WS: 1
     BS: 1
@@ -503,10 +512,13 @@ sheet:
   fields:
     home_world: ""
     background_choice: ""
+    role_choice: ""
     aptitudes: []
     talents: []
     traits: []
     background_abilities: []
+    role_abilities: []
+    elite_advances: []
   skills:
     Acrobatics: 0
     Athletics: 0
