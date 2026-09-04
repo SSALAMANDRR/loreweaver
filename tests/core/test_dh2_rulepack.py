@@ -22,6 +22,17 @@ DIFFICULTY_DELTAS = {
 }
 
 
+def _degrees(roll: int, target: int) -> int:
+    """Independent transcription of CH01_H022.
+
+    Positive values are degrees of success, negative values are degrees of
+    failure.  A check always starts at one degree on whichever side it lands.
+    """
+    if roll <= target:
+        return 1 + (target - roll) // 10
+    return -(1 + (roll - target) // 10)
+
+
 def test_dh2_names_and_russian_aliases_resolve():
     pack = load_rulepack("dh2")
 
@@ -72,7 +83,7 @@ def test_dh2_difficulty_table_matches_neon_source():
             assert resolver.effective_target(raw_target, difficulty=difficulty) == raw_target + delta
 
 
-def test_dh2_percentile_check_is_roll_under_for_every_difficulty():
+def test_dh2_percentile_check_and_degrees_match_rulebook_exhaustively():
     resolver = load_rulepack("dh2").resolver
 
     for raw_target in range(1, 101):
@@ -86,7 +97,28 @@ def test_dh2_percentile_check_is_roll_under_for_every_difficulty():
                 )
                 assert outcome.rank.id == ("success" if roll <= effective else "fail")
                 assert outcome.rank.success == (roll <= effective)
-                assert outcome.margin == effective - roll
+                assert outcome.margin == _degrees(roll, effective)
+
+
+def test_dh2_degree_boundaries_start_at_one_and_step_each_full_ten():
+    resolver = load_rulepack("dh2").resolver
+
+    expected = {
+        50: 1,
+        49: 1,
+        41: 1,
+        40: 2,
+        31: 2,
+        30: 3,
+        51: -1,
+        59: -1,
+        60: -2,
+        69: -2,
+        70: -3,
+    }
+    for roll, degrees in expected.items():
+        outcome = resolver.interpret(RollDetail("1d100", (roll,), roll), 50)
+        assert outcome.margin == degrees
 
 
 def test_dh2_initiative_declares_d10_plus_agility_bonus():
