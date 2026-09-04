@@ -44,8 +44,8 @@ layers:
                 names: ["Искусный Стук", "Technical Knock"]
                 effects:
                   append_fields: {Talents: ["Искусный Стук"]}
-              mechadendrite_hand:
-                names: ["Длань Омниссии", "Mechadendrite? Hand of the Omnissiah", "Hand of the Omnissiah"]
+              hand_of_omnissiah:
+                names: ["Длань Омниссии"]
                 effects:
                   append_fields: {Talents: ["Длань Омниссии"]}
 
