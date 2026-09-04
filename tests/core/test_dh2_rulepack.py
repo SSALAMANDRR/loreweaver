@@ -1,9 +1,20 @@
 from __future__ import annotations
 
+import pytest
+
 from core.character_manager import CharacterSheet
 from core.check_outcome import RollDetail
 from core.rulepacks import load_rulepack
-from core.sheets import check_value, refresh_sheet, sheet_value, wire_resources
+from core.sheets import (
+    UntrainedSkillError,
+    check_value,
+    has_check_value,
+    refresh_sheet,
+    resolve_skill_family,
+    set_sheet_value,
+    sheet_value,
+    wire_resources,
+)
 
 
 DIFFICULTY_DELTAS = {
@@ -50,22 +61,18 @@ REGULAR_SKILLS = {
 
 
 SPECIAL_SKILL_FAMILIES = {
-    "ForbiddenLore": "Запретные Знания",
-    "Linguistics": "Лингвистика",
-    "Navigation": "Навигация",
-    "CommonLore": "Общие Знания",
-    "Trade": "Ремесло",
-    "Operate": "Управление",
-    "ScholasticLore": "Учёные Знания",
+    "ForbiddenLore": ("Int", "Запретные Знания"),
+    "Linguistics": ("Int", "Лингвистика"),
+    "Navigation": ("Int", "Навигация"),
+    "CommonLore": ("Int", "Общие Знания"),
+    "Trade": ("Int", "Ремесло"),
+    "Operate": ("Ag", "Управление"),
+    "ScholasticLore": ("Int", "Учёные Знания"),
 }
 
 
 def _degrees(roll: int, target: int) -> int:
-    """Independent transcription of CH01_H022.
-
-    Positive values are degrees of success, negative values are degrees of
-    failure. A check always starts at one degree on whichever side it lands.
-    """
+    """Independent transcription of CH01_H022."""
     if roll <= target:
         return 1 + (target - roll) // 10
     return -(1 + (roll - target) // 10)
@@ -187,14 +194,12 @@ def test_dh2_sheet_tracks_damage_and_fatigue_as_upward_counters():
     assert sheet_value(sheet, pack, "Wounds") == 12
     assert sheet_value(sheet, pack, "Damage") == 7
     assert sheet_value(sheet, pack, "Fatigue") == 3
-    assert sheet_value(sheet, pack, "FatigueThreshold") == 7  # TB 4 + WPB 3
+    assert sheet_value(sheet, pack, "FatigueThreshold") == 7
 
     meters = {entry["id"]: entry for entry in wire_resources(sheet, pack, "ru")}
     assert meters["damage"] == {"id": "damage", "label": "Урон", "value": 7, "max": 12}
     assert meters["fatigue"] == {"id": "fatigue", "label": "Усталость", "value": 3, "max": 7}
 
-    # DH2 counters may exceed their thresholds; they are not Loreweaver vitals
-    # and therefore must never be silently clamped current <= max.
     sheet.attributes["DAMAGE"] = 15
     sheet.attributes["FATIGUE"] = 9
     meters = {entry["id"]: entry for entry in wire_resources(sheet, pack, "en")}
@@ -202,17 +207,15 @@ def test_dh2_sheet_tracks_damage_and_fatigue_as_upward_counters():
     assert meters["fatigue"]["value"] == 9 and meters["fatigue"]["max"] == 7
 
 
-def test_dh2_regular_skill_aliases_and_special_families_are_separate():
+def test_dh2_regular_skill_aliases_resolve_and_family_names_do_not_collapse():
     pack = load_rulepack("dh2")
 
     for canonical, (_, aliases) in REGULAR_SKILLS.items():
         for alias in aliases:
             assert pack.resolve_skill(alias) == canonical
 
-    # A special skill family is not itself a rollable skill. Each specialization
-    # must become its own independently trained entry once specialization support
-    # exists; otherwise Navigation (Land) and Navigation (Warp) would incorrectly
-    # resolve to one fake shared score.
+    # A family name by itself remains non-rollable. The specialization is part
+    # of the skill identity and is resolved by the generic sheet-family layer.
     for family in SPECIAL_SKILL_FAMILIES:
         assert pack.resolve_skill(family) is None
 
@@ -227,10 +230,6 @@ def test_dh2_regular_skill_training_levels_feed_the_check_target():
         sheet.skills["Acrobatics"] = rank
         assert check_value(sheet, pack, "Acrobatics") == target
 
-        # `check_value` deliberately consumes a canonical key. User-facing
-        # commands resolve aliases first, then hand the canonical name to this
-        # substrate function. Test the same contract instead of asking the low-
-        # level sheet helper to perform command parsing as a side effect.
         canonical = pack.resolve_skill("Акробатика")
         assert canonical == "Acrobatics"
         assert check_value(sheet, pack, canonical) == target
@@ -257,9 +256,6 @@ def test_dh2_regular_skill_base_bindings_and_rank_constraints_match_table_3_3():
     assert check_value(sheet, pack, "Command") == 69
     assert check_value(sheet, pack, "Parry") == 44
     assert check_value(sheet, pack, "Dodge") == 23
-
-    # The rulepack derives the final check target from a 0..4 training level;
-    # it does not duplicate the target value into the stored skill score.
     assert sheet.skills["Command"] == 4
 
     for canonical in REGULAR_SKILLS:
@@ -269,3 +265,49 @@ def test_dh2_regular_skill_base_bindings_and_rank_constraints_match_table_3_3():
     for canonical in SPECIAL_SKILL_FAMILIES:
         assert canonical not in pack.sheet_spec.skill_keys
         assert canonical not in pack.sheet_spec.check_values
+        assert canonical in pack.sheet_spec.skill_families
+
+
+def test_dh2_special_skill_families_match_table_3_3_and_forbid_untrained_checks():
+    pack = load_rulepack("dh2")
+    sheet = CharacterSheet("Acolyte", "DH2")
+    sheet.attributes.update({"Int": 48, "Ag": 43})
+
+    for family_id, (base, russian_name) in SPECIAL_SKILL_FAMILIES.items():
+        family = pack.sheet_spec.skill_families[family_id]
+        assert family.base == base
+        assert family.ranks == {1: 0, 2: 10, 3: 20, 4: 30}
+        assert family.untrained_modifier is None
+
+        resolved = resolve_skill_family(pack, f"{russian_name} (Тест)")
+        assert resolved is not None
+        canonical, resolved_family, _spec, specialization = resolved
+        assert resolved_family == family_id
+        assert canonical == f"{family_id}::тест"
+        assert specialization == "тест"
+        assert not has_check_value(sheet, pack, f"{russian_name} (Тест)")
+        with pytest.raises(UntrainedSkillError):
+            check_value(sheet, pack, f"{russian_name} (Тест)")
+
+
+def test_dh2_special_skill_specializations_are_independent_and_use_the_training_ladder():
+    pack = load_rulepack("dh2")
+    sheet = CharacterSheet("Acolyte", "DH2")
+    sheet.attributes.update({"Int": 48, "Ag": 43})
+
+    set_sheet_value(sheet, pack, "Навигация (Варп)", 2)
+    set_sheet_value(sheet, pack, "Навигация (Наземная)", 4)
+    set_sheet_value(sheet, pack, "Управление (Наземная)", 3)
+
+    assert sheet.skills["Navigation::варп"] == 2
+    assert sheet.skills["Navigation::наземная"] == 4
+    assert sheet.skills["Operate::наземная"] == 3
+
+    assert check_value(sheet, pack, "Навигация (Варп)") == 58
+    assert check_value(sheet, pack, "Navigation::ВАРП") == 58
+    assert check_value(sheet, pack, "Навигация (Наземная)") == 78
+    assert check_value(sheet, pack, "Управление (Наземная)") == 63
+
+    assert has_check_value(sheet, pack, "Навигация (Варп)")
+    assert has_check_value(sheet, pack, "Навигация (Наземная)")
+    assert not has_check_value(sheet, pack, "Навигация (Звёздная)")
