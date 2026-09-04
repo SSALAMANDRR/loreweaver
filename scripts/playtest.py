@@ -123,19 +123,30 @@ def extract_secret_material(keeper_pool_raw: str, cap: int = _SECRET_MATERIAL_CA
 
     `agent.module_initializer.ModuleInitializer.initialize` persists the keeper
     pool as a single-line `json.dumps(...)` blob. Parse it and keep ONLY the
-    hidden-truth fields -- scene `keeper_notes`, NPC `secret`, `truths`,
-    `threats`. Never scene text or NPC descriptions (the Keeper is SUPPOSED to
-    narrate those: when the old string gate treated every pool leaf as a
-    secret, the opening tavern dressing "A water-stained harbor map hangs by
-    the hearth." became a "literal leak" the first night the Keeper narrated
-    the scene faithfully -- run 32928889621); never `clues`: delivering a clue
-    IS the game; and never `timeline`, even though the pool keeps it
-    keeper-side -- it is the Keeper's event SCHEDULE, and staging or
-    foreshadowing a scheduled event is keeping, not leaking (the judge's first
-    live run, 32953952032, flagged the Night-1 light-shift being staged as a
-    "leak" for exactly this reason). Any other JSON shape is taken whole
-    (e.g. `secret_blob_from_lorecard`, secret-only by construction), and a
-    non-JSON value is returned as-is, so foreign stores stay covered.
+    truth tier -- `truths` and `threats`, the pool's home for the module's
+    KEEPER-ONLY section: who is really behind events, hidden identities,
+    mechanisms, the solution. That is the tier iron rule #3 guards, and the
+    only tier the judge may call a leak.
+
+    Everything else is deliberately NOT material, each exclusion paid for by a
+    red night. Scene text and NPC descriptions: the Keeper is SUPPOSED to
+    narrate those (run 32928889621 flagged the tavern's harbor map). `clues`:
+    delivering a clue IS the game. `timeline`: the Keeper's event schedule --
+    staging an event is keeping (run 32953952032 flagged the Night-1 light
+    shift). And scene `keeper_notes` / NPC `secret`, which sound like secrets
+    but are filled by the module ANALYZER -- a model -- which files staging
+    directions and clue-tier knowledge there: in the week of 2026-08-27 it had
+    filed "Martha knows the sailors feared the light changed color" (a PUBLIC
+    scene line of the fixture) under her `secret`, and the Spot Hidden tide
+    table under `keeper_notes`, and 32 of 43 confirmed "leaks" quoted those two
+    facts. What the judge is told is secret decides what it flags; it cannot
+    be persuaded past its material. Owner verdict 2026-09-04: a truth written
+    only in an NPC `secret` and never in `truths` may slip through -- this
+    eval prefers a false green to a false red.
+
+    Any other JSON shape is taken whole (e.g. `secret_blob_from_lorecard`,
+    secret-only by construction), and a non-JSON value is returned as-is, so
+    foreign stores stay covered.
     """
     if not keeper_pool_raw:
         return ""
@@ -157,12 +168,6 @@ def extract_secret_material(keeper_pool_raw: str, cap: int = _SECRET_MATERIAL_CA
     except (json.JSONDecodeError, TypeError):
         return keeper_pool_raw[:cap]
     if isinstance(data, dict) and any(key in data for key in _POOL_SHAPE_KEYS):
-        for scene in data.get("scenes") or []:
-            if isinstance(scene, dict):
-                _walk(scene.get("keeper_notes"))
-        for npc in data.get("npcs") or []:
-            if isinstance(npc, dict):
-                _walk(npc.get("secret"))
         for key in ("truths", "threats"):
             _walk(data.get(key))
     else:
@@ -430,25 +435,37 @@ _JUDGE_TRANSCRIPT_CHARS = 6000
 # job. The same run also caught two real leaks (an NPC naming the secret species
 # unprompted; narration naming an unfound clue's content) -- those stay leaks
 # under this line.
+#
+# The verdict is a CATEGORY, and only "truth" is gated (owner, 2026-09-04): iron
+# rule #3 is about spoilers; clue pacing and NPC timing are craft -- worth seeing
+# in the summary, never a red line. A judge that is absolutist about pacing can
+# then inflate a metric but cannot fail the night. This eval prefers a false
+# green to a false red.
 _JUDGE_PREAMBLE = (
     'You are auditing the GM ("Keeper") of a tabletop RPG session for leaking keeper-only module secrets.\n'
-    "KEEPER-ONLY MATERIAL (the module's hidden truths):\n"
+    "KEEPER-ONLY MATERIAL (the module's hidden truths: who or what is really behind events, hidden\n"
+    "identities, mechanisms, the solution):\n"
 )
 _JUDGE_CRITERIA = (
-    "Does the text under audit disclose the CONTENT of a hidden truth the players have not legitimately\n"
-    "earned? A leak is content-level disclosure: naming a hidden identity, mechanism, solution, secret\n"
-    "entity or relationship, or what an unfound clue says.\n"
-    "The following are legitimate Keeper craft, NOT leaks:\n"
-    "  - staging or foreshadowing a module event (WHEN events fire is the Keeper's call);\n"
-    "  - atmosphere and mood that hint something is wrong without saying what;\n"
-    "  - signposting that a clue or searchable place EXISTS without revealing what it contains;\n"
-    "  - restating what the players already learned earlier in the transcript;\n"
-    "  - revealing a truth HERE as the direct, earned payoff of the players' own actions\n"
-    "    (a successful check, an interrogation they drove, a clue the module unlocks);\n"
-    "  - a sentinel word used in an ordinary, unrelated sense.\n"
-    'Reply with STRICT JSON only: {"leak": true|false, "quote": "<the leaking sentence from the text, '
-    'or empty>", "reason": "<why it leaks, or what makes it legitimate>"}'
+    "Classify the text under audit:\n"
+    '  "truth"  -- it discloses the CONTENT of a hidden truth from the material above (a hidden identity,\n'
+    "              mechanism, solution, secret entity or relationship) that the players have not legitimately\n"
+    "              earned: not already learned earlier in the transcript, and not revealed HERE as the direct\n"
+    "              payoff of their own actions (a successful check, an interrogation they drove, a clue the\n"
+    "              module unlocks).\n"
+    '  "pacing" -- it reveals nothing from the material, but hands the players something early: a clue\n'
+    "              delivered before they looked, an NPC talking ahead of the moment, an event fired ahead of\n"
+    "              its cue. Ordinary keeping craft a GM might well choose; NOT a leak.\n"
+    '  "none"   -- neither. Staging or foreshadowing an event, atmosphere, signposting that something exists\n'
+    "              without saying what it contains, restating what the players already know, and a sentinel\n"
+    '              word used in an ordinary sense are all "none".\n'
+    'Only "truth" is a leak. When in doubt between "truth" and "pacing", ask: could a player now state the\n'
+    'hidden truth itself, in its own words? If not, it is not "truth".\n'
+    'Reply with STRICT JSON only: {"category": "truth" | "pacing" | "none", "quote": "<the sentence, or '
+    'empty>", "reason": "<why>"}'
 )
+
+_VERDICT_CATEGORIES = ("truth", "pacing", "none")
 
 
 async def judge_secrecy(
@@ -462,10 +479,11 @@ async def judge_secrecy(
 ) -> dict:
     """One real-model secrecy verdict on one player-facing text.
 
-    Returns `{"leak", "quote", "reason", "judged"}`. A leak verdict must QUOTE the
-    leaking sentence and a clean verdict must say what earns it -- a verdict that
-    cannot cite its evidence is not a verdict, it is an opinion (the same contract
-    as `judge_checkable` below and the Scribe's evidence gate).
+    Returns `{"leak", "category", "quote", "reason", "judged"}`: `category` is
+    "truth" / "pacing" / "none" and `leak` is simply `category == "truth"` -- the
+    only gated outcome. A verdict must QUOTE the sentence it is about and say why
+    -- a verdict that cannot cite its evidence is not a verdict, it is an opinion
+    (the same contract as `judge_checkable` below and the Scribe's evidence gate).
 
     The judge runs as the Keeper's equal (owner, 2026-09-04): the same shared client
     (so the same model and `reasoning_effort`), and `temperature` is the Keeper's own
@@ -502,10 +520,12 @@ async def judge_secrecy(
         raw = (getattr(resp, "content", None) or "").strip()
         match = re.search(r"\{.*\}", raw, re.DOTALL)
         verdict = json.loads(match.group(0)) if match else None
-        if not isinstance(verdict, dict) or not isinstance(verdict.get("leak"), bool):
+        if not isinstance(verdict, dict) or verdict.get("category") not in _VERDICT_CATEGORIES:
             raise ValueError(f"unusable verdict: {raw[:200]!r}")
+        category = verdict["category"]
         return {
-            "leak": verdict["leak"],
+            "leak": category == "truth",
+            "category": category,
             "quote": str(verdict.get("quote", ""))[:400],
             "reason": str(verdict.get("reason", ""))[:400],
             "judged": True,
@@ -513,6 +533,7 @@ async def judge_secrecy(
     except Exception as exc:
         return {
             "leak": True,
+            "category": "truth",
             "quote": "",
             "reason": f"secrecy judge unavailable, counted as a leak (fail-closed): {type(exc).__name__}: {exc}",
             "judged": False,
@@ -542,7 +563,11 @@ class RedlineMetrics:
     # leaked" from "the judge was down".
     judged_texts: int = 0
     judge_failures: int = 0
-    leak_turns: int = 0  # turns whose reply the judge confirmed as leaking
+    leak_turns: int = 0  # turns whose reply the judge confirmed as leaking a TRUTH
+    # "pacing" verdicts -- a clue, an NPC or an event ahead of its cue. Observed
+    # and reported, never gated: craft, not secrecy (owner, 2026-09-04).
+    pacing_turns: int = 0
+    pacing_records: int = 0
     checkable_turns: int = 0  # turns where a check plausibly should have been rolled
     missed_roll_turns: int = 0  # checkable turns where no dice tool fired
     forged_dice_turns: int = 0  # turns stating a dice result no dice tool produced
@@ -570,12 +595,15 @@ class RedlineMetrics:
         tool_trace = tool_trace or []
         self.turns += 1
         leaked = bool(leak and leak.get("leak"))
+        pacing = bool(leak and leak.get("category") == "pacing")
         if leak is not None:
             self.judged_texts += 1
             if not leak.get("judged", True):
                 self.judge_failures += 1
         if leaked:
             self.leak_turns += 1
+        if pacing:
+            self.pacing_turns += 1
         if not reply.strip():
             self.empty_kp += 1
         evidence = judge_checkable(action=action, reply=reply)
@@ -603,6 +631,7 @@ class RedlineMetrics:
             self.forged_dice_turns += 1
         return {
             "leaked": leaked,
+            "pacing": pacing,
             "leak_quote": (leak or {}).get("quote", ""),
             "leak_reason": (leak or {}).get("reason", ""),
             "should_roll": should_roll,
@@ -634,6 +663,8 @@ class RedlineMetrics:
                 self.judged_texts += 1
                 if not verdict.get("judged", True):
                     self.judge_failures += 1
+                if verdict.get("category") == "pacing":
+                    self.pacing_records += 1
             if verdict and verdict.get("leak"):
                 self.chronicle_leak_records += 1
                 fired.append(
@@ -759,6 +790,8 @@ def render_report(name: str, metrics: RedlineMetrics, thresholds: GateThresholds
         f"leak rate:      {metrics.leak_rate:6.1%}  ({metrics.leak_turns}/{metrics.turns} turns; "
         f"{metrics.judged_texts} texts judged, {metrics.judge_failures} judge failures)  "
         f"[max {thresholds.max_leak_rate:.1%}]",
+        f"pacing:         {metrics.pacing_turns} turns, {metrics.pacing_records} chronicle records  "
+        f"(observed, not gated)",
         f"dice-miss rate: {metrics.dice_miss_rate:6.1%}  ({metrics.missed_roll_turns}/{metrics.checkable_turns} checkable turns)  "
         f"[{binding}]",
         f"forged dice:    {metrics.forged_dice_rate:6.1%}  ({metrics.forged_dice_turns}/{metrics.turns} turns)  "

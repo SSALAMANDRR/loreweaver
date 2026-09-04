@@ -29,9 +29,12 @@ from scripts.playtest import (
 
 # ---------------------------------------------------------------------------
 # What counts as secret material. The judge can only be as right as what it is
-# told is secret: run 32928889621 went red because the old extractor walked
-# EVERY pool leaf, so the Keeper faithfully narrating the opening scene echoed
-# one public sentence verbatim and scored as a "literal leak".
+# told is secret, and every exclusion below was paid for by a red night: run
+# 32928889621 (public scene text walked as a secret), 32953952032 (the timeline
+# -- the Keeper's event schedule), and the week of 2026-08-27, when the module
+# ANALYZER had filed a public scene line ("Martha knows the sailors feared the
+# light changed color") under her `secret` and the Spot Hidden tide table under
+# `keeper_notes`, and 32 of 43 confirmed "leaks" quoted those two facts.
 # ---------------------------------------------------------------------------
 
 PUBLIC_SCENE_SENTENCE = "A water-stained harbor map hangs by the hearth."
@@ -42,18 +45,23 @@ POOL = json.dumps(
             {
                 "name": "The Salt & Anchor Inn",
                 "description": f"A low-beamed tavern. {PUBLIC_SCENE_SENTENCE} Patrons fall silent.",
-                "keeper_notes": "If pressed, Martha lies about the light; the lens is packed with human teeth.",
+                # the analyzer's home for staging directions and gated clues
+                "keeper_notes": "Spot Hidden: behind the map, a tide table with three dates circled.",
             }
         ],
         "npcs": [
             {
-                "name": "Elias Crane",
-                "description": "The lighthouse keeper, rarely seen in the village these days.",
-                "secret": "Elias drowned two years ago; a Deep One thrall wears his face.",
+                "name": "Martha",
+                "description": "The innkeeper, who eyes strangers warily.",
+                # clue-tier knowledge the analyzer files as a "secret"
+                "secret": "Knows the sailors feared the lighthouse light 'changed color'; shares it only if pressed.",
             }
         ],
         "clues": ["A tide table with three dates circled."],
-        "truths": ["The villagers made a pact generations ago; the three dead sailors tried to break it."],
+        "truths": [
+            "The villagers made a pact generations ago; the three dead sailors tried to break it.",
+            "Elias Crane drowned two years ago; a Deep One thrall wears his face.",
+        ],
         "threats": ["Deep One thrall 'Elias' -- claw 1d6+db, drag underwater."],
         "timeline": ["Night 3 (if unresolved): the thrall descends into the village."],
     },
@@ -61,26 +69,25 @@ POOL = json.dumps(
 )
 
 
-def test_secret_material_excludes_what_the_keeper_is_supposed_to_narrate() -> None:
-    material = extract_secret_material(POOL)
-    assert PUBLIC_SCENE_SENTENCE not in material  # the run-32928889621 false positive
-    assert "rarely seen in the village" not in material  # public NPC description
-    assert "tide table" not in material  # delivering a clue IS the game
-    # The timeline is the Keeper's event SCHEDULE, not a hidden truth: with it in
-    # the material, the judge's first live run (32953952032) flagged the Keeper
-    # staging the module's own Night-1 event as a "leak".
-    assert "the thrall descends" not in material
-
-
-def test_secret_material_includes_every_hidden_truth_field() -> None:
+def test_secret_material_is_the_truth_tier_only() -> None:
     material = extract_secret_material(POOL)
     for fragment in (
-        "packed with human teeth",  # scene keeper_notes
-        "wears his face",  # NPC secret
         "made a pact generations ago",  # truths
+        "wears his face",  # truths
         "drag underwater",  # threats
     ):
         assert fragment in material, fragment
+
+
+def test_secret_material_excludes_every_other_tier() -> None:
+    material = extract_secret_material(POOL)
+    assert PUBLIC_SCENE_SENTENCE not in material  # scene text: the Keeper narrates it
+    assert "eyes strangers warily" not in material  # NPC description
+    assert "the thrall descends" not in material  # timeline: the Keeper's schedule
+    # The two facts behind 32 of the week's 43 false reds -- clue-tier knowledge
+    # the analyzer filed under `secret` and `keeper_notes`:
+    assert "changed color" not in material
+    assert "tide table" not in material
 
 
 def test_a_lorecard_secret_blob_is_taken_whole() -> None:
@@ -131,27 +138,47 @@ def _judge(llm: _StubLLM) -> dict:
 
 
 def test_a_clean_verdict_parses_with_its_reason() -> None:
-    verdict = _judge(_StubLLM('{"leak": false, "quote": "", "reason": "nothing secret is revealed"}'))
-    assert verdict == {"leak": False, "quote": "", "reason": "nothing secret is revealed", "judged": True}
+    verdict = _judge(_StubLLM('{"category": "none", "quote": "", "reason": "nothing secret is revealed"}'))
+    assert verdict == {
+        "leak": False,
+        "category": "none",
+        "quote": "",
+        "reason": "nothing secret is revealed",
+        "judged": True,
+    }
 
 
-def test_a_leak_verdict_carries_the_quoted_sentence() -> None:
-    verdict = _judge(_StubLLM('{"leak": true, "quote": "The innkeeper is a Deep One.", "reason": "volunteered"}'))
+def test_a_truth_verdict_is_the_leak_and_carries_the_quoted_sentence() -> None:
+    verdict = _judge(
+        _StubLLM('{"category": "truth", "quote": "The innkeeper is a Deep One.", "reason": "volunteered"}')
+    )
     assert verdict["leak"] is True
+    assert verdict["category"] == "truth"
     assert verdict["judged"] is True
     assert verdict["quote"] == "The innkeeper is a Deep One."
 
 
+def test_a_pacing_verdict_is_not_a_leak() -> None:
+    """Craft, not secrecy: a clue ahead of the search is reported, never gated."""
+    verdict = _judge(_StubLLM('{"category": "pacing", "quote": "the map hangs crooked", "reason": "early"}'))
+    assert verdict["leak"] is False
+    assert verdict["category"] == "pacing"
+    assert verdict["judged"] is True
+
+
 def test_prose_around_the_json_is_tolerated() -> None:
-    verdict = _judge(_StubLLM('Sure. {"leak": false, "quote": "", "reason": "mundane usage"} Hope that helps.'))
+    verdict = _judge(_StubLLM('Sure. {"category": "none", "quote": "", "reason": "mundane usage"} Hope that helps.'))
     assert verdict["leak"] is False
     assert verdict["judged"] is True
 
 
 def test_an_unusable_verdict_fails_closed() -> None:
-    for bad in ("no json here", '{"leak": "yes"}', ""):
+    # Including the pre-category boolean shape: a judge that answers in the old
+    # dialect is an unusable judge, not a lenient one.
+    for bad in ("no json here", '{"leak": true}', '{"category": "maybe"}', ""):
         verdict = _judge(_StubLLM(bad))
         assert verdict["leak"] is True, bad
+        assert verdict["category"] == "truth", bad
         assert verdict["judged"] is False, bad
 
 
@@ -163,7 +190,7 @@ def test_an_unreachable_judge_fails_closed() -> None:
 
 
 def test_the_judge_sees_material_transcript_and_text() -> None:
-    llm = _StubLLM('{"leak": false, "quote": "", "reason": "ok"}')
+    llm = _StubLLM('{"category": "none", "quote": "", "reason": "ok"}')
     _judge(llm)
     (prompt,) = llm.prompts
     assert "The innkeeper is a Deep One." in prompt  # secret material
@@ -175,7 +202,7 @@ def test_the_judge_sees_material_transcript_and_text() -> None:
 def test_the_judge_samples_as_the_keeper_does() -> None:
     """The harness hands the judge the Keeper's own configured temperature; the
     judge never pins its own (a thinking-mode provider rejects an explicit 0)."""
-    llm = _StubLLM('{"leak": false, "quote": "", "reason": "ok"}')
+    llm = _StubLLM('{"category": "none", "quote": "", "reason": "ok"}')
     asyncio.run(
         judge_secrecy(
             llm, text="You press on.", secret_material="The innkeeper is a Deep One.",
@@ -183,7 +210,7 @@ def test_the_judge_samples_as_the_keeper_does() -> None:
         )
     )
     assert llm.kwargs == [{"temperature": 0.7}]
-    default = _StubLLM('{"leak": false, "quote": "", "reason": "ok"}')
+    default = _StubLLM('{"category": "none", "quote": "", "reason": "ok"}')
     _judge(default)
     assert default.kwargs == [{"temperature": None}]
 
@@ -192,7 +219,7 @@ def test_braces_in_material_transcript_and_text_do_not_break_the_judge() -> None
     """The prompt is CONCATENATED, never template-formatted: module material carries
     dice notation ({1D6}), replies carry JSON -- a format pass over untrusted content
     would crash on the first brace, and a whole night would wear it as "judge down"."""
-    llm = _StubLLM('{"leak": false, "quote": "", "reason": "ok"}')
+    llm = _StubLLM('{"category": "none", "quote": "", "reason": "ok"}')
     verdict = asyncio.run(
         judge_secrecy(
             llm,
@@ -213,7 +240,7 @@ def test_a_construction_error_still_fails_closed() -> None:
     """Prompt construction lives INSIDE the fail-closed boundary: an escape here
     would surface as a TURN_ERROR in one lane and an unhandled crash in the other,
     not as a verdict."""
-    llm = _StubLLM('{"leak": false, "quote": "", "reason": "ok"}')
+    llm = _StubLLM('{"category": "none", "quote": "", "reason": "ok"}')
     verdict = asyncio.run(
         judge_secrecy(
             llm,
@@ -234,17 +261,44 @@ def test_a_construction_error_still_fails_closed() -> None:
 
 LEAK_VERDICT = {
     "leak": True,
+    "category": "truth",
     "quote": "The innkeeper is a Deep One.",
     "reason": "volunteered unprompted",
     "judged": True,
 }
-CLEAN_VERDICT = {"leak": False, "quote": "", "reason": "reveals nothing unearned", "judged": True}
+CLEAN_VERDICT = {"leak": False, "category": "none", "quote": "", "reason": "reveals nothing unearned", "judged": True}
+PACING_VERDICT = {
+    "leak": False,
+    "category": "pacing",
+    "quote": "the map hangs crooked",
+    "reason": "clue signposted before any search",
+    "judged": True,
+}
 FAILED_VERDICT = {
     "leak": True,
+    "category": "truth",
     "quote": "",
     "reason": "secrecy judge unavailable, counted as a leak (fail-closed)",
     "judged": False,
 }
+
+
+def test_pacing_is_counted_but_never_gated() -> None:
+    """The owner's line (2026-09-04): iron rule #3 is about spoilers; clue pacing and
+    NPC timing are craft. A night of nothing but pacing verdicts is a green night
+    with a number in the report -- this eval prefers a false green to a false red."""
+    metrics = RedlineMetrics()
+    for _ in range(24):
+        outcome = metrics.record_turn(reply="The map hangs crooked.", action="", tool_trace=[], leak=PACING_VERDICT)
+        assert outcome["pacing"] is True
+        assert outcome["leaked"] is False
+    metrics.record_chronicle_entries(texts=["They noticed the crooked map."], leaks=[PACING_VERDICT])
+    assert metrics.pacing_turns == 24
+    assert metrics.pacing_records == 1
+    assert metrics.leak_turns == 0
+    assert metrics.chronicle_leak_records == 0
+    passed, reasons = evaluate_gate(metrics, GateThresholds())
+    assert passed is True, reasons
 
 
 def test_a_confirmed_leak_fails_the_gate_on_a_single_turn() -> None:

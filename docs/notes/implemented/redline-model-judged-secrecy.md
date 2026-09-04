@@ -66,3 +66,29 @@
   and prompt construction moved inside the fail-closed boundary (an escape
   there was a TURN_ERROR in one lane and an unhandled crash in the longrun
   lane, not a verdict).
+- **Second recalibration (owner, 2026-09-04) after seven consecutive red
+  nightlies (2026-08-27..09-03; 43 confirmed verdicts, zero judge failures):**
+  23 verdicts quoted the lighthouse light turning green and 9 the tide table
+  behind the map -- both PUBLIC scene lines of the fixture that the module
+  ANALYZER (a model) had filed under Martha's `secret` and the scene's
+  `keeper_notes`, from where the judge dutifully treated them as hidden truths;
+  11 quoted truth-tier content (the pact at turn 2, "Elias drowned", "the light
+  calls") and are real Keeper leaks, now tracked in
+  `pending/keeper-volunteers-hidden-truths.md` (plus the Scribe's anticipatory
+  records in `pending/scribe-anticipatory-records.md`). Lesson: what the judge
+  is told is secret decides what it flags; exemption lists cannot persuade it
+  past its material. Verdicts: (1) the material is the truth tier only --
+  `truths` + `threats`; `keeper_notes` and NPC `secret` are gone, accepting that
+  a truth written only in an NPC secret may slip through, because this eval
+  prefers a false green to a false red; (2) the judge returns a CATEGORY --
+  `truth` / `pacing` / `none` -- and only `truth` is gated; `pacing` (a clue,
+  an NPC or an event ahead of its cue) is counted and reported, never a red
+  line, so an absolutist judge can inflate a metric but not fail the night;
+  (3) the judge runs as the Keeper's equal -- same client, model,
+  `reasoning_effort`, and the Keeper's configured temperature instead of a
+  pinned 0; (4) the material is logged whole per session (`secrecy_material`),
+  because this week's root cause was invisible without it; (5) the nightly
+  moved from 03:17 UTC -- inside DeepSeek's weekday peak window -- to 18:17 UTC
+  (02:17 Asia/Shanghai, off-peak, half price). Expected steady state: red on
+  the nights the Keeper actually volunteers a truth, green otherwise, until
+  the Keeper-side pending note lands.

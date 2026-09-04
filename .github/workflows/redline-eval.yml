@@ -17,7 +17,11 @@ name: Nightly red-line eval (real model)
 # LLM key" step.
 on:
   schedule:
-    - cron: "17 3 * * *"   # 03:17 UTC daily -- off the top of the hour
+    # 18:17 UTC = 02:17 Asia/Shanghai, off the top of the hour. DeepSeek bills by
+    # time of day (peak = 01:00-04:00 and 06:00-10:00 UTC on weekdays, everything
+    # else half price -- api-docs.deepseek.com/quick_start/pricing, 2026-08-16);
+    # the old 03:17 UTC slot sat inside peak and cost double for nothing.
+    - cron: "17 18 * * *"
   workflow_dispatch: {}
 
 concurrency:
