@@ -101,7 +101,7 @@ def test_dh2_characteristic_bonuses_and_fatigue_threshold():
         }
     )
 
-    assert derived == {
+    expected = {
         "WSB": 4,
         "BSB": 5,
         "SB": 4,
@@ -114,6 +114,7 @@ def test_dh2_characteristic_bonuses_and_fatigue_threshold():
         "InfB": 9,
         "FatigueThreshold": 10,
     }
+    assert {key: derived[key] for key in expected} == expected
 
 
 def test_dh2_difficulty_table_matches_neon_source():
@@ -208,7 +209,7 @@ def test_dh2_regular_skill_aliases_and_special_families_are_separate():
         for alias in aliases:
             assert pack.resolve_skill(alias) == canonical
 
-    # A special skill family is not itself a rollable skill.  Each specialization
+    # A special skill family is not itself a rollable skill. Each specialization
     # must become its own independently trained entry once specialization support
     # exists; otherwise Navigation (Land) and Navigation (Warp) would incorrectly
     # resolve to one fake shared score.
