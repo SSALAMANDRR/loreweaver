@@ -3,10 +3,11 @@
 # Source of truth for this port is the structured Russian DH2 corpus migrated
 # into the НРИ ВАХА Neon database from DH2_RU_OKP_V1_8.  This slice covers
 # characteristic naming/bonuses, the basic percentile check, the complete
-# difficulty ladder, signed degrees of success/failure, and initiative.
-# Character creation, skills, combat actions, hit locations, damage, weapons
-# and critical effects are added only after their source sections are mapped
-# and covered by tests.
+# difficulty ladder, signed degrees of success/failure, initiative, and the
+# first rule-backed character-sheet resources (wounds, damage, fatigue).
+# Character creation, skills, combat actions, hit locations, weapons and
+# critical effects are added only after their source sections are mapped and
+# covered by tests.
 
 names:
   - dh2
@@ -17,7 +18,7 @@ names:
   - "темная ересь 2"
 set_keys: [dh2, darkheresy2]
 
-# Missing values intentionally fall back to the legal characteristic floor,
+# Missing characteristic values intentionally fall back to the legal floor,
 # not to a fabricated "average acolyte".  Real creation defaults belong to the
 # character-creation slice and will replace these once Chapter II is ported.
 defaults:
@@ -31,9 +32,12 @@ defaults:
   WP: 1
   Fel: 1
   Inf: 1
+  Wounds: 0
+  Damage: 0
+  Fatigue: 0
 
 # Canonical keys stay compact/ASCII so formulas remain readable.  Russian
-# names and abbreviations are taken from CH01_H004..CH01_H013.
+# characteristic names and abbreviations are taken from CH01_H004..CH01_H013.
 alias:
   WS: ["Навык Рукопашной", "Навык Рукопашной (НР)", НР]
   BS: ["Навык Стрельбы", "Навык Стрельбы (НС)", НС]
@@ -45,6 +49,10 @@ alias:
   WP: ["Сила Воли", "Сила Воли (СВ)", СВ]
   Fel: [Общительность, "Общительность (О)", О]
   Inf: [Влияние, "Влияние (Вл)", Вл]
+  Wounds: [Раны]
+  Damage: [Урон]
+  Fatigue: [Усталость]
+  FatigueThreshold: ["Порог усталости"]
 
 # CH01_M03/CH01_M04 + CH01_H018: roll d100 and succeed on a result no greater
 # than the modified characteristic/skill.  DH2 permits effective targets above
@@ -114,6 +122,7 @@ labels:
     fail: {display: Failure, markers: []}
 
 # CH01_H003: every characteristic bonus is the tens digit of the value.
+# CH07_H103: fatigue threshold = Toughness Bonus + Willpower Bonus.
 derived:
   WSB: {expr: "floor(WS / 10)"}
   BSB: {expr: "floor(BS / 10)"}
@@ -125,6 +134,7 @@ derived:
   WPB: {expr: "floor(WP / 10)"}
   FelB: {expr: "floor(Fel / 10)"}
   InfB: {expr: "floor(Inf / 10)"}
+  FatigueThreshold: {expr: "TB + WPB"}
 
 # CH07_H011: d10 + Agility Bonus.
 initiative:
@@ -152,6 +162,10 @@ display:
     WPB: Бонус Силы Воли
     FelB: Бонус Общительности
     InfB: Бонус Влияния
+    Wounds: Раны
+    Damage: Урон
+    Fatigue: Усталость
+    FatigueThreshold: Порог усталости
   en:
     WS: WS
     BS: BS
@@ -173,11 +187,61 @@ display:
     WPB: WPB
     FelB: FelB
     InfB: InfB
+    Wounds: Wounds
+    Damage: Damage
+    Fatigue: Fatigue
+    FatigueThreshold: Fatigue Threshold
 
 commands:
   ra: {action: check}
   rc: {action: check}
 
 expertise:
-  ru: "# Dark Heresy Second Edition — Ведущий\nИспользуй процентные проверки DH2: бросок d100 должен быть не выше модифицированного значения характеристики или умения. Сложность меняет целевое значение по шкале от +60 до -60. Положительный margin — степени успеха, отрицательный — степени провала. Механику, уже выраженную rulepack-ом, не пересчитывай в прозе и не подменяй результат броска повествованием."
-  en: "# Dark Heresy Second Edition — GM\nUse DH2 percentile checks: d100 must roll at or below the modified characteristic or skill. Difficulty changes the target on the +60 to -60 ladder. Positive margin is degrees of success; negative margin is degrees of failure. Do not recompute mechanics already owned by the rulepack in prose or override a rolled result with narration."
+  ru: "# Dark Heresy Second Edition — Ведущий\nИспользуй процентные проверки DH2: бросок d100 должен быть не выше модифицированного значения характеристики или умения. Сложность меняет целевое значение по шкале от +60 до -60. Положительный margin — степени успеха, отрицательный — степени провала. Раны являются порогом, а полученный Урон накапливается отдельно. Порог Усталости равен сумме бонусов Выносливости и Силы Воли. Механику, уже выраженную rulepack-ом, не пересчитывай в прозе и не подменяй результат броска повествованием."
+  en: "# Dark Heresy Second Edition — GM\nUse DH2 percentile checks: d100 must roll at or below the modified characteristic or skill. Difficulty changes the target on the +60 to -60 ladder. Positive margin is degrees of success; negative margin is degrees of failure. Wounds are a threshold while accrued Damage is tracked separately. Fatigue Threshold equals Toughness Bonus plus Willpower Bonus. Do not recompute mechanics already owned by the rulepack in prose or override a rolled result with narration."
+
+# Sheet substrate.  Damage and Fatigue deliberately use ordinary attribute
+# storage rather than `vitals`: both counters grow upward and are allowed to
+# exceed their thresholds, while Loreweaver vitals clamp current <= max.
+sheet:
+  label: DH2
+  attr_keys:
+    WS: WS
+    BS: BS
+    S: S
+    T: T
+    Ag: Ag
+    Int: Int
+    Per: Per
+    WP: WP
+    Fel: Fel
+    Inf: Inf
+    Wounds: WOUNDS
+    Damage: DAMAGE
+    Fatigue: FATIGUE
+    FatigueThreshold: FATIGUE_THRESHOLD
+  attributes:
+    WS: 1
+    BS: 1
+    S: 1
+    T: 1
+    Ag: 1
+    Int: 1
+    Per: 1
+    WP: 1
+    Fel: 1
+    Inf: 1
+    WOUNDS: 0
+    DAMAGE: 0
+    FATIGUE: 0
+  derived_attrs:
+    FATIGUE_THRESHOLD: FatigueThreshold
+  resources:
+    - id: damage
+      label: {ru: Урон, en: Damage}
+      value: DAMAGE
+      max: WOUNDS
+    - id: fatigue
+      label: {ru: Усталость, en: Fatigue}
+      value: FATIGUE
+      max: FATIGUE_THRESHOLD
