@@ -12,7 +12,7 @@ The DH2 port is built from the structured Russian rules corpus already stored in
 
 ## Stage 1 source map
 
-| Loreweaver rulepack path | Source | Source meaning |
+| Loreweaver path | Source | Source meaning |
 |---|---|---|
 | `alias.WS` | Neon `CH01_H004` | Навык Рукопашной (НР) |
 | `alias.BS` | Neon `CH01_H005` | Навык Стрельбы (НС) |
@@ -41,6 +41,8 @@ The DH2 port is built from the structured Russian rules corpus already stored in
 | `creation_constraints.profiles.*.attributes.FateThreshold` | PDF pp. 36–46 | starting Fate Threshold by home world |
 | `creation_constraints.profiles.*.bonus_rolls.emperors_blessing` | PDF Chapter II, home-world rules | roll `1d10`; meeting the listed Emperor's Blessing threshold increases Fate Threshold by 1 |
 | `sheet.vitals.FATE` / Fate resource | PDF Chapter II + Chapter VIII Fate rules | current Fate starts full at Fate Threshold and may later be spent separately |
+| `rulepacks/data/dh2/creation.yaml -> layers.background` | PDF pp. 48–62 | all seven core backgrounds, starting rank-1 skills, talents/trait labels, equipment choices, background abilities and one background aptitude choice |
+| `core.creation_layers` | engine-generic | explicit multi-stage creation choices; missing choices fail instead of being guessed |
 
 ## Stage 1 representation notes
 
@@ -105,13 +107,36 @@ The book also grants the player one optional reroll of a generated characteristi
 
 The rulebook also provides an alternative point-buy method: characteristics start at 25 with 60 points to distribute, no characteristic may exceed 40, and home-world `+/-` characteristics change those starts to 30/20. That method is sourced but not yet wired into the profile generator in this slice.
 
+### Generic layered creation and DH2 backgrounds
+
+Home world is only the first stage of DH2 creation. `core.creation_layers` adds a second system-neutral substrate for choices that are applied **after** the initial profile without multiplying profiles into every possible combination. Layer data lives beside the pack under `rulepacks/data/<system>/creation.yaml`; core resolves the current pack's sidecar by convention and has no Dark Heresy branches.
+
+A layer option can set declared sheet fields, append list fields, assign ordinary or specialized skill ranks, add equipment, and declare explicit nested player choices. A choice may be a finite option or a free specialization of a declared skill family. If any required choice is missing, application fails before mutating the character.
+
+DH2 currently declares all seven core backgrounds from pp. 48–62:
+
+- Адептус Администратум;
+- Адептус Арбитрес;
+- Адептус Астра Телепатика;
+- Адептус Механикус;
+- Адептус Министорум;
+- Астра Милитарум;
+- Изгой.
+
+Starting skills are written at rank 1 (`Знает`), including separate Special-skill specializations such as `CommonLore::адептус механикус` or `Navigation::наземная`. Talents, traits and background abilities are currently stored as structured sheet lists using the exact Russian source labels; their mechanical effects will be connected when the generic talent/trait/availability/combat primitives are ported. Starting equipment is likewise preserved as source-labelled inventory entries until the Chapter V item catalogue is normalized.
+
+The important agency rule is already executable: `Коммерция или Медика`, `Нападение или Защита`, free `Учёные Знания (выберите одно)`, Mechanicus `Бдительность или Управление (выберите одно)`, equipment alternatives, and background aptitude choices all require explicit player selections. The engine does not optimize a PC behind the player's back.
+
 ## Deliberately not ported yet
 
 Stage 1 does **not** invent values or mechanics for areas whose source slice has not been mapped and tested. In particular:
 
 - point-buy character generation and the player's one characteristic reroll;
 - home-world Wounds, aptitude, talent/bonus and recommended-background payloads;
-- backgrounds, roles, aptitudes, XP prices and starting equipment;
+- roles and their aptitudes/abilities;
+- XP prices and advancement purchasing;
+- executable mechanics for background talents, traits and special abilities beyond their structured creation payloads;
+- normalized Chapter V equipment/item profiles behind the source-labelled starting inventory;
 - Fate spending/burning/recovery semantics beyond the current/threshold sheet representation;
 - Insanity and Corruption tracks;
 - situational alternative-characteristic selection for skill checks;
