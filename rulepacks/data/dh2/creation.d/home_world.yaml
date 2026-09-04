@@ -1,0 +1,111 @@
+version: 1
+
+# Dark Heresy Second Edition, Russian OKP translation v1.8, Chapter II,
+# pp. 36-47. This layer applies the non-characteristic part of a selected home
+# world after the generic creation profile has rolled characteristics and Fate.
+# Wounds are rolled here because they are a home-world-specific starting value.
+# Player choices remain explicit; notably Forge World never auto-picks its talent.
+layers:
+  home_world:
+    options:
+      feral_world:
+        names: ["Дикий мир", "Feral World"]
+        display: {ru: "Дикий мир", en: "Feral World"}
+        source: "DH2 RU v1.8 p. 36"
+        rules:
+          ability: "Старые Пути"
+          ability_ru: "Низкотехнологичное оружие в руках персонажа теряет Примитивное и получает Проверенное (3)."
+          aptitude: "Выносливость"
+          wounds: "9+1к5"
+        effects:
+          roll_attributes: {Wounds: "1d5+9"}
+          append_fields:
+            Aptitudes: [Выносливость]
+            BackgroundAbilities: ["Старые Пути"]
+
+      forge_world:
+        names: ["Мир-кузница", "Forge World"]
+        display: {ru: "Мир-кузница", en: "Forge World"}
+        source: "DH2 RU v1.8 p. 38"
+        rules:
+          ability: "Избранный Омниссии"
+          ability_ru: "Персонаж начинает игру с одним из двух талантов: Искусный Стук или Длань Омниссии."
+          aptitude: "Интеллект"
+          wounds: "8+1к5"
+        effects:
+          roll_attributes: {Wounds: "1d5+8"}
+          append_fields:
+            Aptitudes: [Интеллект]
+            BackgroundAbilities: ["Избранный Омниссии"]
+        choices:
+          home_world_talent:
+            options:
+              technical_knock:
+                names: ["Искусный Стук", "Technical Knock"]
+                effects:
+                  append_fields: {Talents: ["Искусный Стук"]}
+              mechadendrite_hand:
+                names: ["Длань Омниссии", "Mechadendrite? Hand of the Omnissiah", "Hand of the Omnissiah"]
+                effects:
+                  append_fields: {Talents: ["Длань Омниссии"]}
+
+      highborn:
+        names: [Высокородный, Highborn]
+        display: {ru: Высокородный, en: Highborn}
+        source: "DH2 RU v1.8 p. 40"
+        rules:
+          ability: "Бессчётное Богатство"
+          ability_ru: "Когда Влияние уменьшается, оно уменьшается на 1 меньше положенного, минимум на 1."
+          aptitude: "Общительность"
+          wounds: "9+1к5"
+        effects:
+          roll_attributes: {Wounds: "1d5+9"}
+          append_fields:
+            Aptitudes: [Общительность]
+            BackgroundAbilities: ["Бессчётное Богатство"]
+
+      hive_world:
+        names: ["Мир-улей", "Hive World"]
+        display: {ru: "Мир-улей", en: "Hive World"}
+        source: "DH2 RU v1.8 p. 42"
+        rules:
+          ability: "Бесчисленные Толпы в Металлических Горах"
+          ability_ru: "Толпы не затрудняют движение; в закрытом помещении персонаж получает +20 к Навигации (Наземная)."
+          aptitude: "Восприятие"
+          wounds: "8+1к5"
+        effects:
+          roll_attributes: {Wounds: "1d5+8"}
+          append_fields:
+            Aptitudes: [Восприятие]
+            BackgroundAbilities: ["Бесчисленные Толпы в Металлических Горах"]
+
+      shrine_world:
+        names: ["Мир-храм", "Shrine World"]
+        display: {ru: "Мир-храм", en: "Shrine World"}
+        source: "DH2 RU v1.8 p. 44"
+        rules:
+          ability: "Вера в Кредо"
+          ability_ru: "После траты очка Судьбы бросается 1к10; на 1 очко Судьбы не уменьшается."
+          aptitude: "Сила Воли"
+          wounds: "7+1к5"
+        effects:
+          roll_attributes: {Wounds: "1d5+7"}
+          append_fields:
+            Aptitudes: ["Сила Воли"]
+            BackgroundAbilities: ["Вера в Кредо"]
+
+      voidborn:
+        names: [Пустоторождённый, Voidborn]
+        display: {ru: Пустоторождённый, en: Voidborn}
+        source: "DH2 RU v1.8 p. 46"
+        rules:
+          ability: "Дитя Темноты"
+          ability_ru: "Персонаж начинает с талантом Непреклонный и получает +30 к проверкам перемещения в нулевой гравитации."
+          aptitude: "Интеллект"
+          wounds: "7+1к5"
+        effects:
+          roll_attributes: {Wounds: "1d5+7"}
+          append_fields:
+            Aptitudes: [Интеллект]
+            Talents: [Непреклонный]
+            BackgroundAbilities: ["Дитя Темноты"]
