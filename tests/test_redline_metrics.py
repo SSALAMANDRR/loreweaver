@@ -108,9 +108,11 @@ class _StubLLM:
         self._content = content
         self._error = error
         self.prompts: list[str] = []
+        self.kwargs: list[dict] = []
 
-    async def chat(self, messages, **_kw):
+    async def chat(self, messages, **kw):
         self.prompts.append(messages[0]["content"])
+        self.kwargs.append(kw)
         if self._error is not None:
             raise self._error
         return SimpleNamespace(content=self._content)
@@ -168,6 +170,22 @@ def test_the_judge_sees_material_transcript_and_text() -> None:
     assert "I look around." in prompt  # transcript
     assert "watches you leave." in prompt  # text under audit
     assert "Deep One" in prompt  # concept hint
+
+
+def test_the_judge_samples_as_the_keeper_does() -> None:
+    """The harness hands the judge the Keeper's own configured temperature; the
+    judge never pins its own (a thinking-mode provider rejects an explicit 0)."""
+    llm = _StubLLM('{"leak": false, "quote": "", "reason": "ok"}')
+    asyncio.run(
+        judge_secrecy(
+            llm, text="You press on.", secret_material="The innkeeper is a Deep One.",
+            transcript_tail="", temperature=0.7,
+        )
+    )
+    assert llm.kwargs == [{"temperature": 0.7}]
+    default = _StubLLM('{"leak": false, "quote": "", "reason": "ok"}')
+    _judge(default)
+    assert default.kwargs == [{"temperature": None}]
 
 
 def test_braces_in_material_transcript_and_text_do_not_break_the_judge() -> None:

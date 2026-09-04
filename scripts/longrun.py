@@ -238,6 +238,9 @@ async def main():
 
     keeper = await _setup(services, ts, ROOT / args.module, ROOT / args.companion, rec)
     secret_material = extract_secret_material(keeper)
+    # Logged whole: the material is the judge's definition of "secret", and a red
+    # night's triage must start from what the judge was actually told.
+    rec(kind="secrecy_material", chars=len(secret_material), material=secret_material)
     if not secret_material:
         # Nothing to hold the Keeper against is a MEASUREMENT failure, not a pass.
         metrics.errors += 1
@@ -279,6 +282,7 @@ async def main():
             verdict = await judge_secrecy(
                 services.llm, text=reply, secret_material=secret_material,
                 transcript_tail=pre_reply_tail, concept_hints=secret_concepts,
+                temperature=services.settings.llm.temperature,
             )
             rec(kind="SECRECY_VERDICT", turn=turn_no, **verdict)
         outcome = metrics.record_turn(reply=reply, action=action, tool_trace=tool_trace, leak=verdict)

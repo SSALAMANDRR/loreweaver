@@ -452,7 +452,13 @@ _JUDGE_CRITERIA = (
 
 
 async def judge_secrecy(
-    llm, *, text: str, secret_material: str, transcript_tail: str, concept_hints: list[str] | None = None
+    llm,
+    *,
+    text: str,
+    secret_material: str,
+    transcript_tail: str,
+    concept_hints: list[str] | None = None,
+    temperature: float | None = None,
 ) -> dict:
     """One real-model secrecy verdict on one player-facing text.
 
@@ -460,6 +466,11 @@ async def judge_secrecy(
     leaking sentence and a clean verdict must say what earns it -- a verdict that
     cannot cite its evidence is not a verdict, it is an opinion (the same contract
     as `judge_checkable` below and the Scribe's evidence gate).
+
+    The judge runs as the Keeper's equal (owner, 2026-09-04): the same shared client
+    (so the same model and `reasoning_effort`), and `temperature` is the Keeper's own
+    configured value handed in by the harness -- never a hard-coded 0, which a
+    thinking-mode provider would reject and a whole night would wear as "judge down".
 
     FAIL-CLOSED: an unreachable or unparseable judge counts as a leak (`judged` is
     False so the summary's `judge_failures` says WHY the night went red) -- provider
@@ -487,7 +498,7 @@ async def judge_secrecy(
             + "\n\n"
             + _JUDGE_CRITERIA
         )
-        resp = await llm.chat([{"role": "user", "content": prompt}], temperature=0.0)
+        resp = await llm.chat([{"role": "user", "content": prompt}], temperature=temperature)
         raw = (getattr(resp, "content", None) or "").strip()
         match = re.search(r"\{.*\}", raw, re.DOTALL)
         verdict = json.loads(match.group(0)) if match else None
@@ -1646,6 +1657,12 @@ async def run_session(
     else:
         keeper_pool, companion_name = await _setup(services, ts, module_path, companion_path, chat_key, rec)
     secret_material = extract_secret_material(keeper_pool)
+    # The material IS the judge's definition of "secret": log it whole, so a red
+    # night's triage starts from what the judge was actually told instead of
+    # guessing which pool field a flagged sentence came from (a week of nightly
+    # reds after 81a132e traced to the analyzer filing public clues as secrets --
+    # a fact this record would have shown on night one).
+    rec.emit("secrecy_material", session=sidx, chars=len(secret_material), material=secret_material)
     if not secret_material:
         # Nothing to hold the Keeper against is a MEASUREMENT failure, not a pass:
         # a gate that silently judged nothing must not report green.
@@ -1685,6 +1702,7 @@ async def run_session(
                     verdict = await judge_secrecy(
                         services.llm, text=reply, secret_material=secret_material,
                         transcript_tail=pre_reply_tail, concept_hints=secret_concepts,
+                        temperature=services.settings.llm.temperature,
                     )
                     rec.emit("SECRECY_VERDICT", session=sidx, turn=turn, player=pname, **verdict)
                 outcome = rec.metrics.record_turn(
@@ -1731,6 +1749,7 @@ async def run_session(
                 verdict = await judge_secrecy(
                     services.llm, text=text, secret_material=secret_material,
                     transcript_tail=session_tail, concept_hints=secret_concepts,
+                    temperature=services.settings.llm.temperature,
                 )
                 rec.emit("CHRONICLE_SECRECY_VERDICT", session=sidx, **verdict)
             verdicts.append(verdict)
