@@ -29,6 +29,9 @@ The DH2 port is built from the structured Russian rules corpus already stored in
 | situational target handling | `CH01_H018` | sum modifiers into the target |
 | `resolution.margin` | `CH01_H022` | positive DoS / negative DoF, starting at one and stepping per full 10 points |
 | `initiative.roll` | `CH07_H011` | `1d10 + Agility Bonus` |
+| `sheet.Wounds` / `sheet.Damage` | `CH07_H098`, `CH07_H099` | Wounds are a threshold; accrued Damage is tracked separately and can exceed it |
+| `derived.FatigueThreshold` | `CH07_H103` | Fatigue Threshold = Toughness Bonus + Willpower Bonus |
+| `sheet.Fatigue` | `CH07_M08`, `CH07_H103` | Fatigue is an upward-counting level; exceeding the threshold causes unconsciousness |
 
 ## Stage 1 representation notes
 
@@ -39,17 +42,26 @@ Loreweaver already treats `CheckOutcome.margin` as a system-defined signed compa
 
 This lets generic opposed checks compare native DH2 degree counts without adding system-specific conditionals to core code.
 
+Damage and Fatigue deliberately are **not** declared as Loreweaver `vitals`. A vital is a current pool clamped to a maximum, while DH2 tracks both as counters that grow upward and may legally exceed their thresholds. They are ordinary sheet attributes exposed through resource meters instead:
+
+- Damage meter: `DAMAGE / WOUNDS`;
+- Fatigue meter: `FATIGUE / FATIGUE_THRESHOLD`.
+
+The meter is presentational only; crossing a threshold is handled by later deterministic combat/state rules and is never silently clamped by the sheet layer.
+
 ## Deliberately not ported yet
 
 Stage 1 does **not** invent values or mechanics for areas whose source slice has not been mapped and tested. In particular:
 
 - Chapter II character generation and home-world characteristic modifiers;
+- Fate threshold / Fate Point initialization and spending;
+- Insanity and Corruption tracks;
 - the full skill list, training levels and characteristic bindings;
 - action economy;
 - attack modes and rate of fire;
 - hit-location digit reversal;
 - dodge/parry reactions;
-- damage, penetration, armor by location and Toughness reduction;
+- penetration, armor by location and Toughness reduction;
 - weapon qualities, ammunition and reload state;
 - righteous fury and critical-effect tables;
 - conditions and duration tracking;
