@@ -1,11 +1,12 @@
 # Dark Heresy Second Edition — initial deterministic mechanics kernel.
 #
 # Source of truth for this port is the structured Russian DH2 corpus migrated
-# into the НРИ ВАХА Neon database from DH2_RU_OKP_V1_8.  This first slice is
-# deliberately narrow: characteristic naming/bonuses, the basic percentile
-# check, the complete difficulty ladder, and initiative.  Character creation,
-# skills, combat actions, hit locations, damage, weapons and critical effects
-# are added only after their source sections are mapped and covered by tests.
+# into the НРИ ВАХА Neon database from DH2_RU_OKP_V1_8.  This slice covers
+# characteristic naming/bonuses, the basic percentile check, the complete
+# difficulty ladder, signed degrees of success/failure, and initiative.
+# Character creation, skills, combat actions, hit locations, damage, weapons
+# and critical effects are added only after their source sections are mapped
+# and covered by tests.
 
 names:
   - dh2
@@ -48,11 +49,19 @@ alias:
 # CH01_M03/CH01_M04 + CH01_H018: roll d100 and succeed on a result no greater
 # than the modified characteristic/skill.  DH2 permits effective targets above
 # 100 and below 0, so target transforms are intentionally not clamped here.
+#
+# CH01_H022: a successful check starts at 1 degree of success and gains one for
+# every full 10 points by which target exceeds the roll; failures mirror this.
+# Loreweaver's generic `margin` is the system-defined signed comparison metric,
+# so positive values are DoS and negative values are DoF.  This is especially
+# useful for opposed checks because they can compare the native DH2 degree count
+# without teaching core/ anything about Dark Heresy.
 resolution:
   version: 1
   roll: 1d100
   target: skill
   compare: "<="
+  margin: "(2 * (roll <= target) - 1) * (1 + floor(abs(target - roll) / 10))"
   difficulties:
     trivial:
       target: "target + 60"
@@ -170,5 +179,5 @@ commands:
   rc: {action: check}
 
 expertise:
-  ru: "# Dark Heresy Second Edition — Ведущий\nИспользуй процентные проверки DH2: бросок d100 должен быть не выше модифицированного значения характеристики или умения. Сложность меняет целевое значение по шкале от +60 до -60. Механику, уже выраженную rulepack-ом, не пересчитывай в прозе и не подменяй результат броска повествованием."
-  en: "# Dark Heresy Second Edition — GM\nUse DH2 percentile checks: d100 must roll at or below the modified characteristic or skill. Difficulty changes the target on the +60 to -60 ladder. Do not recompute mechanics already owned by the rulepack in prose or override a rolled result with narration."
+  ru: "# Dark Heresy Second Edition — Ведущий\nИспользуй процентные проверки DH2: бросок d100 должен быть не выше модифицированного значения характеристики или умения. Сложность меняет целевое значение по шкале от +60 до -60. Положительный margin — степени успеха, отрицательный — степени провала. Механику, уже выраженную rulepack-ом, не пересчитывай в прозе и не подменяй результат броска повествованием."
+  en: "# Dark Heresy Second Edition — GM\nUse DH2 percentile checks: d100 must roll at or below the modified characteristic or skill. Difficulty changes the target on the +60 to -60 ladder. Positive margin is degrees of success; negative margin is degrees of failure. Do not recompute mechanics already owned by the rulepack in prose or override a rolled result with narration."
