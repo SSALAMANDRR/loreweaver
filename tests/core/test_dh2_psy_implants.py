@@ -9,10 +9,13 @@ def test_dh2_sheet_declares_numeric_psy_rating_and_structured_implants():
     sheet = CharacterSheet("Acolyte", "dh2")
 
     assert sheet_value(sheet, pack, "PsyRating") == 0
-    assert pack.resolve_skill("Пси-рейтинг") == "PsyRating"
+    canonical = pack.resolve_skill("Пси-рейтинг")
+    assert canonical == "PsyRating"
     assert sheet.implants == []
 
-    set_sheet_value(sheet, pack, "Пси-рейтинг", 2)
+    # set_sheet_value operates on canonical sheet ids; user-facing aliases are
+    # resolved by command/creation surfaces before they reach this layer.
+    set_sheet_value(sheet, pack, canonical, 2)
     assert sheet_value(sheet, pack, "PsyRating") == 2
     assert sheet.attributes["PSY_RATING"] == 2
 
