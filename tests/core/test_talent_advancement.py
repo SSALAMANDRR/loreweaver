@@ -29,7 +29,7 @@ def test_dh2_talent_catalog_contains_verified_purchasable_slice():
 
     assert catalog is not None
     assert catalog.field == "Talents"
-    assert len(catalog.talents) == 64
+    assert len(catalog.talents) == 67
     assert "Быстрая Перезарядка" in catalog.talents
     assert "Амбидекстрия" in catalog.talents
     assert "Враг" not in catalog.talents
