@@ -1,0 +1,29 @@
+version: 1
+
+# Explicit player-facing order for Dark Heresy Second Edition character
+# creation. Core only understands generic stage kinds and never branches on DH2.
+# The home-world layer reuses the already selected creation profile so the
+# characteristic roll profile and the non-characteristic home-world benefits
+# cannot diverge.
+stages:
+  - id: characteristics
+    kind: profile
+
+  - id: home_world
+    kind: layer
+    layer: home_world
+    option_from_profile: true
+
+  - id: background
+    kind: layer
+    layer: background
+
+  - id: role
+    kind: layer
+    layer: role
+
+  - id: advancement
+    kind: advancement
+
+  - id: starting_equipment
+    kind: starting_equipment
