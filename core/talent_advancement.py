@@ -2,8 +2,9 @@
 
 A rulepack may declare ``talents.yaml`` beside its other advancement sidecars.
 Catalog entries are quoted and purchased only after their structured prerequisite
-sidecar has been satisfied.  Specializations remain explicit player choices;
-free-form specializations are accepted only when the catalog says so.
+sidecar has been satisfied. Specializations remain explicit player choices;
+free-form specializations are accepted only when the catalog says so. Catalogs
+may also declare spelling/legacy aliases that normalize to canonical choices.
 """
 
 from __future__ import annotations
@@ -38,6 +39,7 @@ class TalentSpecializations:
     required: bool
     free: bool
     choices: tuple[str, ...]
+    aliases: Mapping[str, str]
     aptitude_overrides: Mapping[str, tuple[str, ...]]
 
 
@@ -159,7 +161,13 @@ def load_talent_catalog(pack: Any, *, data_root: Path | None = None) -> TalentCa
         if special_raw is not None:
             if not isinstance(special_raw, Mapping):
                 raise AdvancementPurchaseError(f"talent {name!r}.specializations must be a mapping")
-            unknown_special = set(special_raw) - {"required", "free", "choices", "aptitude_overrides"}
+            unknown_special = set(special_raw) - {
+                "required",
+                "free",
+                "choices",
+                "aliases",
+                "aptitude_overrides",
+            }
             if unknown_special:
                 raise AdvancementPurchaseError(
                     f"talent {name!r}.specializations has unknown keys {sorted(unknown_special)}"
@@ -181,20 +189,49 @@ def load_talent_catalog(pack: Any, *, data_root: Path | None = None) -> TalentCa
                 raise AdvancementPurchaseError(
                     f"talent {name!r} requires either specialization choices or free=true"
                 )
+            choice_map = {_normalize(choice): choice for choice in choices}
+
+            aliases_raw = special_raw.get("aliases") or {}
+            if not isinstance(aliases_raw, Mapping):
+                raise AdvancementPurchaseError(
+                    f"talent {name!r}.specializations.aliases must be a mapping"
+                )
+            aliases: dict[str, str] = {}
+            for alias_raw, target_raw in aliases_raw.items():
+                alias = str(alias_raw).strip()
+                target = str(target_raw).strip()
+                if not alias or not target:
+                    raise AdvancementPurchaseError(
+                        f"talent {name!r}.specializations.aliases must map non-empty strings"
+                    )
+                alias_key = _normalize(alias)
+                if alias_key in aliases:
+                    raise AdvancementPurchaseError(
+                        f"talent {name!r}.specializations.aliases contains duplicate alias {alias!r}"
+                    )
+                if choices:
+                    canonical = choice_map.get(_normalize(target))
+                    if canonical is None:
+                        raise AdvancementPurchaseError(
+                            f"talent {name!r} specialization alias {alias!r} targets undeclared choice {target!r}"
+                        )
+                else:
+                    canonical = target
+                aliases[alias_key] = canonical
+
             overrides_raw = special_raw.get("aptitude_overrides") or {}
             if not isinstance(overrides_raw, Mapping):
                 raise AdvancementPurchaseError(
                     f"talent {name!r}.specializations.aptitude_overrides must be a mapping"
                 )
             overrides: dict[str, tuple[str, ...]] = {}
-            choice_keys = {_normalize(choice) for choice in choices}
             for specialization_raw, aptitude_raw in overrides_raw.items():
                 specialization = str(specialization_raw).strip()
                 if not specialization:
                     raise AdvancementPurchaseError(
                         f"talent {name!r} has an empty specialization aptitude override"
                     )
-                if choices and _normalize(specialization) not in choice_keys:
+                if choices and _normalize(specialization) not in choice_map:
                     raise AdvancementPurchaseError(
                         f"talent {name!r} aptitude override names undeclared specialization {specialization!r}"
                     )
@@ -211,6 +248,7 @@ def load_talent_catalog(pack: Any, *, data_root: Path | None = None) -> TalentCa
                 required=required,
                 free=free,
                 choices=choices,
+                aliases=aliases,
                 aptitude_overrides=overrides,
             )
 
@@ -242,6 +280,37 @@ def _split_target(target: str) -> tuple[str, str | None]:
     return text, None
 
 
+def _canonicalize_specialization(
+    entry: TalentEntry, specialization: str | None, *, strict: bool = True
+) -> str | None:
+    policy = entry.specializations
+    if policy is None:
+        if specialization is not None and strict:
+            raise AdvancementPurchaseError(f"talent {entry.name!r} does not take a specialization")
+        return specialization
+    if specialization is None:
+        return None
+
+    alias_target = policy.aliases.get(_normalize(specialization))
+    if alias_target is not None:
+        specialization = alias_target
+
+    if policy.choices:
+        choice = next((item for item in policy.choices if _normalize(item) == _normalize(specialization)), None)
+        if choice is not None:
+            return choice
+        if strict:
+            raise AdvancementPurchaseError(
+                f"talent {entry.name!r} does not allow specialization {specialization!r}"
+            )
+        return specialization
+    if policy.free:
+        return specialization
+    if strict:
+        raise AdvancementPurchaseError(f"talent {entry.name!r} does not allow free specializations")
+    return specialization
+
+
 def _resolve_entry(catalog: TalentCatalog, target: str) -> tuple[TalentEntry, str | None, tuple[str, ...]]:
     name_text, specialization = _split_target(target)
     wanted = _normalize(name_text)
@@ -260,18 +329,9 @@ def _resolve_entry(catalog: TalentCatalog, target: str) -> tuple[TalentEntry, st
 
     if policy.required and specialization is None:
         raise AdvancementPurchaseError(f"talent {entry.name!r} requires a specialization")
+    specialization = _canonicalize_specialization(entry, specialization)
     if specialization is None:
         return entry, None, entry.aptitudes
-
-    if policy.choices:
-        choice = next((item for item in policy.choices if _normalize(item) == _normalize(specialization)), None)
-        if choice is None:
-            raise AdvancementPurchaseError(
-                f"talent {entry.name!r} does not allow specialization {specialization!r}"
-            )
-        specialization = choice
-    elif not policy.free:
-        raise AdvancementPurchaseError(f"talent {entry.name!r} does not allow free specializations")
 
     aptitudes = policy.aptitude_overrides.get(_normalize(specialization), entry.aptitudes)
     return entry, specialization, aptitudes
@@ -300,8 +360,8 @@ def _canonical_target(name: str, specialization: str | None) -> str:
     return name if specialization is None else f"{name}::{specialization}"
 
 
-def _owns_talent(values: list[Any], name: str, specialization: str | None) -> bool:
-    wanted_name = _normalize(name)
+def _owns_talent(values: list[Any], entry: TalentEntry, specialization: str | None) -> bool:
+    wanted_name = _normalize(entry.name)
     wanted_specialization = _normalize(specialization or "")
     for raw in values:
         if not isinstance(raw, str):
@@ -312,7 +372,8 @@ def _owns_talent(values: list[Any], name: str, specialization: str | None) -> bo
             continue
         if _normalize(owned_name) != wanted_name:
             continue
-        if _normalize(owned_specialization or "") == wanted_specialization:
+        canonical_owned = _canonicalize_specialization(entry, owned_specialization, strict=False)
+        if _normalize(canonical_owned or "") == wanted_specialization:
             return True
     return False
 
@@ -342,7 +403,7 @@ def quote_talent_purchase(
     budget = _existing_budget(pack, character, data_root=data_root)
     values = _talent_field(character, pack, catalog)
     entry, specialization, aptitudes = _resolve_entry(catalog, target)
-    if _owns_talent(values, entry.name, specialization):
+    if _owns_talent(values, entry, specialization):
         raise AdvancementPurchaseError(f"talent {_storage_text(entry.name, specialization)!r} is already owned")
 
     canonical_target = _canonical_target(entry.name, specialization)
