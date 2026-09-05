@@ -1,0 +1,18 @@
+version: 1
+
+# Dark Heresy Second Edition, Russian OKP translation v1.8, Chapter II.
+# If character creation grants the same aptitude twice, the duplicate is
+# replaced by any characteristic aptitude the character does not already have.
+# The engine consumes these choices explicitly; it never chooses for the player.
+duplicate_replacements:
+  Aptitudes:
+    choices:
+      - "Навык Рукопашной"
+      - "Навык Стрельбы"
+      - Сила
+      - Выносливость
+      - Ловкость
+      - Интеллект
+      - Восприятие
+      - "Сила Воли"
+      - Общительность

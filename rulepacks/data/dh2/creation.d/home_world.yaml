@@ -4,6 +4,8 @@ version: 1
 # pp. 36-47. This layer applies the non-characteristic part of a selected home
 # world after the generic creation profile has rolled characteristics and Fate.
 # Wounds are rolled here because they are a home-world-specific starting value.
+# Every character also receives the universal General aptitude here, before the
+# background and role can create duplicate-aptitude replacement choices.
 # Player choices remain explicit; notably Forge World never auto-picks its talent.
 layers:
   home_world:
@@ -20,7 +22,7 @@ layers:
         effects:
           roll_attributes: {Wounds: "1d5+9"}
           append_fields:
-            Aptitudes: [Выносливость]
+            Aptitudes: [Общая, Выносливость]
             BackgroundAbilities: ["Старые Пути"]
 
       forge_world:
@@ -35,7 +37,7 @@ layers:
         effects:
           roll_attributes: {Wounds: "1d5+8"}
           append_fields:
-            Aptitudes: [Интеллект]
+            Aptitudes: [Общая, Интеллект]
             BackgroundAbilities: ["Избранный Омниссии"]
         choices:
           home_world_talent:
@@ -61,7 +63,7 @@ layers:
         effects:
           roll_attributes: {Wounds: "1d5+9"}
           append_fields:
-            Aptitudes: [Общительность]
+            Aptitudes: [Общая, Общительность]
             BackgroundAbilities: ["Бессчётное Богатство"]
 
       hive_world:
@@ -76,7 +78,7 @@ layers:
         effects:
           roll_attributes: {Wounds: "1d5+8"}
           append_fields:
-            Aptitudes: [Восприятие]
+            Aptitudes: [Общая, Восприятие]
             BackgroundAbilities: ["Бесчисленные Толпы в Металлических Горах"]
 
       shrine_world:
@@ -91,7 +93,7 @@ layers:
         effects:
           roll_attributes: {Wounds: "1d5+7"}
           append_fields:
-            Aptitudes: ["Сила Воли"]
+            Aptitudes: [Общая, "Сила Воли"]
             BackgroundAbilities: ["Вера в Кредо"]
 
       voidborn:
@@ -106,6 +108,6 @@ layers:
         effects:
           roll_attributes: {Wounds: "1d5+7"}
           append_fields:
-            Aptitudes: [Интеллект]
+            Aptitudes: [Общая, Интеллект]
             Talents: [Непреклонный]
             BackgroundAbilities: ["Дитя Темноты"]

@@ -7,6 +7,7 @@ from core.creation_layers import (
     CreationLayerError,
     apply_creation_layer,
     load_creation_layers,
+    load_creation_policy,
     resolve_creation_layer_option,
 )
 from core.rulepacks import load_rulepack
@@ -59,6 +60,16 @@ class _FixedLayerRoller:
         return _Roll(self.value)
 
 
+def _administratum_choices() -> dict[str, object]:
+    return {
+        "trained_skill": "Коммерция",
+        "scholastic_lore": "Бюрократия",
+        "weapon_training": "Лазерное",
+        "starting_weapon": "Лазпистолет",
+        "aptitude": "Познание",
+    }
+
+
 def test_dh2_creation_sidecars_declare_home_worlds_backgrounds_and_roles():
     pack = load_rulepack("dh2")
     layers = load_creation_layers(pack)
@@ -84,7 +95,25 @@ def test_dh2_creation_sidecars_declare_home_worlds_backgrounds_and_roles():
         assert resolved[0] == canonical
 
 
-def test_feral_home_world_applies_wounds_aptitude_and_ability_without_core_knowing_dh2():
+def test_dh2_duplicate_aptitude_policy_allows_only_characteristic_aptitudes():
+    policy = load_creation_policy(load_rulepack("dh2"))
+
+    assert policy == {
+        "Aptitudes": (
+            "Навык Рукопашной",
+            "Навык Стрельбы",
+            "Сила",
+            "Выносливость",
+            "Ловкость",
+            "Интеллект",
+            "Восприятие",
+            "Сила Воли",
+            "Общительность",
+        )
+    }
+
+
+def test_feral_home_world_applies_wounds_general_world_aptitude_and_ability_without_core_knowing_dh2():
     pack = load_rulepack("dh2")
     sheet = CharacterSheet("Acolyte", "dh2")
     roller = _FixedLayerRoller(12)
@@ -94,7 +123,7 @@ def test_feral_home_world_applies_wounds_aptitude_and_ability_without_core_knowi
     assert result.option_id == "feral_world"
     assert roller.calls == ["1d5+9"]
     assert sheet_value(sheet, pack, "Wounds") == 12
-    assert sheet.aptitudes == ["Выносливость"]
+    assert sheet.aptitudes == ["Общая", "Выносливость"]
     assert sheet.background_abilities == ["Старые Пути"]
 
 
@@ -118,19 +147,19 @@ def test_forge_home_world_refuses_to_guess_omnissiah_talent_then_applies_player_
     )
 
     assert sheet_value(sheet, pack, "Wounds") == 11
-    assert sheet.aptitudes == ["Интеллект"]
+    assert sheet.aptitudes == ["Общая", "Интеллект"]
     assert sheet.background_abilities == ["Избранный Омниссии"]
     assert sheet.talents == ["Длань Омниссии"]
 
 
-def test_voidborn_home_world_grants_fixed_unyielding_talent_and_seven_plus_d5_wounds():
+def test_voidborn_home_world_grants_general_fixed_unyielding_talent_and_seven_plus_d5_wounds():
     pack = load_rulepack("dh2")
     sheet = CharacterSheet("Acolyte", "dh2")
 
     apply_creation_layer(pack, sheet, "home_world", "Пустоторождённый", roller=_FixedLayerRoller(9))
 
     assert sheet_value(sheet, pack, "Wounds") == 9
-    assert sheet.aptitudes == ["Интеллект"]
+    assert sheet.aptitudes == ["Общая", "Интеллект"]
     assert sheet.talents == ["Непреклонный"]
     assert sheet.background_abilities == ["Дитя Темноты"]
 
@@ -156,13 +185,7 @@ def test_administratum_background_applies_fixed_and_selected_effects():
         sheet,
         "background",
         "Адептус Администратум",
-        selections={
-            "trained_skill": "Коммерция",
-            "scholastic_lore": "Бюрократия",
-            "weapon_training": "Лазерное",
-            "starting_weapon": "Лазпистолет",
-            "aptitude": "Познание",
-        },
+        selections=_administratum_choices(),
     )
 
     assert result.option_id == "adeptus_administratum"
@@ -325,6 +348,88 @@ def test_all_eight_roles_have_five_role_aptitudes_and_one_role_ability_after_cho
         assert len(sheet.aptitudes) == 5
         assert len(sheet.role_abilities) == 1
         assert len(sheet.talents) == 1
+
+
+def test_duplicate_aptitudes_require_explicit_characteristic_replacements_and_roll_back_on_failure():
+    pack = load_rulepack("dh2")
+    sheet = CharacterSheet("Acolyte", "dh2")
+
+    apply_creation_layer(pack, sheet, "home_world", "Дикий мир", roller=_FixedLayerRoller(12))
+    apply_creation_layer(
+        pack,
+        sheet,
+        "background",
+        "Адептус Администратум",
+        selections=_administratum_choices(),
+    )
+    before = sheet.to_dict()
+
+    # Chirurgeon grants Knowledge and Toughness again. The engine must not drop
+    # them silently and must not half-apply the role when the player has not
+    # supplied the two required replacement aptitudes.
+    with pytest.raises(CreationLayerError, match="requires a player replacement choice"):
+        apply_creation_layer(
+            pack,
+            sheet,
+            "role",
+            "Хирургеон",
+            selections={"role_talent": "Нокдаун"},
+        )
+    assert sheet.to_dict() == before
+
+    apply_creation_layer(
+        pack,
+        sheet,
+        "role",
+        "Хирургеон",
+        selections={"role_talent": "Нокдаун"},
+        duplicate_replacements={
+            "Aptitudes": ["Навык Стрельбы", "Навык Рукопашной"],
+        },
+    )
+
+    assert sheet.role_choice == "Хирургеон"
+    assert sheet.aptitudes == [
+        "Общая",
+        "Выносливость",
+        "Познание",
+        "Полевое",
+        "Интеллект",
+        "Навык Стрельбы",
+        "Сила",
+        "Навык Рукопашной",
+    ]
+    assert len(sheet.aptitudes) == len(set(sheet.aptitudes)) == 8
+
+
+def test_duplicate_replacement_rejects_owned_or_unused_choices_and_rolls_back():
+    pack = load_rulepack("dh2")
+    sheet = CharacterSheet("Acolyte", "dh2")
+
+    apply_creation_layer(pack, sheet, "home_world", "Дикий мир", roller=_FixedLayerRoller(10))
+    before = sheet.to_dict()
+
+    with pytest.raises(CreationLayerError, match="already present"):
+        apply_creation_layer(
+            pack,
+            sheet,
+            "role",
+            "Хирургеон",
+            selections={"role_talent": "Нокдаун"},
+            duplicate_replacements={"Aptitudes": ["Выносливость"]},
+        )
+    assert sheet.to_dict() == before
+
+    with pytest.raises(CreationLayerError, match="unused duplicate replacement"):
+        apply_creation_layer(
+            pack,
+            sheet,
+            "background",
+            "Адептус Администратум",
+            selections=_administratum_choices(),
+            duplicate_replacements={"Aptitudes": ["Сила"]},
+        )
+    assert sheet.to_dict() == before
 
 
 def test_layer_rejects_unknown_or_extra_choice_instead_of_silently_ignoring_it():

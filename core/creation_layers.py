@@ -9,8 +9,10 @@ for such stages.
 Built-in sidecars live at ``rulepacks/data/<system>/creation.yaml``. A sidecar
 may be split into additional ``creation.d/*.yaml`` fragments so a large system
 can keep independent creation stages in auditable files. A user rulepack data
-directory may mirror the same layout. The engine never branches on a concrete
-system id; the id is only the lookup key for that system's data directory.
+directory may mirror the same layout. An optional ``creation_policy.yaml`` in
+the same directory can declare duplicate-replacement pools for list-like fields.
+The engine never branches on a concrete system id; ids are only lookup keys for
+that system's data directory.
 
 A layer option may apply:
 
@@ -23,11 +25,13 @@ A layer option may apply:
   of a declared skill family, or a free specialization interpolated into a
   declared list-like sheet field (for talents/traits/etc.).
 
-Missing choices fail loudly. The substrate never guesses for the player.
+Missing choices fail loudly. Pack-declared duplicate replacements also require
+an explicit player choice. The substrate never guesses for the player.
 """
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -69,8 +73,6 @@ def _candidate_sidecars(pack: Any, data_root: Path | None = None) -> list[Path]:
     if data_root is not None:
         candidates.append(Path(data_root) / system / "creation.yaml")
     else:
-        # User rulepack data wins when present, matching the user-rulepack override
-        # philosophy without importing the private path at module import time.
         try:
             import core.rulepacks as rulepacks
 
@@ -81,6 +83,10 @@ def _candidate_sidecars(pack: Any, data_root: Path | None = None) -> list[Path]:
             candidates.append(Path(user_root) / "data" / system / "creation.yaml")
         candidates.append(_BUILTIN_DATA_ROOT / system / "creation.yaml")
     return candidates
+
+
+def _selected_sidecar(pack: Any, data_root: Path | None = None) -> Path | None:
+    return next((candidate for candidate in _candidate_sidecars(pack, data_root) if candidate.is_file()), None)
 
 
 def _load_sidecar_file(path: Path) -> Mapping[str, Any]:
@@ -102,15 +108,8 @@ def _load_sidecar_file(path: Path) -> Mapping[str, Any]:
 
 
 def load_creation_layers(pack: Any, *, data_root: Path | None = None) -> Mapping[str, Any]:
-    """Load a pack's base creation sidecar plus sorted ``creation.d`` fragments.
-
-    The same root that supplies ``creation.yaml`` supplies its fragments. This
-    preserves the existing user-sidecar-wins behavior instead of accidentally
-    mixing a user override with built-in fragments. Duplicate layer ids across
-    files are rejected rather than silently merged.
-    """
-
-    path = next((candidate for candidate in _candidate_sidecars(pack, data_root) if candidate.is_file()), None)
+    """Load a pack's base creation sidecar plus sorted ``creation.d`` fragments."""
+    path = _selected_sidecar(pack, data_root)
     if path is None:
         return {}
 
@@ -130,6 +129,59 @@ def load_creation_layers(pack: Any, *, data_root: Path | None = None) -> Mapping
         for layer_id, layer in layers.items():
             merged[str(layer_id)] = layer
     return merged
+
+
+def load_creation_policy(pack: Any, *, data_root: Path | None = None) -> Mapping[str, tuple[str, ...]]:
+    """Load optional duplicate-replacement pools from ``creation_policy.yaml``."""
+    sidecar = _selected_sidecar(pack, data_root)
+    if sidecar is None:
+        return {}
+    path = sidecar.parent / "creation_policy.yaml"
+    if not path.is_file():
+        return {}
+
+    try:
+        raw = safe_load_no_aliases(path.read_text(encoding="utf-8")) or {}
+    except Exception as exc:
+        raise CreationLayerError(f"could not load creation policy {path.name!r}: {exc}") from exc
+    if not isinstance(raw, Mapping):
+        raise CreationLayerError(f"creation policy {path.name!r} root must be a mapping")
+    if int(raw.get("version", 1)) != 1:
+        raise CreationLayerError(f"unsupported creation policy version in {path.name!r}")
+    unknown = set(raw) - {"version", "duplicate_replacements"}
+    if unknown:
+        raise CreationLayerError(f"creation policy {path.name!r} has unknown root keys {sorted(unknown)}")
+
+    duplicate_replacements = raw.get("duplicate_replacements") or {}
+    if not isinstance(duplicate_replacements, Mapping):
+        raise CreationLayerError("creation policy duplicate_replacements must be a mapping")
+
+    parsed: dict[str, tuple[str, ...]] = {}
+    for field_raw, spec_raw in duplicate_replacements.items():
+        field_name = str(field_raw).strip()
+        if not field_name or not isinstance(spec_raw, Mapping):
+            raise CreationLayerError("creation duplicate replacement entries must be field mappings")
+        extra = set(spec_raw) - {"choices"}
+        if extra:
+            raise CreationLayerError(
+                f"creation duplicate replacement field {field_name!r} has unknown keys {sorted(extra)}"
+            )
+        choices = spec_raw.get("choices") or []
+        if (
+            not isinstance(choices, (list, tuple))
+            or not choices
+            or not all(isinstance(item, str) and item.strip() for item in choices)
+        ):
+            raise CreationLayerError(
+                f"creation duplicate replacement field {field_name!r}.choices must be a non-empty string list"
+            )
+        normalized = [_normalize(item) for item in choices]
+        if len(set(normalized)) != len(normalized):
+            raise CreationLayerError(
+                f"creation duplicate replacement field {field_name!r}.choices contains duplicates"
+            )
+        parsed[field_name] = tuple(str(item).strip() for item in choices)
+    return parsed
 
 
 def _resolve_named_option(options: Mapping[str, Any], name: str, where: str) -> tuple[str, Mapping[str, Any]] | None:
@@ -176,18 +228,98 @@ def _declared_field_name(pack: Any, canonical: str) -> str:
     return field_name
 
 
-def _append_unique(current: Any, incoming: list[Any]) -> list[Any]:
+def _list_values(current: Any) -> list[Any]:
     if current in (None, ""):
-        values: list[Any] = []
-    elif isinstance(current, list):
-        values = list(current)
-    elif isinstance(current, tuple):
-        values = list(current)
-    else:
-        raise CreationLayerError("append_fields target must be list-like")
+        return []
+    if isinstance(current, list):
+        return list(current)
+    if isinstance(current, tuple):
+        return list(current)
+    raise CreationLayerError("append_fields target must be list-like")
+
+
+def _append_unique(current: Any, incoming: list[Any]) -> list[Any]:
+    values = _list_values(current)
     for value in incoming:
         if value not in values:
             values.append(value)
+    return values
+
+
+def _replacement_queues(
+    raw: Mapping[str, Any] | None,
+    policy: Mapping[str, tuple[str, ...]],
+) -> dict[str, list[str]]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, Mapping):
+        raise CreationLayerError("duplicate_replacements must be a mapping of field -> string list")
+
+    queues: dict[str, list[str]] = {}
+    for field_raw, values_raw in raw.items():
+        field_name = str(field_raw).strip()
+        if field_name not in policy:
+            raise CreationLayerError(f"field {field_name!r} has no duplicate-replacement policy")
+        if (
+            not isinstance(values_raw, (list, tuple))
+            or not all(isinstance(item, str) and item.strip() for item in values_raw)
+        ):
+            raise CreationLayerError(f"duplicate_replacements.{field_name} must be a string list")
+        queues[field_name] = [str(item).strip() for item in values_raw]
+    return queues
+
+
+def _append_with_policy(
+    current: Any,
+    incoming: list[Any],
+    canonical_field: str,
+    policy: Mapping[str, tuple[str, ...]],
+    replacement_queues: dict[str, list[str]],
+) -> list[Any]:
+    choices = policy.get(canonical_field)
+    if choices is None:
+        return _append_unique(current, incoming)
+
+    values = _list_values(current)
+    if not all(isinstance(item, str) and item.strip() for item in values):
+        raise CreationLayerError(
+            f"duplicate-replacement field {canonical_field!r} must contain only non-empty strings"
+        )
+    if not all(isinstance(item, str) and item.strip() for item in incoming):
+        raise CreationLayerError(
+            f"duplicate-replacement field {canonical_field!r} can append only non-empty strings"
+        )
+
+    pool = {_normalize(item): item for item in choices}
+    present = {_normalize(item) for item in values}
+    queue = replacement_queues.get(canonical_field, [])
+
+    for value_raw in incoming:
+        value = str(value_raw).strip()
+        normalized = _normalize(value)
+        if normalized not in present:
+            values.append(value)
+            present.add(normalized)
+            continue
+
+        if not queue:
+            raise CreationLayerError(
+                f"duplicate value {value!r} for field {canonical_field!r} requires a player replacement choice"
+            )
+        replacement_raw = queue.pop(0)
+        replacement_key = _normalize(replacement_raw)
+        replacement = pool.get(replacement_key)
+        if replacement is None:
+            raise CreationLayerError(
+                f"replacement {replacement_raw!r} is not allowed for field {canonical_field!r}"
+            )
+        if replacement_key in present:
+            raise CreationLayerError(
+                f"replacement {replacement!r} for field {canonical_field!r} is already present"
+            )
+        values.append(replacement)
+        present.add(replacement_key)
+
     return values
 
 
@@ -211,6 +343,9 @@ def _apply_effects(
     character: Any,
     raw: Any,
     roller: DiceRoller,
+    *,
+    duplicate_policy: Mapping[str, tuple[str, ...]] | None = None,
+    replacement_queues: dict[str, list[str]] | None = None,
 ) -> tuple[list[str], dict[str, int]]:
     if raw is None:
         return [], {}
@@ -219,6 +354,9 @@ def _apply_effects(
     unknown = set(raw) - {"fields", "append_fields", "roll_attributes", "skills", "equipment"}
     if unknown:
         raise CreationLayerError(f"creation effects have unknown keys {sorted(unknown)}")
+
+    duplicate_policy = duplicate_policy or {}
+    replacement_queues = replacement_queues if replacement_queues is not None else {}
 
     fields = raw.get("fields") or {}
     if not isinstance(fields, Mapping):
@@ -232,8 +370,19 @@ def _apply_effects(
     for canonical, values in appended.items():
         if not isinstance(values, (list, tuple)):
             raise CreationLayerError(f"append_fields.{canonical} must be a list")
-        field_name = _declared_field_name(pack, str(canonical))
-        setattr(character, field_name, _append_unique(getattr(character, field_name, None), list(values)))
+        canonical_field = str(canonical)
+        field_name = _declared_field_name(pack, canonical_field)
+        setattr(
+            character,
+            field_name,
+            _append_with_policy(
+                getattr(character, field_name, None),
+                list(values),
+                canonical_field,
+                duplicate_policy,
+                replacement_queues,
+            ),
+        )
 
     rolled = raw.get("roll_attributes") or {}
     if not isinstance(rolled, Mapping):
@@ -314,6 +463,9 @@ def _apply_choice_group(
     group: Mapping[str, Any],
     selection: Any,
     roller: DiceRoller,
+    *,
+    duplicate_policy: Mapping[str, tuple[str, ...]] | None = None,
+    replacement_queues: dict[str, list[str]] | None = None,
 ) -> tuple[list[str], dict[str, int]]:
     if "skill_family" in group and "options" not in group:
         canonical, rank = _apply_specialization(pack, character, group, selection)
@@ -343,7 +495,14 @@ def _apply_choice_group(
     if "skill_family" in option and "field_template" in option:
         raise CreationLayerError("choice option cannot combine skill_family and field_template")
 
-    equipment, skills = _apply_effects(pack, character, option.get("effects"), roller)
+    equipment, skills = _apply_effects(
+        pack,
+        character,
+        option.get("effects"),
+        roller,
+        duplicate_policy=duplicate_policy,
+        replacement_queues=replacement_queues,
+    )
     if "skill_family" in option:
         canonical, rank = _apply_specialization(pack, character, option, specialization)
         skills[canonical] = rank
@@ -361,10 +520,17 @@ def apply_creation_layer(
     option: str,
     *,
     selections: Mapping[str, Any] | None = None,
+    duplicate_replacements: Mapping[str, Any] | None = None,
     data_root: Path | None = None,
     roller: DiceRoller | None = None,
 ) -> CreationLayerResult:
-    """Apply one selected layer option and all explicit player sub-choices."""
+    """Apply one selected layer option and all explicit player sub-choices.
+
+    If the pack declares a duplicate-replacement policy for a list-like field,
+    each duplicate generated by this layer consumes one explicit replacement
+    from ``duplicate_replacements[field]``. Missing, invalid and unused choices
+    fail loudly. The character is rolled back to its pre-layer state on failure.
+    """
     layers = load_creation_layers(pack, data_root=data_root)
     layer = layers.get(layer_id)
     if not isinstance(layer, Mapping):
@@ -391,17 +557,52 @@ def apply_creation_layer(
     if extra:
         raise CreationLayerError(f"creation option {option_id!r} got unknown choices {sorted(extra)}")
 
+    duplicate_policy = load_creation_policy(pack, data_root=data_root)
+    replacement_queues = _replacement_queues(duplicate_replacements, duplicate_policy)
     roller = roller or DiceRoller()
-    equipment_added, skills_set = _apply_effects(pack, character, raw.get("effects"), roller)
-    for group_id_raw, group in choices.items():
-        group_id = str(group_id_raw)
-        if not isinstance(group, Mapping):
-            raise CreationLayerError(f"choice group {group_id!r} must be a mapping")
-        equipment, skills = _apply_choice_group(pack, character, group_id, group, provided[group_id], roller)
-        equipment_added.extend(equipment)
-        skills_set.update(skills)
 
-    refresh_sheet(character, pack)
+    try:
+        snapshot = copy.deepcopy(vars(character))
+    except TypeError as exc:
+        raise CreationLayerError("character must expose mutable attribute storage") from exc
+
+    try:
+        equipment_added, skills_set = _apply_effects(
+            pack,
+            character,
+            raw.get("effects"),
+            roller,
+            duplicate_policy=duplicate_policy,
+            replacement_queues=replacement_queues,
+        )
+        for group_id_raw, group in choices.items():
+            group_id = str(group_id_raw)
+            if not isinstance(group, Mapping):
+                raise CreationLayerError(f"choice group {group_id!r} must be a mapping")
+            equipment, skills = _apply_choice_group(
+                pack,
+                character,
+                group_id,
+                group,
+                provided[group_id],
+                roller,
+                duplicate_policy=duplicate_policy,
+                replacement_queues=replacement_queues,
+            )
+            equipment_added.extend(equipment)
+            skills_set.update(skills)
+
+        unused = {field: values for field, values in replacement_queues.items() if values}
+        if unused:
+            fields = ", ".join(sorted(unused))
+            raise CreationLayerError(f"unused duplicate replacement choices for fields: {fields}")
+
+        refresh_sheet(character, pack)
+    except Exception:
+        vars(character).clear()
+        vars(character).update(snapshot)
+        raise
+
     return CreationLayerResult(
         layer_id=str(layer_id),
         option_id=option_id,

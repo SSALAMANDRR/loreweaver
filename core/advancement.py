@@ -35,7 +35,9 @@ class AdvancementSpec:
 
     starting_xp: int
     aptitude_field: str
+    base_aptitudes: tuple[str, ...]
     costs: Mapping[str, Mapping[str, Mapping[int, int]]]
+    requirements: Mapping[str, Mapping[str, tuple[str, ...]]]
 
 
 @dataclass(frozen=True)
@@ -127,7 +129,7 @@ def load_advancement_spec(pack: Any, *, data_root: Path | None = None) -> Advanc
         raise AdvancementError(f"advancement sidecar {path.name!r} root must be a mapping")
     if int(raw.get("version", 1)) != 1:
         raise AdvancementError(f"unsupported advancement sidecar version in {path.name!r}")
-    unknown = set(raw) - {"version", "starting_xp", "aptitude_field", "costs"}
+    unknown = set(raw) - {"version", "starting_xp", "aptitude_field", "base_aptitudes", "costs", "requirements"}
     if unknown:
         raise AdvancementError(f"advancement sidecar {path.name!r} has unknown root keys {sorted(unknown)}")
 
@@ -142,10 +144,43 @@ def load_advancement_spec(pack: Any, *, data_root: Path | None = None) -> Advanc
     if not aptitude_field:
         raise AdvancementError("advancement aptitude_field must name a declared sheet field")
 
+    base_aptitudes_raw = raw.get("base_aptitudes") or []
+    if (
+        not isinstance(base_aptitudes_raw, (list, tuple))
+        or not all(isinstance(item, str) and item.strip() for item in base_aptitudes_raw)
+    ):
+        raise AdvancementError("advancement base_aptitudes must be a string list")
+    base_aptitudes = tuple(str(item).strip() for item in base_aptitudes_raw)
+
+    requirements_raw = raw.get("requirements") or {}
+    if not isinstance(requirements_raw, Mapping):
+        raise AdvancementError("advancement requirements must be a mapping")
+    requirements: dict[str, dict[str, tuple[str, ...]]] = {}
+    for category_raw, targets_raw in requirements_raw.items():
+        category = str(category_raw).strip()
+        if not category or not isinstance(targets_raw, Mapping):
+            raise AdvancementError("advancement requirement categories must contain target mappings")
+        targets: dict[str, tuple[str, ...]] = {}
+        for target_raw, aptitudes_raw in targets_raw.items():
+            target = str(target_raw).strip()
+            if (
+                not target
+                or not isinstance(aptitudes_raw, (list, tuple))
+                or not aptitudes_raw
+                or not all(isinstance(item, str) and item.strip() for item in aptitudes_raw)
+            ):
+                raise AdvancementError(
+                    f"advancement requirements.{category} targets must contain non-empty aptitude lists"
+                )
+            targets[target] = tuple(str(item).strip() for item in aptitudes_raw)
+        requirements[category] = targets
+
     return AdvancementSpec(
         starting_xp=starting_xp,
         aptitude_field=aptitude_field,
+        base_aptitudes=base_aptitudes,
         costs=_parse_costs(raw.get("costs")),
+        requirements=requirements,
     )
 
 
@@ -192,13 +227,33 @@ def _character_aptitudes(pack: Any, character: Any, canonical_field: str) -> Ite
     return values
 
 
+def advancement_requirements(spec: AdvancementSpec, category: str, target: str) -> tuple[str, ...]:
+    """Resolve declared aptitude requirements for a canonical advancement target.
+
+    Specialized skills use the generic ``Family::specialization`` identity. If a
+    sidecar declares the family once, every specialization inherits that pair.
+    """
+
+    category_id = _resolve_table_key(spec.requirements, category, "advancement requirement category")
+    targets = spec.requirements[category_id]
+    try:
+        target_id = _resolve_table_key(targets, target, "advancement target")
+    except AdvancementError:
+        family, separator, _specialization = str(target).partition("::")
+        if not separator:
+            raise
+        target_id = _resolve_table_key(targets, family, "advancement target")
+    return targets[target_id]
+
+
 def quote_advancement(
     pack: Any,
     character: Any,
     category: str,
     stage: str,
-    required_aptitudes: Iterable[str],
+    required_aptitudes: Iterable[str] | None = None,
     *,
+    target: str | None = None,
     data_root: Path | None = None,
 ) -> AdvancementQuote:
     """Return the declared XP cost for one advancement without mutating the sheet."""
@@ -210,7 +265,12 @@ def quote_advancement(
     category_id = _resolve_table_key(spec.costs, category, "advancement category")
     stages = spec.costs[category_id]
     stage_id = _resolve_table_key(stages, stage, "advancement stage")
-    owned = _character_aptitudes(pack, character, spec.aptitude_field)
+    if (required_aptitudes is None) == (target is None):
+        raise AdvancementError("quote needs exactly one of required_aptitudes or target")
+    if target is not None:
+        required_aptitudes = advancement_requirements(spec, category_id, target)
+    assert required_aptitudes is not None
+    owned = (*_character_aptitudes(pack, character, spec.aptitude_field), *spec.base_aptitudes)
     matches = count_matching_aptitudes(owned, required_aptitudes)
     row = stages[stage_id]
     if matches not in row:
