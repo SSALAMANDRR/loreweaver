@@ -8,9 +8,11 @@ from core.creation_flow import (
     CreationFlowError,
     apply_creation_flow_layer,
     choose_creation_flow_starting_item,
+    creation_flow_duplicate_requirements,
     creation_flow_status,
     finish_creation_advancement,
     load_creation_flow_spec,
+    resolve_creation_flow_duplicates,
     start_creation_flow,
 )
 from core.rulepacks import load_rulepack
@@ -51,11 +53,14 @@ def test_dh2_creation_flow_declares_explicit_generic_stage_order():
         ("home_world", "layer"),
         ("background", "layer"),
         ("role", "layer"),
+        ("duplicate_aptitudes", "duplicates"),
         ("advancement", "advancement"),
         ("starting_equipment", "starting_equipment"),
     ]
     assert spec.stages[1].layer_id == "home_world"
     assert spec.stages[1].option_from_profile is True
+    assert spec.stages[2].defer_duplicates is True
+    assert spec.stages[3].defer_duplicates is True
 
 
 def test_dh2_full_creation_flow_reaches_ready_character_without_system_specific_core_logic():
@@ -90,13 +95,30 @@ def test_dh2_full_creation_flow_reaches_ready_character_without_system_specific_
         sheet,
         "Хирургеон",
         selections={"role_talent": "Нокдаун"},
-        duplicate_replacements={
-            "Aptitudes": ["Навык Стрельбы", "Навык Рукопашной"],
-        },
         roller=roller,
     )
     assert role.result.option_id == "chirurgeon"
-    assert role.status.stage_id == "advancement"
+    assert role.status.stage_id == "duplicate_aptitudes"
+    assert role.status.stage_kind == "duplicates"
+    assert initialized_advancement_budget(pack, sheet) is None
+
+    requirements = creation_flow_duplicate_requirements(pack, sheet)
+    assert len(requirements) == 1
+    assert requirements[0].field == "Aptitudes"
+    assert requirements[0].count == 2
+    assert "Навык Стрельбы" in requirements[0].choices
+    assert "Навык Рукопашной" in requirements[0].choices
+
+    duplicate_result = resolve_creation_flow_duplicates(
+        pack,
+        sheet,
+        {"Aptitudes": ["Навык Стрельбы", "Навык Рукопашной"]},
+    )
+    assert duplicate_result.replacements == {
+        "Aptitudes": ("Навык Стрельбы", "Навык Рукопашной"),
+    }
+    assert duplicate_result.status.stage_id == "advancement"
+    assert len(sheet.aptitudes) == len(set(sheet.aptitudes))
 
     xp = initialized_advancement_budget(pack, sheet)
     assert xp is not None
@@ -130,6 +152,7 @@ def test_dh2_full_creation_flow_reaches_ready_character_without_system_specific_
         "home_world",
         "background",
         "role",
+        "duplicate_aptitudes",
         "advancement",
         "starting_equipment",
     )
@@ -137,6 +160,41 @@ def test_dh2_full_creation_flow_reaches_ready_character_without_system_specific_
     persisted = creation_flow_status(pack, CharacterSheet.from_dict(sheet.to_dict()))
     assert persisted is not None
     assert persisted.complete is True
+
+
+def test_duplicate_resolution_rejects_missing_or_already_owned_choices_atomically():
+    pack = load_rulepack("dh2")
+    roller = _FixedRoller(30)
+    sheet = start_creation_flow(pack, "Дикий мир", "Acolyte", roller=roller).character
+    apply_creation_flow_layer(pack, sheet, roller=roller)
+    apply_creation_flow_layer(
+        pack,
+        sheet,
+        "Адептус Администратум",
+        selections=_administratum_choices(),
+        roller=roller,
+    )
+    apply_creation_flow_layer(
+        pack,
+        sheet,
+        "Хирургеон",
+        selections={"role_talent": "Нокдаун"},
+        roller=roller,
+    )
+    before = sheet.to_dict()
+
+    with pytest.raises(Exception):
+        resolve_creation_flow_duplicates(pack, sheet, {"Aptitudes": ["Навык Стрельбы"]})
+    assert sheet.to_dict() == before
+
+    with pytest.raises(Exception):
+        resolve_creation_flow_duplicates(
+            pack,
+            sheet,
+            {"Aptitudes": ["Выносливость", "Навык Рукопашной"]},
+        )
+    assert sheet.to_dict() == before
+    assert initialized_advancement_budget(pack, sheet) is None
 
 
 def test_profile_bound_layer_cannot_switch_to_a_different_option_and_rolls_back():
