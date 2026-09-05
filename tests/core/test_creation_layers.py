@@ -222,6 +222,7 @@ def test_mechanicus_can_choose_a_free_operate_specialization_without_core_knowin
     assert sheet.skills["Operate::наземная"] == 1
     assert sheet.skills["TechUse"] == 1
     assert sheet.traits == ["Имплантаты Механикус"]
+    assert sheet.implants == ["Оптический механодендрит"]
     assert "Использование Механодендритов (Вспомогательный)" in sheet.talents
     assert sheet.aptitudes == ["Техно"]
     assert "оптический механодендрит" in sheet.equipment
@@ -310,7 +311,7 @@ def test_hierophant_hatred_uses_the_same_generic_specialized_field_primitive():
     assert "Власть над Массами" in sheet.role_abilities
 
 
-def test_mystic_role_records_psyker_elite_advance_without_pretending_to_execute_it_yet():
+def test_mystic_role_applies_the_free_psyker_elite_immediate_changes():
     pack = load_rulepack("dh2")
     sheet = CharacterSheet("Acolyte", "dh2")
 
@@ -324,11 +325,14 @@ def test_mystic_role_records_psyker_elite_advance_without_pretending_to_execute_
 
     assert sheet.role_choice == "Мистик"
     assert sheet.elite_advances == ["Псайкер"]
+    assert sheet_value(sheet, pack, "PsyRating") == 1
+    assert "Псайкер" in sheet.aptitudes
+    assert "Псайкер" in sheet.traits
     assert sheet.talents == ["Варп-чувство"]
     assert sheet.role_abilities == ["Смотрящий в Варп"]
 
 
-def test_all_eight_roles_have_five_role_aptitudes_and_one_role_ability_after_choices():
+def test_all_eight_roles_have_five_role_aptitudes_plus_any_free_elite_aptitudes():
     pack = load_rulepack("dh2")
     selections = {
         "Ассасин": {"combat_aptitude": "Навык Рукопашной", "role_talent": "Искушённый"},
@@ -345,7 +349,8 @@ def test_all_eight_roles_have_five_role_aptitudes_and_one_role_ability_after_cho
         sheet = CharacterSheet(role, "dh2")
         apply_creation_layer(pack, sheet, "role", role, selections=role_selections)
         assert sheet.role_choice == role
-        assert len(sheet.aptitudes) == 5
+        expected_aptitudes = 6 if role == "Мистик" else 5
+        assert len(sheet.aptitudes) == expected_aptitudes
         assert len(sheet.role_abilities) == 1
         assert len(sheet.talents) == 1
 
