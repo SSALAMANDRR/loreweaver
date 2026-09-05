@@ -1,16 +1,18 @@
 """Generic structured prerequisites for catalog-driven talent advancement.
 
 A rulepack may declare ``talent_requirements.yaml`` beside ``talents.yaml``.
-The schema is deliberately small and composable: ``all``/``any`` boolean nodes
-plus characteristic/skill/talent/field-membership leaves.  It does not parse
-human prose; rulepacks must encode prerequisites explicitly.
+The schema is deliberately small and composable: boolean nodes plus leaves for
+characteristics, skills, talents, declared fields and equipment. Requirements
+may also branch on the talent specialization or refer to the selected skill for
+free-form mastery-style talents. It does not parse human prose; rulepacks must
+encode prerequisites explicitly.
 """
 
 from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field as dc_field
 from pathlib import Path
 from typing import Any
 
@@ -34,7 +36,9 @@ class TalentRequirement:
     any_specialization: bool = False
     field: str = ""
     value: str = ""
+    families: tuple[str, ...] = ()
     children: tuple["TalentRequirement", ...] = ()
+    branches: Mapping[str, "TalentRequirement"] = dc_field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -165,6 +169,87 @@ def _parse_requirement(raw: Any, *, where: str) -> TalentRequirement:
             )
         return TalentRequirement(kind="field_contains", field=field, value=value)
 
+    if kind == "equipment_contains":
+        if isinstance(payload, str):
+            value = payload.strip()
+        elif isinstance(payload, Mapping):
+            unknown = set(payload) - {"value"}
+            if unknown:
+                raise AdvancementPurchaseError(
+                    f"{where}.equipment_contains has unknown keys {sorted(unknown)}"
+                )
+            value = str(payload.get("value") or "").strip()
+        else:
+            raise AdvancementPurchaseError(
+                f"{where}.equipment_contains must be a string or value mapping"
+            )
+        if not value:
+            raise AdvancementPurchaseError(f"{where}.equipment_contains value is required")
+        return TalentRequirement(kind="equipment_contains", value=value)
+
+    if kind == "any_skill_family":
+        if not isinstance(payload, Mapping):
+            raise AdvancementPurchaseError(f"{where}.any_skill_family must be a mapping")
+        unknown = set(payload) - {"families", "min_rank"}
+        if unknown:
+            raise AdvancementPurchaseError(
+                f"{where}.any_skill_family has unknown keys {sorted(unknown)}"
+            )
+        families_raw = payload.get("families")
+        if (
+            not isinstance(families_raw, (list, tuple))
+            or not families_raw
+            or not all(isinstance(item, str) and item.strip() for item in families_raw)
+        ):
+            raise AdvancementPurchaseError(
+                f"{where}.any_skill_family.families must be a non-empty string list"
+            )
+        families = tuple(str(item).strip() for item in families_raw)
+        if len({_normalize(item) for item in families}) != len(families):
+            raise AdvancementPurchaseError(f"{where}.any_skill_family.families contains duplicates")
+        minimum = _positive_int(
+            payload.get("min_rank"), where=f"{where}.any_skill_family.min_rank"
+        )
+        return TalentRequirement(kind="any_skill_family", families=families, minimum=minimum)
+
+    if kind == "selected_skill":
+        if not isinstance(payload, Mapping):
+            raise AdvancementPurchaseError(f"{where}.selected_skill must be a mapping")
+        unknown = set(payload) - {"min_rank"}
+        if unknown:
+            raise AdvancementPurchaseError(
+                f"{where}.selected_skill has unknown keys {sorted(unknown)}"
+            )
+        minimum = _positive_int(
+            payload.get("min_rank"), where=f"{where}.selected_skill.min_rank"
+        )
+        return TalentRequirement(kind="selected_skill", minimum=minimum)
+
+    if kind == "by_specialization":
+        if not isinstance(payload, Mapping) or not payload:
+            raise AdvancementPurchaseError(
+                f"{where}.by_specialization must be a non-empty mapping"
+            )
+        branches: dict[str, TalentRequirement] = {}
+        normalized: set[str] = set()
+        for specialization_raw, requirement_raw in payload.items():
+            specialization = str(specialization_raw).strip()
+            key = _normalize(specialization)
+            if not specialization:
+                raise AdvancementPurchaseError(
+                    f"{where}.by_specialization contains an empty specialization"
+                )
+            if key in normalized:
+                raise AdvancementPurchaseError(
+                    f"{where}.by_specialization contains duplicate specialization {specialization!r}"
+                )
+            normalized.add(key)
+            branches[specialization] = _parse_requirement(
+                requirement_raw,
+                where=f"{where}.by_specialization.{specialization}",
+            )
+        return TalentRequirement(kind="by_specialization", branches=branches)
+
     raise AdvancementPurchaseError(f"{where} uses unknown requirement operator {kind!r}")
 
 
@@ -279,23 +364,80 @@ def _canonical_sheet_target(pack: Any, name: str) -> str:
     return resolved or str(name).strip()
 
 
+def _family_id(pack: Any, name: str) -> str | None:
+    spec = getattr(pack, "sheet_spec", None)
+    if spec is None:
+        return None
+    wanted = _normalize(name)
+    for family_id, family in spec.skill_families.items():
+        surfaces = (family_id, *family.aliases)
+        if any(_normalize(surface) == wanted for surface in surfaces):
+            return str(family_id)
+    return None
+
+
+def _has_skill_in_families(
+    pack: Any,
+    character: Any,
+    families: tuple[str, ...],
+    minimum: int,
+) -> bool:
+    family_ids = {_family_id(pack, name) for name in families}
+    family_ids.discard(None)
+    if not family_ids:
+        return False
+    skills = getattr(character, "skills", None)
+    if not isinstance(skills, Mapping):
+        return False
+    wanted = {_normalize(item) for item in family_ids}
+    for key_raw, rank_raw in skills.items():
+        key = str(key_raw)
+        if "::" not in key:
+            continue
+        family_name, specialization = key.split("::", 1)
+        if not specialization.strip() or _normalize(family_name) not in wanted:
+            continue
+        if isinstance(rank_raw, bool):
+            continue
+        try:
+            rank = int(rank_raw)
+        except (TypeError, ValueError):
+            continue
+        if rank >= minimum:
+            return True
+    return False
+
+
 def requirement_met(
     pack: Any,
     character: Any,
     requirement: TalentRequirement,
     *,
     talent_field: str = "Talents",
+    target_specialization: str = "",
 ) -> bool:
     """Evaluate one validated prerequisite node against a character sheet."""
 
     if requirement.kind == "all":
         return all(
-            requirement_met(pack, character, child, talent_field=talent_field)
+            requirement_met(
+                pack,
+                character,
+                child,
+                talent_field=talent_field,
+                target_specialization=target_specialization,
+            )
             for child in requirement.children
         )
     if requirement.kind == "any":
         return any(
-            requirement_met(pack, character, child, talent_field=talent_field)
+            requirement_met(
+                pack,
+                character,
+                child,
+                talent_field=talent_field,
+                target_specialization=target_specialization,
+            )
             for child in requirement.children
         )
     if requirement.kind in {"stat", "skill"}:
@@ -315,6 +457,49 @@ def requirement_met(
         return any(
             isinstance(item, str) and _normalize(item) == wanted
             for item in _field_values(character, pack, requirement.field)
+        )
+    if requirement.kind == "equipment_contains":
+        equipment = getattr(character, "equipment", None)
+        if not isinstance(equipment, list):
+            return False
+        wanted = _normalize(requirement.value)
+        return any(
+            isinstance(item, str) and _normalize(item) == wanted
+            for item in equipment
+        )
+    if requirement.kind == "any_skill_family":
+        return _has_skill_in_families(
+            pack,
+            character,
+            requirement.families,
+            requirement.minimum,
+        )
+    if requirement.kind == "selected_skill":
+        if not target_specialization:
+            return False
+        canonical = _canonical_sheet_target(pack, target_specialization)
+        return sheet_value(character, pack, canonical) >= requirement.minimum
+    if requirement.kind == "by_specialization":
+        if not target_specialization:
+            return False
+        wanted = _normalize(target_specialization)
+        matches = [
+            child
+            for specialization, child in requirement.branches.items()
+            if _normalize(specialization) == wanted
+        ]
+        if len(matches) > 1:
+            raise AdvancementPurchaseError(
+                f"ambiguous requirement specialization {target_specialization!r}"
+            )
+        if not matches:
+            return False
+        return requirement_met(
+            pack,
+            character,
+            matches[0],
+            talent_field=talent_field,
+            target_specialization=target_specialization,
         )
     raise AdvancementPurchaseError(
         f"unsupported normalized talent requirement kind {requirement.kind!r}"
@@ -350,10 +535,17 @@ def talent_requirements_met(
     spec = load_talent_requirements(pack, data_root=data_root)
     if spec is None:
         return True
+    _name, specialization = _split_talent(target)
     requirement = requirement_for_talent(spec, target)
     if requirement is None:
         return True
-    return requirement_met(pack, character, requirement, talent_field=spec.talent_field)
+    return requirement_met(
+        pack,
+        character,
+        requirement,
+        talent_field=spec.talent_field,
+        target_specialization=specialization or "",
+    )
 
 
 def require_talent_prerequisites(
