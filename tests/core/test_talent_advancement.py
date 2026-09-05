@@ -23,18 +23,19 @@ def _character(*aptitudes: str) -> tuple[object, CharacterSheet]:
     return pack, character
 
 
-def test_dh2_talent_catalog_contains_verified_purchasable_slice():
+def test_dh2_talent_catalog_contains_all_xp_purchasable_core_talents():
     pack = load_rulepack("dh2")
     catalog = load_talent_catalog(pack)
 
     assert catalog is not None
     assert catalog.field == "Talents"
-    assert len(catalog.talents) == 82
+    assert len(catalog.talents) == 84
     assert "Быстрая Перезарядка" in catalog.talents
     assert "Амбидекстрия" in catalog.talents
+    assert "Крепкое Телосложение" in catalog.talents
+    assert "Мастер Клинка" in catalog.talents
+    # Enemy is awarded by play/narrative circumstances and cannot be bought for XP.
     assert "Враг" not in catalog.talents
-    assert "Крепкое Телосложение" not in catalog.talents
-    assert "Мастер Клинка" not in catalog.talents
 
 
 def test_talent_quote_never_initializes_a_missing_budget():
