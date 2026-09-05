@@ -33,6 +33,7 @@ async def test_dh2_make_char_accepts_canonical_profile_id_and_character_name():
     reply = await router.dispatch(ctx, ".dh2 forge_world Varro")
 
     assert reply is not None and "dh2" in reply
+    assert "1000 XP" in reply and ".advance" in reply
     character = await services.characters.get_character("u1", ctx.chat_key)
     assert character.name == "Varro"
     assert character.system == "dh2"

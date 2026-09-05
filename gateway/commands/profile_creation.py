@@ -72,6 +72,7 @@ class ProfileCreationCommands:
             return await super().cmd_make_char(ctx, pack)
 
         default_name = ctx.i18n.t("commands.character.default_name")
+        budget = None
         try:
             profile_id, name = _parse_profile_make_char_args(pack, ctx.args, default_name)
             generated = generate_profiled_character(
@@ -80,7 +81,7 @@ class ProfileCreationCommands:
                 name,
                 roller=ctx.services.dice,
             )
-            initialize_advancement_budget(pack, generated.character)
+            budget = initialize_advancement_budget(pack, generated.character)
         except CreationProfileError:
             return ctx.i18n.t("commands.error.bad_args")
 
@@ -97,6 +98,15 @@ class ProfileCreationCommands:
                 ctx.i18n.t("commands.character.name_taken", name=character.name, command=ctx.command)
             )
 
-        result = ctx.i18n.t("commands.character.created", name=character.name, system=character.system)
+        lines = [ctx.i18n.t("commands.character.created", name=character.name, system=character.system)]
+        if budget is not None:
+            lines.append(
+                ctx.i18n.t(
+                    "commands.advancement.creation_hint",
+                    available=budget.available_xp,
+                )
+            )
         notice = render_validation_notice(ctx.i18n, violations)
-        return f"{result}\n{notice}" if notice else result
+        if notice:
+            lines.append(notice)
+        return "\n".join(lines)

@@ -1,0 +1,15 @@
+{
+  "commands.help.advance": "查看或购买当前角色下一项可用的经验值成长。",
+  "commands.advancement.no_character": "请先创建或选择角色，再花费经验值。",
+  "commands.advancement.unsupported": "该角色的规则系统没有提供成长购买流程。",
+  "commands.advancement.uninitialized": "该角色没有已初始化的经验值预算。起始经验值只会在创建角色时授予。",
+  "commands.advancement.usage": "用法：.advance [<类别> <目标>]，例如 `.advance characteristic Ag` 或 `.advance skill Acrobatics`。",
+  "commands.advancement.header": "经验值：可用 {available} · 已花费 {spent} · 起始 {starting}",
+  "commands.advancement.item": "· {category} · {target} · {stage} · {current}→{next} · {cost} XP{suffix}",
+  "commands.advancement.unaffordable": " · 经验值不足",
+  "commands.advancement.none": "当前没有更多具体可购买的成长。",
+  "commands.advancement.invalid": "现在无法购买该成长。请检查目标、专精、购买顺序和剩余经验值。",
+  "commands.advancement.save_failed": "成长没有成功保存，因此不会视为已购买。",
+  "commands.advancement.purchased": "已购买 {target}（{stage}）：{current}→{next}，花费 {cost} XP，剩余 {remaining} XP。",
+  "commands.advancement.creation_hint": "起始成长预算：{available} XP。完成其余角色创建选择后，用 `.advance` 查看可购买成长。"
+}
