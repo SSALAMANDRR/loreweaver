@@ -4,7 +4,9 @@ version: 1
 # creation. Core only understands generic stage kinds and never branches on DH2.
 # The home-world layer reuses the already selected creation profile so the
 # characteristic roll profile and the non-characteristic home-world benefits
-# cannot diverge.
+# cannot diverge. Background/role aptitude collisions stay unresolved until all
+# seven starting aptitudes are known, then the player replaces every duplicate
+# before the starting XP budget becomes available.
 stages:
   - id: characteristics
     kind: profile
@@ -17,10 +19,15 @@ stages:
   - id: background
     kind: layer
     layer: background
+    defer_duplicates: true
 
   - id: role
     kind: layer
     layer: role
+    defer_duplicates: true
+
+  - id: duplicate_aptitudes
+    kind: duplicates
 
   - id: advancement
     kind: advancement
