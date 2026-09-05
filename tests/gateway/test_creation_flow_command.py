@@ -14,7 +14,7 @@ def _services():
     return build_services(Settings(), llm=FakeLLM(script=[]), embeddings=FakeEmbeddings(64))
 
 
-async def test_dh2_make_char_starts_flow_and_auto_applies_choice_free_bound_home_world():
+async def test_dh2_make_char_stops_for_optional_reroll_before_home_world_benefits():
     services = _services()
     router = CommandRouter(services)
     ctx = AgentCtx(chat_key="cli:dm:create-start", user_id="u1", locale="en")
@@ -23,16 +23,48 @@ async def test_dh2_make_char_starts_flow_and_auto_applies_choice_free_bound_home
 
     assert reply is not None
     assert "Staged character creation started" in reply
-    assert "stage: background" in reply
-    assert ".create <option>" in reply
+    assert "stage: characteristic_reroll" in reply
+    assert "second result is final" in reply
+    assert ".create reroll <characteristic>" in reply
+    assert ".create done" in reply
 
     saved = await services.characters.get_character(ctx.user_id, ctx.chat_key)
     pack = load_rulepack("dh2")
     status = creation_flow_status(pack, saved)
-    assert status is not None and status.stage_id == "background"
-    assert "Старые Пути" in saved.background_abilities
+    assert status is not None and status.stage_id == "characteristic_reroll"
+    assert "Старые Пути" not in saved.background_abilities
     assert initialized_advancement_budget(pack, saved) is None
     assert starting_equipment_budget(pack, saved) is None
+
+    skipped = await router.dispatch(ctx, ".create done")
+
+    assert skipped is not None and "stage: background" in skipped
+    saved = await services.characters.get_character(ctx.user_id, ctx.chat_key)
+    status = creation_flow_status(pack, saved)
+    assert status is not None and status.stage_id == "background"
+    assert "Старые Пути" in saved.background_abilities
+
+
+async def test_create_rerolls_one_characteristic_and_then_cannot_offer_reroll_again():
+    services = _services()
+    router = CommandRouter(services)
+    ctx = AgentCtx(chat_key="cli:dm:create-reroll", user_id="u1", locale="en")
+    await router.dispatch(ctx, ".dh2 Дикий мир | Acolyte")
+
+    reply = await router.dispatch(ctx, ".create reroll Выносливость")
+
+    assert reply is not None
+    assert "Rerolled T:" in reply
+    assert "second result is final" in reply
+    assert "stage: background" in reply
+
+    saved = await services.characters.get_character(ctx.user_id, ctx.chat_key)
+    audit = saved.secondary_attributes["__creation_flow__"]["profile_reroll"]
+    assert audit["target"] == "T"
+    assert audit["expression"] == "3d10kh2+20"
+    assert saved.attributes["T"] == audit["result"]
+    status = creation_flow_status(load_rulepack("dh2"), saved)
+    assert status is not None and status.stage_id == "background"
 
 
 async def test_forge_world_stays_on_bound_layer_until_required_talent_is_selected():
@@ -42,10 +74,12 @@ async def test_forge_world_stays_on_bound_layer_until_required_talent_is_selecte
 
     started = await router.dispatch(ctx, ".dh2 Мир-кузница | Tech")
 
-    assert started is not None
-    assert "stage: home_world" in started
-    assert "home_world_talent" in started
-    assert ".create home_world_talent=<value>" in started
+    assert started is not None and "stage: characteristic_reroll" in started
+    after_reroll = await router.dispatch(ctx, ".create done")
+    assert after_reroll is not None
+    assert "stage: home_world" in after_reroll
+    assert "home_world_talent" in after_reroll
+    assert ".create home_world_talent=<value>" in after_reroll
 
     applied = await router.dispatch(ctx, ".create home_world_talent=Искусный Стук")
 
@@ -60,6 +94,7 @@ async def test_create_previews_layer_choices_without_mutating_character():
     router = CommandRouter(services)
     ctx = AgentCtx(chat_key="cli:dm:create-preview", user_id="u1", locale="en")
     await router.dispatch(ctx, ".dh2 Дикий мир | Acolyte")
+    await router.dispatch(ctx, ".create done")
     before = (await services.characters.get_character(ctx.user_id, ctx.chat_key)).to_dict()
 
     reply = await router.dispatch(ctx, ".create Адептус Администратум")
@@ -78,6 +113,7 @@ async def test_create_reaches_duplicate_stage_before_initializing_xp():
     router = CommandRouter(services)
     ctx = AgentCtx(chat_key="cli:dm:create-layers", user_id="u1", locale="en")
     await router.dispatch(ctx, ".dh2 Дикий мир | Acolyte")
+    await router.dispatch(ctx, ".create done")
 
     background = await router.dispatch(
         ctx,
@@ -117,6 +153,7 @@ async def test_create_done_enters_starting_equipment_and_item_purchase_persists(
     router = CommandRouter(services)
     ctx = AgentCtx(chat_key="cli:dm:create-equipment", user_id="u1", locale="en")
     await router.dispatch(ctx, ".dh2 Дикий мир | Acolyte")
+    await router.dispatch(ctx, ".create done")
     await router.dispatch(
         ctx,
         ".create Адептус Администратум"
