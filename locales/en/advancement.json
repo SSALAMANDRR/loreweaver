@@ -3,13 +3,15 @@
   "commands.advancement.no_character": "Create or select a character before spending XP.",
   "commands.advancement.unsupported": "This character's rule system does not expose an advancement purchase flow.",
   "commands.advancement.uninitialized": "This character has no initialized XP budget. Starting XP is granted only by character creation.",
-  "commands.advancement.usage": "Usage: .advance [<category> <target>] — for example `.advance characteristic Ag` or `.advance skill Acrobatics`.",
+  "commands.advancement.usage": "Usage: .advance [<category> <target>] — for example `.advance characteristic Ag`, `.advance skill Acrobatics`, or `.advance talent Быстрая Перезарядка`.",
   "commands.advancement.header": "XP: {available} available · {spent} spent · {starting} starting",
   "commands.advancement.item": "· {category} · {target} · {stage} · {current}→{next} · {cost} XP{suffix}",
+  "commands.advancement.talent_item": "· {category} · {target} · {stage} · {cost} XP{suffix}",
   "commands.advancement.unaffordable": " · not enough XP",
   "commands.advancement.none": "No further concrete purchases are available.",
-  "commands.advancement.invalid": "That advancement cannot be bought now. Check the target, specialization, sequence, and remaining XP.",
+  "commands.advancement.invalid": "That advancement cannot be bought now. Check the target, specialization, prerequisites, sequence, and remaining XP.",
   "commands.advancement.save_failed": "The advancement was not saved, so it is not treated as purchased.",
   "commands.advancement.purchased": "Purchased {target} ({stage}): {current}→{next} for {cost} XP. {remaining} XP remain.",
+  "commands.advancement.talent_purchased": "Purchased {target} ({stage}) for {cost} XP. {remaining} XP remain.",
   "commands.advancement.creation_hint": "Starting advancement budget: {available} XP. Finish the remaining creation choices, then use `.advance` to review purchases."
 }

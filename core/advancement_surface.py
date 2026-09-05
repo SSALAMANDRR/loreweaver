@@ -1,9 +1,9 @@
 """Read-only advancement discovery and safe player-facing purchase helpers.
 
-The low-level purchase module intentionally exposes primitive operations.  This
+The low-level purchase modules intentionally expose primitive operations. This
 module composes them into the surface used by commands and clients: it never
 initializes a missing starting-XP budget, refuses bare specialization families,
-and can enumerate the concrete next purchases a sheet can currently make.
+and can enumerate concrete next characteristic, skill and catalog-talent buys.
 """
 
 from __future__ import annotations
@@ -24,6 +24,12 @@ from core.advancement_purchase import (
     purchase_advancement,
 )
 from core.sheets import resolve_skill_family
+from core.talent_advancement import (
+    available_talent_purchases,
+    load_talent_catalog,
+    purchase_talent,
+    quote_talent_purchase,
+)
 
 
 @dataclass(frozen=True)
@@ -65,7 +71,7 @@ def initialized_advancement_budget(
 ) -> AdvancementBudget | None:
     """Return an existing XP budget without ever granting starting XP.
 
-    Character creation owns initialization.  Read/purchase surfaces deliberately
+    Character creation owns initialization. Read/purchase surfaces deliberately
     treat a missing state as uninitialized so opening a command on a legacy sheet
     cannot mint a fresh starting allowance.
     """
@@ -92,6 +98,8 @@ def safe_next_advancement_purchase(
 
     if initialized_advancement_budget(pack, character, data_root=data_root) is None:
         raise AdvancementPurchaseError("character advancement budget is not initialized")
+    if _normalize(category) == "talent" and load_talent_catalog(pack, data_root=data_root) is not None:
+        return quote_talent_purchase(pack, character, target, data_root=data_root)
     _require_specialization(pack, target)
     return next_advancement_purchase(pack, character, category, target, data_root=data_root)
 
@@ -106,6 +114,10 @@ def safe_purchase_advancement(
 ) -> AdvancementPurchaseResult:
     """Apply one purchase after the same guards used by the player-facing quote."""
 
+    if initialized_advancement_budget(pack, character, data_root=data_root) is None:
+        raise AdvancementPurchaseError("character advancement budget is not initialized")
+    if _normalize(category) == "talent" and load_talent_catalog(pack, data_root=data_root) is not None:
+        return purchase_talent(pack, character, target, data_root=data_root)
     safe_next_advancement_purchase(pack, character, category, target, data_root=data_root)
     return purchase_advancement(pack, character, category, target, data_root=data_root)
 
@@ -118,10 +130,14 @@ def available_advancement_surface(
 ) -> AdvancementSurface | None:
     """Return the persisted budget and every concrete next purchase.
 
-    Generic requirement targets are enumerable directly.  Bare special-skill
+    Generic requirement targets are enumerable directly. Bare special-skill
     families are templates rather than purchasable skills, so the list includes
     only specializations already present on the sheet; a player can still enter a
     new explicit specialization directly and have it quoted/purchased safely.
+
+    Talent catalogs enumerate unspecialized talents and finite specialization
+    choices. Free-form talent specializations are intentionally omitted from the
+    list but remain directly purchasable when the player names one explicitly.
     """
 
     budget = initialized_advancement_budget(pack, character, data_root=data_root)
@@ -170,7 +186,12 @@ def available_advancement_surface(
                     )
                 )
             except AdvancementPurchaseError:
-                # Exhausted/invalid targets are not actionable list entries.
                 continue
+
+    for quote in available_talent_purchases(pack, character, data_root=data_root):
+        key = (_normalize(quote.category), _normalize(quote.target))
+        if key not in seen:
+            seen.add(key)
+            quotes.append(quote)
 
     return AdvancementSurface(budget=budget, purchases=tuple(quotes))

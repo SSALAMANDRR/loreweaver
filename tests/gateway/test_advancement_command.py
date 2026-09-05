@@ -35,6 +35,7 @@ async def test_advance_lists_budget_and_next_purchases():
     assert "XP: 1000 available" in reply
     assert "Ag" in reply
     assert "100 XP" in reply
+    assert "Быстрая Перезарядка" in reply
 
 
 async def test_advance_purchases_characteristic_and_persists_budget():
@@ -79,6 +80,38 @@ async def test_advance_rejects_bare_special_skill_family():
     assert "Navigation" not in saved.skills
     budget = advancement_budget(load_rulepack("dh2"), saved)
     assert budget is not None and budget.available_xp == 1000
+
+
+async def test_advance_purchases_catalog_talent_and_persists_it():
+    services = _services()
+    router = CommandRouter(services)
+    ctx = AgentCtx(chat_key="cli:dm:advance-talent", user_id="u1", locale="en")
+    await _save_dh2(services, ctx, aptitudes=["Ловкость", "Полевое"])
+
+    reply = await router.dispatch(ctx, ".advance talent Быстрая Перезарядка")
+
+    assert reply is not None and "800 XP remain" in reply
+    assert "0→1" not in reply
+    saved = await services.characters.get_character(ctx.user_id, ctx.chat_key)
+    assert "Быстрая Перезарядка" in saved.talents
+    budget = advancement_budget(load_rulepack("dh2"), saved)
+    assert budget is not None
+    assert (budget.available_xp, budget.spent_xp) == (800, 200)
+
+
+async def test_advance_talent_requires_declared_specialization():
+    services = _services()
+    router = CommandRouter(services)
+    ctx = AgentCtx(chat_key="cli:dm:advance-talent-special", user_id="u1", locale="en")
+    await _save_dh2(services, ctx, aptitudes=["Общая", "Изящество"])
+
+    bad = await router.dispatch(ctx, ".advance talent Выучка с Оружием")
+    good = await router.dispatch(ctx, ".advance talent Выучка с Оружием (Лазерное)")
+
+    assert bad is not None and "cannot be bought" in bad
+    assert good is not None and "800 XP remain" in good
+    saved = await services.characters.get_character(ctx.user_id, ctx.chat_key)
+    assert saved.talents == ["Выучка с Оружием (Лазерное)"]
 
 
 async def test_advance_does_not_grant_xp_to_uninitialized_legacy_sheet():

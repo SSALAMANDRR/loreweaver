@@ -1,0 +1,91 @@
+version: 1
+field: Talents
+source: "Dark Heresy Second Edition RU OKP v1.8, Chapter IV pp. 145-162; only XP-purchasable talents with no prerequisites are enabled in this slice."
+
+talents:
+  Быстрая Перезарядка:
+    tier: 1
+    aptitudes: [Ловкость, Полевое]
+    source: CH04_TAL_010
+
+  Выучка с Оружием:
+    tier: 1
+    aptitudes: [Общая, Изящество]
+    source: CH04_TAL_021
+    specializations:
+      required: true
+      free: false
+      choices:
+        - Болтерное
+        - Цепное
+        - Зажигательное
+        - Тяжёлое
+        - Лазерное
+        - Пусковое
+        - Мельта
+        - Плазма
+        - Силовое
+        - Низкотехнологичное
+        - Шоковое
+        - Твёрдотельное
+
+  Выучка с Экзотическим Оружием:
+    tier: 2
+    aptitudes: [Интеллект, Изящество]
+    source: CH04_TAL_022
+    specializations:
+      required: true
+      free: true
+
+  Выхватить Оружие:
+    tier: 1
+    aptitudes: [Ловкость, Изящество]
+    source: CH04_TAL_023
+
+  Неистовство:
+    tier: 1
+    aptitudes: [Сила, Нападение]
+    source: CH04_TAL_049
+
+  Ненависть:
+    tier: 2
+    aptitudes: ["Навык Рукопашной", Общение]
+    source: CH04_TAL_050
+    specializations:
+      required: true
+      free: true
+
+  Нокдаун:
+    tier: 1
+    aptitudes: ["Навык Рукопашной", Нападение]
+    source: CH04_TAL_058
+
+  Обоерукий воин:
+    tier: 2
+    aptitudes: ["Навык Рукопашной", Изящество]
+    source: CH04_TAL_059
+    specializations:
+      required: true
+      free: false
+      choices: [Рукопашное, Стрелковое]
+      aptitude_overrides:
+        Рукопашное: ["Навык Рукопашной", Изящество]
+        Стрелковое: ["Навык Стрельбы", Изящество]
+
+  Плечом к Плечу:
+    tier: 1
+    aptitudes: [Общая, Нападение]
+    source: CH04_TAL_062
+
+  Сопротивление:
+    tier: 1
+    aptitudes: [Выносливость, Защита]
+    source: CH04_TAL_075
+    specializations:
+      required: true
+      free: true
+
+  Спринт:
+    tier: 3
+    aptitudes: [Ловкость, Полевое]
+    source: CH04_TAL_076

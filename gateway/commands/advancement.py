@@ -20,6 +20,10 @@ def _target_label(pack, target: str, locale: str) -> str:
     return pack.display_name(target, locale)
 
 
+def _is_talent(category: str) -> bool:
+    return str(category).strip().casefold() == "talent"
+
+
 class AdvancementCommands:
     """Add one generic `.advance`/`.xp` surface to the public router."""
 
@@ -79,18 +83,30 @@ class AdvancementCommands:
                     if quote.cost > surface.budget.available_xp
                     else ""
                 )
-                lines.append(
-                    ctx.i18n.t(
-                        "commands.advancement.item",
-                        category=quote.category,
-                        target=label,
-                        stage=quote.stage,
-                        current=quote.current_value,
-                        next=quote.next_value,
-                        cost=quote.cost,
-                        suffix=suffix,
+                if _is_talent(quote.category):
+                    lines.append(
+                        ctx.i18n.t(
+                            "commands.advancement.talent_item",
+                            category=quote.category,
+                            target=label,
+                            stage=quote.stage,
+                            cost=quote.cost,
+                            suffix=suffix,
+                        )
                     )
-                )
+                else:
+                    lines.append(
+                        ctx.i18n.t(
+                            "commands.advancement.item",
+                            category=quote.category,
+                            target=label,
+                            stage=quote.stage,
+                            current=quote.current_value,
+                            next=quote.next_value,
+                            cost=quote.cost,
+                            suffix=suffix,
+                        )
+                    )
             return "\n".join(lines)
 
         category, separator, target = raw.partition(" ")
@@ -105,11 +121,17 @@ class AdvancementCommands:
         try:
             await ctx.services.characters.save_character(ctx.user_id, ctx.chat_key, character)
         except Exception:
-            # The purchase mutated only this in-memory sheet. Nothing is reported as
-            # successful unless persistence completes.
             return ctx.fail(ctx.i18n.t("commands.advancement.save_failed"))
 
         label = _target_label(pack, result.quote.target, ctx.locale)
+        if _is_talent(result.quote.category):
+            return ctx.i18n.t(
+                "commands.advancement.talent_purchased",
+                target=label,
+                stage=result.quote.stage,
+                cost=result.quote.cost,
+                remaining=result.remaining_xp,
+            )
         return ctx.i18n.t(
             "commands.advancement.purchased",
             target=label,

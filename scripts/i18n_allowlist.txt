@@ -17,6 +17,7 @@ core/advancement_surface.py
 core/creation_layers.py
 core/creation_profiles.py
 core/sheets.py
+core/talent_advancement.py
 
 # Narrow runner exemptions for bot-on parser tokens.
 gateway/runner.py::开启
