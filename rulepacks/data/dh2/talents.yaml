@@ -18,6 +18,11 @@ talents:
     aptitudes: [Общительность, Лидерство]
     source: CH04_TAL_003
 
+  Благоволение Варпа:
+    tier: 3
+    aptitudes: ["Сила Воли", Псайкер]
+    source: CH04_TAL_005
+
   Боевая ярость:
     tier: 2
     aptitudes: [Сила, Защита]
@@ -131,6 +136,18 @@ talents:
     aptitudes: ["Сила Воли", Защита]
     source: CH04_TAL_029
 
+  Использование Механодендритов:
+    tier: 2
+    aptitudes: [Интеллект, Техно]
+    source: CH04_TAL_030
+    specializations:
+      required: true
+      free: false
+      choices: [Боевые, Вспомогательные]
+      aliases:
+        Боевой: Боевые
+        Вспомогательный: Вспомогательные
+
   Истинная Стойкость:
     tier: 3
     aptitudes: [Выносливость, Защита]
@@ -218,6 +235,11 @@ talents:
     tier: 2
     aptitudes: ["Навык Рукопашной", Нападение]
     source: CH04_TAL_051
+
+  Непреклонный:
+    tier: 2
+    aptitudes: ["Сила Воли", Защита]
+    source: CH04_TAL_053
 
   Несокрушимая вера:
     tier: 3
