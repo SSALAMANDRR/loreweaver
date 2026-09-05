@@ -15,8 +15,10 @@ from core.creation_flow import (
     apply_creation_flow_layer,
     choose_creation_flow_starting_item,
     creation_flow_duplicate_requirements,
+    creation_flow_profile_reroll_attributes,
     creation_flow_status,
     finish_creation_advancement,
+    finish_creation_profile_reroll,
     load_creation_flow_spec,
     resolve_creation_flow_duplicates,
     start_creation_flow,
@@ -26,6 +28,7 @@ from core.creation_layers import (
     load_creation_layers,
     resolve_creation_layer_option,
 )
+from core.creation_profile_reroll import CreationProfileRerollError
 from core.creation_profiles import (
     CreationProfileError,
     generate_profiled_character,
@@ -40,6 +43,7 @@ from core.starting_equipment import (
 from gateway.commands.types import CommandCtx, CommandSpec
 
 _DONE_WORDS = {"done", "finish", "完成"}
+_REROLL_WORDS = {"reroll", "重掷", "重擲"}
 _APPLY_WORDS = {"apply", "choose", "选择", "選擇"}
 
 
@@ -167,6 +171,13 @@ def _render_creation_status(ctx: CommandCtx, pack: RulePack, character: Any) -> 
     if stage is None:
         return ctx.i18n.t("commands.creation.complete")
     lines = [ctx.i18n.t("commands.creation.header", stage=stage.id)]
+
+    if stage.kind == "profile_reroll":
+        targets = creation_flow_profile_reroll_attributes(pack, character)
+        labels = ", ".join(pack.display_name(target, ctx.locale) for target in targets)
+        lines.append(ctx.i18n.t("commands.creation.reroll", characteristics=labels))
+        lines.append(ctx.i18n.t("commands.creation.reroll_usage"))
+        return "\n".join(lines)
 
     if stage.kind == "layer":
         options = _layer_options(pack, status)
@@ -460,7 +471,32 @@ class ProfileCreationCommands:
             return ctx.i18n.t("commands.creation.complete")
 
         try:
-            if stage.kind == "layer":
+            if stage.kind == "profile_reroll":
+                raw = ctx.args.strip()
+                if raw.casefold() in _DONE_WORDS:
+                    finish_creation_profile_reroll(pack, character)
+                    prefix = ctx.i18n.t("commands.creation.reroll_skipped")
+                else:
+                    action, separator, target = raw.partition(" ")
+                    if action.casefold() not in _REROLL_WORDS or not separator or not target.strip():
+                        return ctx.fail(ctx.i18n.t("commands.creation.reroll_usage"))
+                    result = finish_creation_profile_reroll(
+                        pack,
+                        character,
+                        target.strip(),
+                        roller=ctx.services.dice,
+                    )
+                    if result.reroll is None:
+                        return ctx.fail(ctx.i18n.t("commands.creation.invalid"))
+                    prefix = ctx.i18n.t(
+                        "commands.creation.rerolled",
+                        characteristic=pack.display_name(result.reroll.target, ctx.locale),
+                        previous=result.reroll.previous,
+                        result=result.reroll.result,
+                    )
+                _auto_apply_bound_layers(pack, character, ctx.services.dice)
+
+            elif stage.kind == "layer":
                 target, selections, option_raw = _parse_layer_action(pack, status, ctx.args.strip())
                 if option_raw is None:
                     return ctx.fail(ctx.i18n.t("commands.creation.invalid"))
@@ -503,7 +539,12 @@ class ProfileCreationCommands:
             else:
                 return ctx.fail(ctx.i18n.t("commands.creation.invalid"))
 
-        except (CreationFlowError, CreationLayerError, StartingEquipmentError):
+        except (
+            CreationFlowError,
+            CreationLayerError,
+            CreationProfileRerollError,
+            StartingEquipmentError,
+        ):
             return ctx.fail(ctx.i18n.t("commands.creation.invalid"))
 
         try:
