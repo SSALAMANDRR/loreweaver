@@ -9,7 +9,7 @@
   "commands.creation.options": "Available options: {options}",
   "commands.creation.choice": "· {id}: {options}",
   "commands.creation.choice_free": "· {id}: enter a specialization as free text",
-  "commands.creation.choice_specialized": "{option}::<specialization>",
+  "commands.creation.choice_specialized": "{option}::<{{specialization}}>",
   "commands.creation.layer_browse": "Use `.create <option>` to inspect that option's required choices.",
   "commands.creation.layer_usage": "Apply it with `.create <option> | {choices}`.",
   "commands.creation.fixed_apply": "Use `.create apply` to apply this already selected stage.",
