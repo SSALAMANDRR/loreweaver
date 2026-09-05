@@ -1,10 +1,9 @@
 """Generic catalog-driven talent advancement purchases.
 
 A rulepack may declare ``talents.yaml`` beside its other advancement sidecars.
-This first catalog slice intentionally contains only talents that have no
-prerequisites beyond choosing a specialization where the talent itself demands
-one. Prerequisite-bearing talents are added only after their requirements can
-be represented structurally; they are never silently treated as requirement-free.
+Catalog entries are quoted and purchased only after their structured prerequisite
+sidecar has been satisfied.  Specializations remain explicit player choices;
+free-form specializations are accepted only when the catalog says so.
 """
 
 from __future__ import annotations
@@ -23,6 +22,7 @@ from core.advancement_purchase import (
     AdvancementPurchaseResult,
     advancement_budget,
 )
+from core.talent_requirements import require_talent_prerequisites
 from core.yaml_safety import safe_load_no_aliases
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -43,7 +43,7 @@ class TalentSpecializations:
 
 @dataclass(frozen=True)
 class TalentEntry:
-    """One XP-purchasable talent with no unresolved prerequisites."""
+    """One XP-purchasable talent with resolved purchase metadata."""
 
     name: str
     tier: int
@@ -334,7 +334,7 @@ def quote_talent_purchase(
     *,
     data_root: Path | None = None,
 ) -> AdvancementPurchaseQuote:
-    """Quote one catalog talent without mutating the sheet or minting XP."""
+    """Quote one legal catalog talent without mutating the sheet or minting XP."""
 
     catalog = load_talent_catalog(pack, data_root=data_root)
     if catalog is None:
@@ -344,6 +344,9 @@ def quote_talent_purchase(
     entry, specialization, aptitudes = _resolve_entry(catalog, target)
     if _owns_talent(values, entry.name, specialization):
         raise AdvancementPurchaseError(f"talent {_storage_text(entry.name, specialization)!r} is already owned")
+
+    canonical_target = _canonical_target(entry.name, specialization)
+    require_talent_prerequisites(pack, character, canonical_target, data_root=data_root)
 
     cost_quote = quote_advancement(
         pack,
@@ -355,7 +358,7 @@ def quote_talent_purchase(
     )
     return AdvancementPurchaseQuote(
         category="talent",
-        target=_canonical_target(entry.name, specialization),
+        target=canonical_target,
         stage=cost_quote.stage,
         current_value=0,
         next_value=1,
@@ -372,7 +375,7 @@ def purchase_talent(
     *,
     data_root: Path | None = None,
 ) -> AdvancementPurchaseResult:
-    """Atomically append one catalog talent and spend its quoted XP."""
+    """Atomically append one legal catalog talent and spend its quoted XP."""
 
     quote = quote_talent_purchase(pack, character, target, data_root=data_root)
     if quote.cost > quote.available_xp:
@@ -435,7 +438,7 @@ def available_talent_purchases(
     *,
     data_root: Path | None = None,
 ) -> tuple[AdvancementPurchaseQuote, ...]:
-    """Enumerate concrete no-prerequisite talent purchases the catalog exposes."""
+    """Enumerate concrete legal talent purchases the catalog exposes."""
 
     catalog = load_talent_catalog(pack, data_root=data_root)
     if catalog is None:
