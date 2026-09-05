@@ -1,7 +1,8 @@
 """Generic, pack-driven orchestration for multi-stage character creation.
 
 The existing creation primitives deliberately stay independent: profiles roll a
-fresh sheet, creation layers apply explicit player choices, advancement owns XP,
+fresh sheet, an optional profile-reroll stage can replace one generated
+attribute, creation layers apply explicit player choices, advancement owns XP,
 and starting equipment owns free acquisitions. This module only orders those
 primitives according to ``creation_flow.yaml`` and persists the current stage on
 the character.
@@ -31,6 +32,11 @@ from core.creation_layers import (
     resolve_creation_duplicates,
     resolve_creation_layer_option,
 )
+from core.creation_profile_reroll import (
+    CreationProfileRerollResult,
+    reroll_profile_attribute,
+    rerollable_profile_attributes,
+)
 from core.creation_profiles import CreationProfileResult, generate_profiled_character
 from core.dice_engine import DiceRoller
 from core.starting_equipment import (
@@ -43,7 +49,14 @@ from core.yaml_safety import safe_load_no_aliases
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _BUILTIN_DATA_ROOT = _REPO_ROOT / "rulepacks" / "data"
 _STATE_KEY = "__creation_flow__"
-_ALLOWED_KINDS = {"profile", "layer", "duplicates", "advancement", "starting_equipment"}
+_ALLOWED_KINDS = {
+    "profile",
+    "profile_reroll",
+    "layer",
+    "duplicates",
+    "advancement",
+    "starting_equipment",
+}
 
 
 class CreationFlowError(ValueError):
@@ -80,6 +93,12 @@ class CreationFlowStart:
     profile_id: str
     attribute_rolls: Mapping[str, int]
     bonus_rolls: Mapping[str, int]
+    status: CreationFlowStatus
+
+
+@dataclass(frozen=True)
+class CreationFlowProfileRerollResult:
+    reroll: CreationProfileRerollResult | None
     status: CreationFlowStatus
 
 
@@ -147,6 +166,7 @@ def load_creation_flow_spec(pack: Any, *, data_root: Path | None = None) -> Crea
     stages: list[CreationFlowStage] = []
     seen_ids: set[str] = set()
     profile_count = 0
+    profile_reroll_count = 0
     duplicate_stage_count = 0
     for index, entry in enumerate(stages_raw):
         if not isinstance(entry, Mapping):
@@ -191,6 +211,8 @@ def load_creation_flow_spec(pack: Any, *, data_root: Path | None = None) -> Crea
 
         if kind == "profile":
             profile_count += 1
+        if kind == "profile_reroll":
+            profile_reroll_count += 1
         if kind == "duplicates":
             duplicate_stage_count += 1
         stages.append(
@@ -205,6 +227,10 @@ def load_creation_flow_spec(pack: Any, *, data_root: Path | None = None) -> Crea
 
     if profile_count != 1 or stages[0].kind != "profile":
         raise CreationFlowError("creation-flow must contain exactly one profile stage and it must be first")
+    if profile_reroll_count > 1:
+        raise CreationFlowError("creation-flow may contain at most one profile-reroll stage")
+    if profile_reroll_count == 1 and (len(stages) < 2 or stages[1].kind != "profile_reroll"):
+        raise CreationFlowError("creation-flow profile-reroll stage must immediately follow the profile stage")
     if duplicate_stage_count > 1:
         raise CreationFlowError("creation-flow may contain at most one duplicate-resolution stage")
     duplicate_indexes = [index for index, stage in enumerate(stages) if stage.kind == "duplicates"]
@@ -238,6 +264,7 @@ def _validated_state(spec: CreationFlowSpec, character: Any) -> dict[str, Any]:
     stage_index = state.get("stage_index")
     completed = state.get("completed")
     layers = state.get("layers")
+    profile_reroll = state.get("profile_reroll")
     if not isinstance(profile_id, str) or not profile_id.strip():
         raise CreationFlowError("creation-flow profile id is invalid")
     if isinstance(stage_index, bool) or not isinstance(stage_index, int):
@@ -248,6 +275,8 @@ def _validated_state(spec: CreationFlowSpec, character: Any) -> dict[str, Any]:
         raise CreationFlowError("creation-flow completed stages are invalid")
     if not isinstance(layers, dict):
         raise CreationFlowError("creation-flow layer state is invalid")
+    if profile_reroll is not None and not isinstance(profile_reroll, dict):
+        raise CreationFlowError("creation-flow profile-reroll state is invalid")
     return state
 
 
@@ -340,6 +369,7 @@ def start_creation_flow(
     character.secondary_attributes[_STATE_KEY] = {
         "version": 1,
         "profile_id": generated.profile_id,
+        "profile_reroll": None,
         "stage_index": 1,
         "completed": [spec.stages[0].id],
         "layers": {},
@@ -353,6 +383,79 @@ def start_creation_flow(
         bonus_rolls=generated.bonus_rolls,
         status=_status(spec, state),
     )
+
+
+def creation_flow_profile_reroll_attributes(
+    pack: Any,
+    character: Any,
+    *,
+    data_root: Path | None = None,
+) -> tuple[str, ...]:
+    """Return legal profile-reroll targets only while that flow stage is active."""
+
+    spec = load_creation_flow_spec(pack, data_root=data_root)
+    if spec is None:
+        raise CreationFlowError("rulepack has no creation-flow sidecar")
+    state = _validated_state(spec, character)
+    status = _status(spec, state)
+    if status.complete:
+        return ()
+    stage = spec.stages[status.stage_index]
+    if stage.kind != "profile_reroll":
+        return ()
+    return rerollable_profile_attributes(pack, status.profile_id)
+
+
+def finish_creation_profile_reroll(
+    pack: Any,
+    character: Any,
+    target: str | None = None,
+    *,
+    roller: DiceRoller | None = None,
+    data_root: Path | None = None,
+) -> CreationFlowProfileRerollResult:
+    """Use or explicitly skip the current one-shot profile attribute reroll."""
+
+    spec = load_creation_flow_spec(pack, data_root=data_root)
+    if spec is None:
+        raise CreationFlowError("rulepack has no creation-flow sidecar")
+    state = _validated_state(spec, character)
+    status = _status(spec, state)
+    if status.complete:
+        raise CreationFlowError("character creation flow is already complete")
+    stage = spec.stages[status.stage_index]
+    if stage.kind != "profile_reroll":
+        raise CreationFlowError(f"current creation-flow stage {stage.id!r} is not a profile reroll")
+
+    snapshot = copy.deepcopy(vars(character))
+    try:
+        target_text = str(target or "").strip()
+        reroll = None
+        if target_text:
+            reroll = reroll_profile_attribute(
+                pack,
+                character,
+                status.profile_id,
+                target_text,
+                roller=roller,
+            )
+        current_state = _validated_state(spec, character)
+        if reroll is None:
+            current_state["profile_reroll"] = {"skipped": True}
+        else:
+            current_state["profile_reroll"] = {
+                "target": reroll.target,
+                "previous": reroll.previous,
+                "result": reroll.result,
+                "expression": reroll.expression,
+            }
+        _complete_current_stage(spec, current_state)
+        _prepare_current_stage(pack, character, spec, current_state, data_root=data_root)
+        return CreationFlowProfileRerollResult(reroll=reroll, status=_status(spec, current_state))
+    except Exception:
+        vars(character).clear()
+        vars(character).update(snapshot)
+        raise
 
 
 def apply_creation_flow_layer(
