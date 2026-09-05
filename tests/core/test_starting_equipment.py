@@ -54,19 +54,31 @@ def test_starting_allowance_is_explicitly_initialized_and_frozen_from_influence_
     assert starting_equipment_budget(pack, character) == budget
 
 
-def test_weapon_acquisition_consumes_one_slot_and_grants_two_standard_magazines():
+def test_ranged_weapon_acquisition_consumes_one_slot_and_grants_two_standard_magazines():
     pack, character = _character(40)
     initialize_starting_equipment(pack, character)
 
     result = choose_starting_item(pack, character, "Lasgun")
 
     assert result.item.name == "Лазган"
+    assert result.item.uses_standard_magazines
     assert result.budget.remaining == 3
     assert result.equipment_added == (
         "Лазган",
-        "Стандартные боеприпасы к Лазган (2 магазина)",
+        "Стандартные боеприпасы: Лазган (2 магазина)",
     )
     assert character.equipment[-2:] == list(result.equipment_added)
+
+
+def test_melee_weapon_does_not_receive_nonsense_magazines():
+    pack, character = _character(40)
+    initialize_starting_equipment(pack, character)
+
+    result = choose_starting_item(pack, character, "Меч")
+
+    assert not result.item.uses_standard_magazines
+    assert result.equipment_added == ("Меч",)
+    assert character.equipment == ["Меч"]
 
 
 def test_too_rare_item_is_rejected_without_spending_a_slot_or_mutating_equipment():
