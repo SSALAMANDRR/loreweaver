@@ -1,0 +1,319 @@
+version: 1
+roll: 1d100
+
+# Dark Heresy Second Edition, Russian OKP translation v1.8, Chapter II,
+# pp. 89-90, Table 2-9: Divinations. Every new acolyte rolls once and applies
+# the result immediately. Row 01 references Table 8-15: Rudiments on p. 355.
+# That table is not present in the current structured Neon corpus (which ends
+# at p. 321), so the rolled 01 result is deliberately preserved as blocked
+# instead of being rerolled, skipped, or guessed.
+rows:
+  - id: mutation_without_corruption
+    min: 1
+    max: 1
+    display:
+      ru: "Мутация снаружи, порча внутри"
+      en: "Mutation without, corruption within"
+    source: "DH2 RU v1.8 p. 89, Table 2-9"
+    blocked_reference: table_8_15_rudiments
+    rules:
+      ru: "Совершите один бросок по Таблице 8-15: Рудименты и примените результат."
+      en: "Roll once on Table 8-15: Rudiments and apply the result."
+
+  - id: trust_your_fear
+    min: 2
+    max: 5
+    display: {ru: "Верь своему страху", en: "Trust in your fear"}
+    source: "DH2 RU v1.8 p. 89, Table 2-9"
+    annotations:
+      mental_disorders: ["Фобия"]
+    effects:
+      add_attributes: {Per: 5}
+    rules:
+      ru: "Получает ментальное расстройство Фобия."
+      en: "Gain the Phobia mental disorder."
+
+  - id: mankind_must_die
+    min: 6
+    max: 9
+    display: {ru: "Для выживания Человечества люди должны умирать", en: "For mankind to survive, men must die"}
+    source: "DH2 RU v1.8 p. 89, Table 2-9"
+    effects:
+      conditional:
+        - when: {field_contains: {field: Talents, value: "Искушённый"}}
+          then: {add_attributes: {WP: 2}}
+          else: {append_fields: {Talents: ["Искушённый"]}}
+
+  - id: pain_is_ecstasy
+    min: 10
+    max: 13
+    display: {ru: "В сравнении с проклятьем боль есть экстаз", en: "Compared to the curse, pain is ecstasy"}
+    source: "DH2 RU v1.8 p. 89, Table 2-9"
+    effects:
+      add_attributes: {Ag: -3}
+    rules:
+      ru: "При первом получении Критического урона за сессию бросьте 1к10; на 10 Критический эффект игнорируется, но урон остаётся."
+      en: "The first time Critical damage is suffered each session, roll 1d10; on 10 ignore the Critical Effect but keep the damage."
+
+  - id: boon_and_bane
+    min: 14
+    max: 17
+    display: {ru: "Будь благом друзей и бичом врагов", en: "Be a boon to allies and a bane to enemies"}
+    source: "DH2 RU v1.8 p. 89, Table 2-9"
+    choices:
+      hatred:
+        field_template:
+          field: Talents
+          template: "Ненависть ({value})"
+          if_present_effects:
+            add_attributes: {S: 2}
+
+  - id: learn_from_death
+    min: 18
+    max: 21
+    display: {ru: "Мудрые учатся на чужих смертях", en: "The wise learn from the deaths of others"}
+    source: "DH2 RU v1.8 p. 89, Table 2-9"
+    choices:
+      increase:
+        options:
+          agility: {names: [Ловкость, Agility], display: {ru: Ловкость, en: Agility}, effects: {add_attributes: {Ag: 3}}}
+          intelligence: {names: [Интеллект, Intelligence], display: {ru: Интеллект, en: Intelligence}, effects: {add_attributes: {Int: 3}}}
+      decrease:
+        options:
+          weapon_skill: {names: ["Навык Рукопашной", "Weapon Skill"], display: {ru: "Навык Рукопашной", en: "Weapon Skill"}, effects: {add_attributes: {WS: -3}}}
+          ballistic_skill: {names: ["Навык Стрельбы", "Ballistic Skill"], display: {ru: "Навык Стрельбы", en: "Ballistic Skill"}, effects: {add_attributes: {BS: -3}}}
+
+  - id: kill_the_alien
+    min: 22
+    max: 25
+    display: {ru: "Убей чужака прежде чем он солжёт", en: "Kill the alien before it can speak its lies"}
+    source: "DH2 RU v1.8 p. 89, Table 2-9"
+    effects:
+      conditional:
+        - when: {field_contains: {field: Talents, value: "Выхватить Оружие"}}
+          then: {add_attributes: {Ag: 2}}
+          else: {append_fields: {Talents: ["Выхватить Оружие"]}}
+
+  - id: truth_is_subjective
+    min: 26
+    max: 29
+    display: {ru: "Истина субъективна", en: "Truth is subjective"}
+    source: "DH2 RU v1.8 p. 89, Table 2-9"
+    effects:
+      add_attributes: {Per: 3}
+    rules:
+      ru: "Первый раз за сессию, когда персонаж получает Порчу, увеличьте полученное количество на 1."
+      en: "The first time Corruption is gained each session, increase the amount gained by 1."
+
+  - id: contemplation_breeds_heresy
+    min: 30
+    max: 33
+    display: {ru: "Раздумья порождают ересь", en: "Thought begets heresy"}
+    source: "DH2 RU v1.8 p. 89, Table 2-9"
+    effects:
+      add_attributes: {Int: -3}
+    rules:
+      ru: "Первый раз за сессию, когда персонаж получает Порчу, уменьшите полученное количество на 1, минимум до 0."
+      en: "The first time Corruption is gained each session, reduce the amount gained by 1, to a minimum of 0."
+
+  - id: heresy_begets_retribution
+    min: 34
+    max: 38
+    display: {ru: "Ересь порождает возмездие", en: "Heresy begets retribution"}
+    source: "DH2 RU v1.8 p. 89, Table 2-9"
+    choices:
+      increase:
+        options:
+          fellowship: {names: [Общительность, Fellowship], display: {ru: Общительность, en: Fellowship}, effects: {add_attributes: {Fel: 3}}}
+          strength: {names: [Сила, Strength], display: {ru: Сила, en: Strength}, effects: {add_attributes: {S: 3}}}
+      decrease:
+        options:
+          toughness: {names: [Выносливость, Toughness], display: {ru: Выносливость, en: Toughness}, effects: {add_attributes: {T: -3}}}
+          willpower: {names: ["Сила Воли", Willpower], display: {ru: "Сила Воли", en: Willpower}, effects: {add_attributes: {WP: -3}}}
+
+  - id: mind_without_purpose
+    min: 39
+    max: 43
+    display: {ru: "Разум без цели блуждает во тьме", en: "A mind without purpose wanders in dark places"}
+    source: "DH2 RU v1.8 p. 89, Table 2-9"
+    rules:
+      ru: "При получении ментального расстройства можно получить новое расстройство вместо усиления существующего."
+      en: "When gaining a mental disorder, a new disorder may be taken instead of increasing an existing one."
+
+  - id: work_worth_doing
+    min: 44
+    max: 49
+    display: {ru: "Если работа важна, за неё можно умереть", en: "If a job is worth doing, it is worth dying for"}
+    source: "DH2 RU v1.8 p. 89, Table 2-9"
+    choices:
+      increase:
+        options:
+          toughness: {names: [Выносливость, Toughness], display: {ru: Выносливость, en: Toughness}, effects: {add_attributes: {T: 3}}}
+          willpower: {names: ["Сила Воли", Willpower], display: {ru: "Сила Воли", en: Willpower}, effects: {add_attributes: {WP: 3}}}
+      decrease:
+        options:
+          fellowship: {names: [Общительность, Fellowship], display: {ru: Общительность, en: Fellowship}, effects: {add_attributes: {Fel: -3}}}
+          strength: {names: [Сила, Strength], display: {ru: Сила, en: Strength}, effects: {add_attributes: {S: -3}}}
+
+  - id: dark_dreams
+    min: 50
+    max: 54
+    display: {ru: "Тёмные мечты лежат на сердце", en: "Dark dreams lie upon the heart"}
+    source: "DH2 RU v1.8 p. 90, Table 2-9"
+    rules:
+      ru: "Когда персонаж бросает по Таблице 8-15: Рудименты, он может выбрать результат вместо случайного."
+      en: "Whenever the character would roll on Table 8-15: Rudiments, the player may choose the result instead."
+
+  - id: violence_solves_everything
+    min: 55
+    max: 59
+    display: {ru: "Насилию подвластно всё", en: "Violence solves everything"}
+    source: "DH2 RU v1.8 p. 90, Table 2-9"
+    choices:
+      increase:
+        options:
+          weapon_skill: {names: ["Навык Рукопашной", "Weapon Skill"], display: {ru: "Навык Рукопашной", en: "Weapon Skill"}, effects: {add_attributes: {WS: 3}}}
+          ballistic_skill: {names: ["Навык Стрельбы", "Ballistic Skill"], display: {ru: "Навык Стрельбы", en: "Ballistic Skill"}, effects: {add_attributes: {BS: 3}}}
+      decrease:
+        options:
+          agility: {names: [Ловкость, Agility], display: {ru: Ловкость, en: Agility}, effects: {add_attributes: {Ag: -3}}}
+          intelligence: {names: [Интеллект, Intelligence], display: {ru: Интеллект, en: Intelligence}, effects: {add_attributes: {Int: -3}}}
+
+  - id: ignorance_is_wisdom
+    min: 60
+    max: 63
+    display: {ru: "Невежество суть лучшая мудрость", en: "Ignorance is a wisdom of its own"}
+    source: "DH2 RU v1.8 p. 90, Table 2-9"
+    effects:
+      add_attributes: {Per: -3}
+    rules:
+      ru: "Первый раз за сессию, когда персонаж получает Безумие, уменьшите полученное количество на 1, минимум до 0."
+      en: "The first time Insanity is gained each session, reduce the amount gained by 1, to a minimum of 0."
+
+  - id: madmen_prosper
+    min: 64
+    max: 67
+    display: {ru: "Лишь безумцы достаточно сильны для процветания", en: "Only the insane have strength enough to prosper"}
+    source: "DH2 RU v1.8 p. 90, Table 2-9"
+    effects:
+      add_attributes: {WP: 3}
+    rules:
+      ru: "Первый раз за сессию, когда персонаж получает Безумие, увеличьте полученное количество на 1."
+      en: "The first time Insanity is gained each session, increase the amount gained by 1."
+
+  - id: suspicious_mind
+    min: 68
+    max: 71
+    display: {ru: "Подозрительный разум — здоровый разум", en: "A suspicious mind is a healthy mind"}
+    source: "DH2 RU v1.8 p. 90, Table 2-9"
+    effects:
+      add_attributes: {Per: 2}
+    rules:
+      ru: "Можно перебрасывать проверки Бдительности, когда персонаж Ошеломлён."
+      en: "Awareness tests may be rerolled while the character is Stunned."
+
+  - id: suffering_teaches
+    min: 72
+    max: 75
+    display: {ru: "Страдание — безжалостный учитель", en: "Suffering is an unrelenting instructor"}
+    source: "DH2 RU v1.8 p. 90, Table 2-9"
+    effects:
+      add_attributes: {T: -3}
+    rules:
+      ru: "Первый раз за сессию после получения урона персонаж получает +20 к следующей проверке до конца следующего хода."
+      en: "The first time damage is suffered each session, gain +20 to the next test before the end of the next turn."
+
+  - id: one_true_fear
+    min: 76
+    max: 79
+    display: {ru: "Есть лишь один истинный страх — умереть не исполнив долг", en: "There is only one true fear: dying with duty unfulfilled"}
+    source: "DH2 RU v1.8 p. 90, Table 2-9"
+    choices:
+      resistance:
+        options:
+          cold:
+            names: [Холод, Cold]
+            display: {ru: Холод, en: Cold}
+            effects:
+              conditional:
+                - when: {field_contains: {field: Talents, value: "Сопротивление (Холод)"}}
+                  then: {add_attributes: {T: 2}}
+                  else: {append_fields: {Talents: ["Сопротивление (Холод)"]}}
+          heat:
+            names: [Жара, Heat]
+            display: {ru: Жара, en: Heat}
+            effects:
+              conditional:
+                - when: {field_contains: {field: Talents, value: "Сопротивление (Жара)"}}
+                  then: {add_attributes: {T: 2}}
+                  else: {append_fields: {Talents: ["Сопротивление (Жара)"]}}
+          fear:
+            names: [Страх, Fear]
+            display: {ru: Страх, en: Fear}
+            effects:
+              conditional:
+                - when: {field_contains: {field: Talents, value: "Сопротивление (Страх)"}}
+                  then: {add_attributes: {T: 2}}
+                  else: {append_fields: {Talents: ["Сопротивление (Страх)"]}}
+
+  - id: duty_ends_in_death
+    min: 80
+    max: 83
+    display: {ru: "Лишь со смертью завершается долг", en: "Only in death does duty end"}
+    source: "DH2 RU v1.8 p. 90, Table 2-9"
+    rules:
+      ru: "Первый раз за сессию, когда персонаж получает Усталость, уменьшите её количество на 1, минимум до 0."
+      en: "The first time Fatigue is gained each session, reduce the amount gained by 1, to a minimum of 0."
+
+  - id: innocence_is_illusion
+    min: 84
+    max: 87
+    display: {ru: "Невинность есть иллюзия", en: "Innocence is an illusion"}
+    source: "DH2 RU v1.8 p. 90, Table 2-9"
+    effects:
+      conditional:
+        - when: {field_contains: {field: Talents, value: "Чуткая Интуиция"}}
+          then: {add_attributes: {Int: 2}}
+          else: {append_fields: {Talents: ["Чуткая Интуиция"]}}
+
+  - id: born_for_war
+    min: 88
+    max: 91
+    display: {ru: "Человек рождён для войны", en: "A man is born to war"}
+    source: "DH2 RU v1.8 p. 90, Table 2-9"
+    effects:
+      conditional:
+        - when: {skill_at_least: {skill: Dodge, rank: 1}}
+          then: {add_attributes: {Ag: 2}}
+          else: {skills: {Dodge: 1}}
+
+  - id: zeal_has_no_substitute
+    min: 92
+    max: 95
+    display: {ru: "Нет замены рвению", en: "There is no substitute for zeal"}
+    source: "DH2 RU v1.8 p. 90, Table 2-9"
+    effects:
+      conditional:
+        - when: {field_contains: {field: Talents, value: "Разговор с Толпой"}}
+          then: {add_attributes: {Fel: 2}}
+          else: {append_fields: {Talents: ["Разговор с Толпой"]}}
+
+  - id: give_your_life
+    min: 96
+    max: 99
+    display: {ru: "Даже не имеющий ничего может отдать свою жизнь", en: "Even one who has nothing can still offer his life"}
+    source: "DH2 RU v1.8 p. 90, Table 2-9"
+    rules:
+      ru: "Когда персонаж сжигает порог Судьбы, чтобы пережить смертельную рану, бросьте 1к10; на 10 он выживает без снижения порога Судьбы."
+      en: "When burning Fate Threshold to survive a lethal injury, roll 1d10; on 10 survive without reducing Fate Threshold."
+
+  - id: ask_how_you_serve
+    min: 100
+    max: 100
+    display: {ru: "Не спрашивай почему ты служишь. Спрашивай как", en: "Do not ask why you serve. Ask how"}
+    source: "DH2 RU v1.8 p. 90, Table 2-9"
+    effects:
+      # During creation current Fate is full, so increasing both stored current
+      # points and threshold preserves that invariant while the rule itself
+      # increases the threshold by one.
+      add_attributes: {FateThreshold: 1, Fate: 1}
