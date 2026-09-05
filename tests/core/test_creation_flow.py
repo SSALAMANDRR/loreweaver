@@ -9,8 +9,10 @@ from core.creation_flow import (
     apply_creation_flow_layer,
     choose_creation_flow_starting_item,
     creation_flow_duplicate_requirements,
+    creation_flow_profile_reroll_attributes,
     creation_flow_status,
     finish_creation_advancement,
+    finish_creation_profile_reroll,
     load_creation_flow_spec,
     resolve_creation_flow_duplicates,
     start_creation_flow,
@@ -51,6 +53,7 @@ def test_dh2_creation_flow_declares_explicit_generic_stage_order():
     assert spec is not None
     assert [(stage.id, stage.kind) for stage in spec.stages] == [
         ("characteristics", "profile"),
+        ("characteristic_reroll", "profile_reroll"),
         ("home_world", "layer"),
         ("background", "layer"),
         ("role", "layer"),
@@ -58,10 +61,53 @@ def test_dh2_creation_flow_declares_explicit_generic_stage_order():
         ("advancement", "advancement"),
         ("starting_equipment", "starting_equipment"),
     ]
-    assert spec.stages[1].layer_id == "home_world"
-    assert spec.stages[1].option_from_profile is True
-    assert spec.stages[2].defer_duplicates is True
+    assert spec.stages[2].layer_id == "home_world"
+    assert spec.stages[2].option_from_profile is True
     assert spec.stages[3].defer_duplicates is True
+    assert spec.stages[4].defer_duplicates is True
+
+
+def test_profile_reroll_reuses_selected_world_expression_and_second_result_is_final():
+    pack = load_rulepack("dh2")
+    started = start_creation_flow(pack, "Дикий мир", "Acolyte", roller=_FixedRoller(30))
+    sheet = started.character
+
+    assert started.status.stage_id == "characteristic_reroll"
+    assert started.status.stage_kind == "profile_reroll"
+    assert creation_flow_profile_reroll_attributes(pack, sheet) == (
+        "WS",
+        "BS",
+        "S",
+        "T",
+        "Ag",
+        "Int",
+        "Per",
+        "WP",
+        "Fel",
+        "Inf",
+    )
+
+    reroller = _FixedRoller(41)
+    rerolled = finish_creation_profile_reroll(pack, sheet, "Выносливость", roller=reroller)
+
+    assert rerolled.reroll is not None
+    assert rerolled.reroll.target == "T"
+    assert rerolled.reroll.previous == 30
+    assert rerolled.reroll.result == 41
+    assert rerolled.reroll.expression == "3d10kh2+20"
+    assert reroller.calls == ["3d10kh2+20"]
+    assert sheet.attributes["T"] == 41
+    assert rerolled.status.stage_id == "home_world"
+    assert sheet.secondary_attributes["__creation_flow__"]["profile_reroll"] == {
+        "target": "T",
+        "previous": 30,
+        "result": 41,
+        "expression": "3d10kh2+20",
+    }
+
+    with pytest.raises(CreationFlowError, match="not a profile reroll"):
+        finish_creation_profile_reroll(pack, sheet, "S", roller=_FixedRoller(50))
+    assert sheet.attributes["T"] == 41
 
 
 def test_dh2_full_creation_flow_reaches_ready_character_without_system_specific_core_logic():
@@ -72,10 +118,13 @@ def test_dh2_full_creation_flow_reaches_ready_character_without_system_specific_
     sheet = started.character
 
     assert started.profile_id == "feral_world"
-    assert started.status.stage_id == "home_world"
-    assert started.status.stage_kind == "layer"
+    assert started.status.stage_id == "characteristic_reroll"
     assert initialized_advancement_budget(pack, sheet) is None
     assert starting_equipment_budget(pack, sheet) is None
+
+    skipped_reroll = finish_creation_profile_reroll(pack, sheet)
+    assert skipped_reroll.reroll is None
+    assert skipped_reroll.status.stage_id == "home_world"
 
     home_world = apply_creation_flow_layer(pack, sheet, roller=roller)
     assert home_world.result.option_id == "feral_world"
@@ -150,6 +199,7 @@ def test_dh2_full_creation_flow_reaches_ready_character_without_system_specific_
     assert third.status.stage_id is None
     assert third.status.completed_stages == (
         "characteristics",
+        "characteristic_reroll",
         "home_world",
         "background",
         "role",
@@ -167,6 +217,7 @@ def test_duplicate_resolution_rejects_missing_or_already_owned_choices_atomicall
     pack = load_rulepack("dh2")
     roller = _FixedRoller(30)
     sheet = start_creation_flow(pack, "Дикий мир", "Acolyte", roller=roller).character
+    finish_creation_profile_reroll(pack, sheet)
     apply_creation_flow_layer(pack, sheet, roller=roller)
     apply_creation_flow_layer(
         pack,
@@ -202,6 +253,7 @@ def test_profile_bound_layer_cannot_switch_to_a_different_option_and_rolls_back(
     pack = load_rulepack("dh2")
     started = start_creation_flow(pack, "Дикий мир", "Acolyte", roller=_FixedRoller(30))
     sheet = started.character
+    finish_creation_profile_reroll(pack, sheet)
     before = sheet.to_dict()
 
     with pytest.raises(CreationFlowError, match="must reuse profile option"):
