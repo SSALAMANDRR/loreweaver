@@ -41,9 +41,12 @@ def test_dh2_catalog_has_no_unstructured_prerequisite_talents():
 
     assert catalog is not None
     assert requirements is not None
-    assert len(catalog.talents) == 67
-    assert len(requirements.requirements) == 56
+    assert len(catalog.talents) == 82
+    assert len(requirements.requirements) == 71
     assert set(catalog.talents) == set(requirements.requirements) | _NO_PREREQUISITE_TALENTS
+    assert "Враг" not in catalog.talents
+    assert "Крепкое Телосложение" not in catalog.talents
+    assert "Мастер Клинка" not in catalog.talents
 
 
 def test_characteristic_requirement_hides_and_blocks_talent_until_met():
@@ -186,3 +189,74 @@ def test_unyielding_requires_psychic_resistance_specialization():
 
     character.talents.append("Сопротивление (Психические Силы)")
     assert talent_requirements_met(pack, character, "Непреклонный")
+
+
+def test_specialization_dependent_requirement_uses_selected_attack_mode():
+    pack, character = _character("Навык Стрельбы", "Изящество")
+    character.attributes["WS"] = 39
+    character.attributes["BS"] = 40
+    character.attributes["Per"] = 35
+
+    assert not talent_requirements_met(pack, character, "Неотразимая Атака::Рукопашная")
+    assert talent_requirements_met(pack, character, "Неотразимая Атака::Стрелковая")
+
+    ranged = quote_talent_purchase(pack, character, "Неотразимая Атака (Стрелковая)")
+    assert ranged.stage == "tier_2"
+    assert ranged.aptitude_matches == 2
+    assert ranged.cost == 300
+
+
+def test_selected_skill_requirement_tracks_mastery_specialization():
+    pack, character = _character("Интеллект", "Познание")
+    character.skills["Awareness"] = 4
+    character.skills["Logic"] = 3
+
+    assert talent_requirements_met(pack, character, "Мастерство::Awareness")
+    assert not talent_requirements_met(pack, character, "Мастерство::Logic")
+
+    quote = quote_talent_purchase(pack, character, "Мастерство (Awareness)")
+    assert quote.stage == "tier_3"
+    assert quote.cost == 400
+
+
+def test_any_lore_specialization_satisfies_infused_knowledge():
+    pack, character = _character("Интеллект", "Познание")
+    character.attributes["Int"] = 40
+
+    assert not talent_requirements_met(pack, character, "Вложенное Знание")
+
+    character.skills["CommonLore::Империум"] = 1
+    assert talent_requirements_met(pack, character, "Вложенное Знание")
+
+
+def test_psy_rating_presence_is_grounded_in_psyker_elite_advance():
+    pack, character = _character("Восприятие", "Псайкер")
+    character.attributes["Per"] = 30
+    character.skills["Psyniscience"] = 1
+
+    assert not talent_requirements_met(pack, character, "Варп-чувство")
+
+    character.elite_advances.append("Псайкер")
+    assert talent_requirements_met(pack, character, "Варп-чувство")
+
+
+def test_cybernetic_prerequisites_use_equipment_plus_mechanicus_trait():
+    pack, character = _character("Навык Рукопашной", "Техно")
+    character.equipment.append("Конденсатор люминена")
+
+    assert not talent_requirements_met(pack, character, "Шок Люминена")
+
+    character.traits.append("Имплантаты Механикус")
+    assert talent_requirements_met(pack, character, "Шок Люминена")
+
+
+def test_two_weapon_master_requires_both_wielder_specializations():
+    pack, character = _character("Нападение", "Изящество")
+    character.attributes["Ag"] = 45
+    character.attributes["WS"] = 40
+    character.talents.extend(["Амбидекстрия", "Обоерукий воин (Рукопашное)"])
+
+    assert not talent_requirements_met(pack, character, "Обоерукий мастер")
+
+    character.talents.append("Обоерукий воин (Стрелковое)")
+    assert talent_requirements_met(pack, character, "Обоерукий мастер")
