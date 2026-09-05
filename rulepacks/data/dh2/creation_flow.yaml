@@ -2,14 +2,18 @@ version: 1
 
 # Explicit player-facing order for Dark Heresy Second Edition character
 # creation. Core only understands generic stage kinds and never branches on DH2.
-# The home-world layer reuses the already selected creation profile so the
-# characteristic roll profile and the non-characteristic home-world benefits
-# cannot diverge. Background/role aptitude collisions stay unresolved until all
-# seven starting aptitudes are known, then the player replaces every duplicate
-# before the starting XP budget becomes available.
+# After the initial profile rolls the player may make the rules-granted one-shot
+# characteristic reroll; its second result is mandatory. The home-world layer
+# then reuses the selected profile so characteristic generation and the
+# non-characteristic home-world benefits cannot diverge. Background/role
+# aptitude collisions stay unresolved until all seven starting aptitudes are
+# known, then the player replaces every duplicate before starting XP is exposed.
 stages:
   - id: characteristics
     kind: profile
+
+  - id: characteristic_reroll
+    kind: profile_reroll
 
   - id: home_world
     kind: layer
