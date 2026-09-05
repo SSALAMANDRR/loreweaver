@@ -16,6 +16,7 @@ _NO_PREREQUISITE_TALENTS = {
     "Выучка с Оружием",
     "Выучка с Экзотическим Оружием",
     "Выхватить Оружие",
+    "Крепкое Телосложение",
     "Неистовство",
     "Ненависть",
     "Нокдаун",
@@ -41,12 +42,12 @@ def test_dh2_catalog_has_no_unstructured_prerequisite_talents():
 
     assert catalog is not None
     assert requirements is not None
-    assert len(catalog.talents) == 82
-    assert len(requirements.requirements) == 71
+    assert len(catalog.talents) == 84
+    assert len(requirements.requirements) == 72
     assert set(catalog.talents) == set(requirements.requirements) | _NO_PREREQUISITE_TALENTS
     assert "Враг" not in catalog.talents
-    assert "Крепкое Телосложение" not in catalog.talents
-    assert "Мастер Клинка" not in catalog.talents
+    assert "Крепкое Телосложение" in catalog.talents
+    assert "Мастер Клинка" in catalog.talents
 
 
 def test_characteristic_requirement_hides_and_blocks_talent_until_met():
@@ -260,3 +261,25 @@ def test_two_weapon_master_requires_both_wielder_specializations():
 
     character.talents.append("Обоерукий воин (Стрелковое)")
     assert talent_requirements_met(pack, character, "Обоерукий мастер")
+
+
+def test_blademaster_requires_ws30_and_melee_weapon_training():
+    pack, character = _character("Навык Рукопашной", "Изящество")
+    character.attributes["WS"] = 30
+
+    character.talents.append("Выучка с Оружием (Лазерное)")
+    assert not talent_requirements_met(pack, character, "Мастер Клинка")
+
+    character.talents.append("Выучка с Оружием (Цепное)")
+    assert talent_requirements_met(pack, character, "Мастер Клинка")
+    quote = quote_talent_purchase(pack, character, "Мастер Клинка")
+    assert quote.stage == "tier_3"
+    assert quote.cost == 400
+
+
+def test_blademaster_accepts_existing_combined_low_tech_creation_grant():
+    pack, character = _character("Навык Рукопашной", "Изящество")
+    character.attributes["WS"] = 30
+    character.talents.append("Выучка с Оружием (Лазерное, Низкотехнологичное)")
+
+    assert talent_requirements_met(pack, character, "Мастер Клинка")
