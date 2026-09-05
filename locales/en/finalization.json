@@ -1,0 +1,16 @@
+{
+  "commands.help.finalize": "Roll and resolve the active character's pack-declared creation finalization.",
+  "commands.finalization.no_character": "Create or select a character before finalizing character creation.",
+  "commands.finalization.unsupported": "This character's rule system does not expose a creation-finalization table.",
+  "commands.finalization.creation_incomplete": "Finish the staged character-creation flow before finalization.",
+  "commands.finalization.roll_prompt": "Final creation step is ready. Use `.finalize roll` to make the mandatory one-time roll.",
+  "commands.finalization.result": "Finalization roll {roll}: {result}",
+  "commands.finalization.rule": "· {rule}",
+  "commands.finalization.choice": "· {id}: {options}",
+  "commands.finalization.choice_free": "· {id}: enter a free-text value",
+  "commands.finalization.choice_usage": "Resolve the required choices with `.finalize {assignments}`.",
+  "commands.finalization.blocked": "This rolled result requires referenced rule data that is not available in the current pack: {reference}. The roll is preserved and cannot be rerolled; finalization remains pending.",
+  "commands.finalization.complete": "Character finalization is complete. The character is ready for play.",
+  "commands.finalization.invalid": "That finalization action cannot be applied. Check the rolled result and every required choice.",
+  "commands.finalization.save_failed": "The finalization change was not saved, so it is not treated as applied."
+}
