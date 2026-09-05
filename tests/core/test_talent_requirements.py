@@ -41,8 +41,8 @@ def test_dh2_catalog_has_no_unstructured_prerequisite_talents():
 
     assert catalog is not None
     assert requirements is not None
-    assert len(catalog.talents) == 64
-    assert len(requirements.requirements) == 53
+    assert len(catalog.talents) == 67
+    assert len(requirements.requirements) == 56
     assert set(catalog.talents) == set(requirements.requirements) | _NO_PREREQUISITE_TALENTS
 
 
@@ -146,3 +146,43 @@ def test_low_level_talent_api_cannot_bypass_prerequisites():
 
     assert character.talents == before_talents
     assert advancement_budget(pack, character) == before_budget
+
+
+def test_mechanicus_trait_unlocks_mechadendrite_purchase():
+    pack, character = _character("Интеллект", "Техно")
+
+    assert not talent_requirements_met(pack, character, "Использование Механодендритов::Боевые")
+    with pytest.raises(AdvancementPurchaseError):
+        quote_talent_purchase(pack, character, "Использование Механодендритов (Боевые)")
+
+    character.traits.append("Имплантаты Механикус")
+    assert talent_requirements_met(pack, character, "Использование Механодендритов::Боевые")
+    quote = quote_talent_purchase(pack, character, "Использование Механодендритов (Боевые)")
+    assert quote.stage == "tier_2"
+    assert quote.cost == 300
+
+
+def test_legacy_mechadendrite_specialization_alias_blocks_duplicate_purchase():
+    pack, character = _character("Интеллект", "Техно")
+    character.traits.append("Имплантаты Механикус")
+    character.talents.append("Использование Механодендритов (Вспомогательный)")
+    before_budget = advancement_budget(pack, character)
+
+    with pytest.raises(AdvancementPurchaseError):
+        quote_talent_purchase(pack, character, "Использование Механодендритов (Вспомогательные)")
+    with pytest.raises(AdvancementPurchaseError):
+        purchase_talent(pack, character, "Использование Механодендритов::Вспомогательные")
+
+    assert character.talents == ["Использование Механодендритов (Вспомогательный)"]
+    assert advancement_budget(pack, character) == before_budget
+
+
+def test_unyielding_requires_psychic_resistance_specialization():
+    pack, character = _character("Сила Воли", "Защита")
+    character.attributes["WP"] = 30
+    character.talents.append("Сопротивление (Страх)")
+
+    assert not talent_requirements_met(pack, character, "Непреклонный")
+
+    character.talents.append("Сопротивление (Психические Силы)")
+    assert talent_requirements_met(pack, character, "Непреклонный")
