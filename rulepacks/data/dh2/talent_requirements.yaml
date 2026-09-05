@@ -1,6 +1,6 @@
 version: 1
 talent_field: Talents
-source: "Dark Heresy Second Edition RU OKP v1.8, Chapter IV tables 4-1 to 4-3 and talent descriptions. Human prerequisite prose is represented only where it maps deterministically to existing sheet state. A bare Chapter IV 'psy rating' prerequisite is represented by owning the Psyker elite advance, whose immediate changes grant Psy Rating 1. Cybernetic prerequisites use the canonical Chapter V equipment titles."
+source: "Dark Heresy Second Edition RU OKP v1.8, Chapter IV tables 4-1 to 4-3 and talent descriptions. Human prerequisite prose is represented only where it maps deterministically to existing sheet state. A bare Chapter IV 'psy rating' prerequisite requires Psy Rating 1+ with an EliteAdvances Psyker fallback for legacy sheets. Cybernetic prerequisites prefer the structured Implants field and retain equipment fallback for legacy sheets."
 
 requirements:
   Аккуратный Допрос:
@@ -18,7 +18,9 @@ requirements:
 
   Бастион Железной Воли:
     all:
-      - field_contains: {field: EliteAdvances, value: Псайкер}
+      - any:
+          - stat: {name: PsyRating, min: 1}
+          - field_contains: {field: EliteAdvances, value: Псайкер}
       - talent: {name: Непреклонный}
       - stat: {name: WP, min: 40}
 
@@ -43,26 +45,34 @@ requirements:
 
   Варп-блок:
     all:
-      - field_contains: {field: EliteAdvances, value: Псайкер}
+      - any:
+          - stat: {name: PsyRating, min: 1}
+          - field_contains: {field: EliteAdvances, value: Псайкер}
       - talent: {name: Могучий Разум}
       - stat: {name: WP, min: 50}
 
   Варп-Канал:
     all:
-      - field_contains: {field: EliteAdvances, value: Псайкер}
+      - any:
+          - stat: {name: PsyRating, min: 1}
+          - field_contains: {field: EliteAdvances, value: Псайкер}
       - talent: {name: Непреклонный}
       - stat: {name: WP, min: 50}
 
   Варп-чувство:
     all:
       - stat: {name: Per, min: 30}
-      - field_contains: {field: EliteAdvances, value: Псайкер}
+      - any:
+          - stat: {name: PsyRating, min: 1}
+          - field_contains: {field: EliteAdvances, value: Псайкер}
       - skill: {name: Psyniscience, min_rank: 1}
 
   Взрыв Люминена:
     all:
       - talent: {name: Шок Люминена}
-      - equipment_contains: {value: "Конденсатор люминена"}
+      - any:
+          - field_contains: {field: Implants, value: "Конденсатор люминена"}
+          - equipment_contains: {value: "Конденсатор люминена"}
       - field_contains: {field: Traits, value: "Имплантаты Механикус"}
 
   Вихрь Смерти:
@@ -130,7 +140,9 @@ requirements:
 
   Левитационная Трансценденция:
     all:
-      - equipment_contains: {value: "Маглев-катушки"}
+      - any:
+          - field_contains: {field: Implants, value: "Маглев-катушки"}
+          - equipment_contains: {value: "Маглев-катушки"}
       - field_contains: {field: Traits, value: "Имплантаты Механикус"}
 
   Лицо В Толпе:
@@ -229,14 +241,18 @@ requirements:
   Призыв Железа:
     all:
       - field_contains: {field: Traits, value: "Имплантаты Механикус"}
-      - equipment_contains: {value: "Имплантаты Железного Призыва"}
+      - any:
+          - field_contains: {field: Implants, value: "Имплантаты Железного Призыва"}
+          - equipment_contains: {value: "Имплантаты Железного Призыва"}
 
   Пробивающий Удар:
     talent: {name: Сокрушительный Удар}
 
   Просангвина:
     all:
-      - equipment_contains: {value: Автосангвинация}
+      - any:
+          - field_contains: {field: Implants, value: Автосангвинация}
+          - equipment_contains: {value: Автосангвинация}
       - field_contains: {field: Traits, value: "Имплантаты Механикус"}
 
   Работа Под Прикрытием:
@@ -305,7 +321,9 @@ requirements:
 
   Шок Люминена:
     all:
-      - equipment_contains: {value: "Конденсатор люминена"}
+      - any:
+          - field_contains: {field: Implants, value: "Конденсатор люминена"}
+          - equipment_contains: {value: "Конденсатор люминена"}
       - field_contains: {field: Traits, value: "Имплантаты Механикус"}
 
   Яростный Натиск:
