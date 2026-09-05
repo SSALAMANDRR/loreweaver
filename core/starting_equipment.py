@@ -1,7 +1,7 @@
 """Generic pack-driven starting-equipment acquisitions.
 
 Some systems grant a fixed number of free item selections during character
-creation.  The allowance is explicitly initialized on a fresh character so an
+creation. The allowance is explicitly initialized on a fresh character so an
 old/campaign sheet can never mint creation gear merely by opening a UI later.
 The item catalog and all thresholds live in ``starting_equipment.yaml``.
 """
@@ -34,6 +34,7 @@ class StartingItem:
     aliases: tuple[str, ...]
     availability: int
     kind: str
+    uses_standard_magazines: bool = False
     source: str = ""
 
 
@@ -136,7 +137,14 @@ def load_starting_equipment_spec(
         item_id = str(item_id_raw).strip()
         if not item_id or not isinstance(entry, Mapping):
             raise StartingEquipmentError("starting-equipment item entries must be named mappings")
-        unknown_item = set(entry) - {"name", "aliases", "availability", "kind", "source"}
+        unknown_item = set(entry) - {
+            "name",
+            "aliases",
+            "availability",
+            "kind",
+            "uses_standard_magazines",
+            "source",
+        }
         if unknown_item:
             raise StartingEquipmentError(
                 f"starting-equipment item {item_id!r} has unknown keys {sorted(unknown_item)}"
@@ -156,6 +164,15 @@ def load_starting_equipment_spec(
             raise StartingEquipmentError(f"starting-equipment item {item_id!r}.aliases must be a string list")
         aliases = tuple(str(alias).strip() for alias in aliases_raw)
         availability = _int(entry.get("availability"), where=f"item {item_id!r}.availability")
+        uses_standard_magazines = entry.get("uses_standard_magazines", False)
+        if not isinstance(uses_standard_magazines, bool):
+            raise StartingEquipmentError(
+                f"starting-equipment item {item_id!r}.uses_standard_magazines must be boolean"
+            )
+        if uses_standard_magazines and kind != "weapon":
+            raise StartingEquipmentError(
+                f"starting-equipment item {item_id!r} may use standard magazines only when kind=weapon"
+            )
 
         for surface in (item_id, name, *aliases):
             key = _normalize(surface)
@@ -172,6 +189,7 @@ def load_starting_equipment_spec(
             aliases=aliases,
             availability=availability,
             kind=kind,
+            uses_standard_magazines=uses_standard_magazines,
             source=str(entry.get("source") or "").strip(),
         )
 
@@ -308,8 +326,8 @@ def choose_starting_item(
     try:
         added = [item.name]
         equipment.append(item.name)
-        if item.kind == "weapon" and spec.weapon_magazines:
-            ammo = f"Стандартные боеприпасы к {item.name} ({spec.weapon_magazines} магазина)"
+        if item.uses_standard_magazines and spec.weapon_magazines:
+            ammo = f"Стандартные боеприпасы: {item.name} ({spec.weapon_magazines} магазина)"
             equipment.append(ammo)
             added.append(ammo)
 
