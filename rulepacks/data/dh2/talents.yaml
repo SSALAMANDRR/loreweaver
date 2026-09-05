@@ -203,6 +203,15 @@ talents:
     aptitudes: ["Сила Воли", Защита]
     source: CH04_TAL_035
 
+  Крепкое Телосложение:
+    tier: 1
+    aptitudes: [Выносливость, Общая]
+    source: CH04_TAL_036
+    repeatable:
+      max_purchases: {stat: TB, multiplier: 2}
+      attribute_deltas: {Wounds: 1}
+      indexed_storage: true
+
   Левитационная Трансценденция:
     tier: 2
     aptitudes: [Интеллект, Техно]
@@ -222,6 +231,11 @@ talents:
     tier: 2
     aptitudes: [Интеллект, Техно]
     source: CH04_TAL_040
+
+  Мастер Клинка:
+    tier: 3
+    aptitudes: ["Навык Рукопашной", Изящество]
+    source: CH04_TAL_041
 
   Мастерство:
     tier: 3
