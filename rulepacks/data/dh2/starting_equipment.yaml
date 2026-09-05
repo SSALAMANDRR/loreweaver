@@ -10,6 +10,7 @@ items:
     aliases: [Bolter]
     availability: -30
     kind: weapon
+    uses_standard_magazines: true
     source: CH05_H076
 
   flamer:
@@ -17,6 +18,7 @@ items:
     aliases: [Огнемёт, Flamer]
     availability: -10
     kind: weapon
+    uses_standard_magazines: true
     source: CH05_H076
 
   lasgun:
@@ -24,6 +26,7 @@ items:
     aliases: [Lasgun]
     availability: 10
     kind: weapon
+    uses_standard_magazines: true
     source: CH05_H076
 
   long_las:
@@ -31,6 +34,7 @@ items:
     aliases: [Long-Las, Longlas]
     availability: -10
     kind: weapon
+    uses_standard_magazines: true
     source: CH05_H076
 
   bow:
@@ -45,6 +49,7 @@ items:
     aliases: [Autogun]
     availability: 0
     kind: weapon
+    uses_standard_magazines: true
     source: CH05_H078
 
   hand_cannon:
@@ -52,6 +57,7 @@ items:
     aliases: [Hand Cannon]
     availability: -10
     kind: weapon
+    uses_standard_magazines: true
     source: CH05_H078
 
   shotgun:
@@ -59,6 +65,7 @@ items:
     aliases: [Shotgun]
     availability: 0
     kind: weapon
+    uses_standard_magazines: true
     source: CH05_H078
 
   sniper_rifle:
@@ -66,6 +73,7 @@ items:
     aliases: [Sniper Rifle]
     availability: -10
     kind: weapon
+    uses_standard_magazines: true
     source: CH05_H078
 
   stub_revolver:
@@ -73,6 +81,7 @@ items:
     aliases: [Stub Revolver]
     availability: 20
     kind: weapon
+    uses_standard_magazines: true
     source: CH05_H078
 
   tear_gas_grenade:
