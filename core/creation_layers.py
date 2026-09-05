@@ -18,6 +18,7 @@ A layer option may apply:
 
 * scalar declared sheet ``fields``;
 * list-like ``append_fields``;
+* scalar declared sheet ``attributes``;
 * rolled sheet attributes through pack-agnostic dice expressions;
 * skill ranks, including ``Family::specialization`` keys;
 * starting equipment;
@@ -351,7 +352,7 @@ def _apply_effects(
         return [], {}
     if not isinstance(raw, Mapping):
         raise CreationLayerError("creation effects must be a mapping")
-    unknown = set(raw) - {"fields", "append_fields", "roll_attributes", "skills", "equipment"}
+    unknown = set(raw) - {"fields", "append_fields", "attributes", "roll_attributes", "skills", "equipment"}
     if unknown:
         raise CreationLayerError(f"creation effects have unknown keys {sorted(unknown)}")
 
@@ -383,6 +384,12 @@ def _apply_effects(
                 replacement_queues,
             ),
         )
+
+    attributes = raw.get("attributes") or {}
+    if not isinstance(attributes, Mapping):
+        raise CreationLayerError("creation effects.attributes must be a mapping")
+    for canonical, value in attributes.items():
+        set_sheet_value(character, pack, str(canonical), value)
 
     rolled = raw.get("roll_attributes") or {}
     if not isinstance(rolled, Mapping):
