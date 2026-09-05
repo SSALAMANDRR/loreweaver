@@ -15,6 +15,7 @@ from core.creation_flow import (
     resolve_creation_flow_duplicates,
     start_creation_flow,
 )
+from core.creation_layers import CreationLayerError
 from core.rulepacks import load_rulepack
 from core.starting_equipment import starting_equipment_budget
 
@@ -183,11 +184,11 @@ def test_duplicate_resolution_rejects_missing_or_already_owned_choices_atomicall
     )
     before = sheet.to_dict()
 
-    with pytest.raises(Exception):
+    with pytest.raises(CreationLayerError, match="requires exactly 2 choices"):
         resolve_creation_flow_duplicates(pack, sheet, {"Aptitudes": ["Навык Стрельбы"]})
     assert sheet.to_dict() == before
 
-    with pytest.raises(Exception):
+    with pytest.raises(CreationLayerError, match="is already present"):
         resolve_creation_flow_duplicates(
             pack,
             sheet,
