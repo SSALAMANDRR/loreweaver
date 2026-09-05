@@ -1,0 +1,16 @@
+{
+  "commands.help.finalize": "为当前角色执行规则包声明的创建终结掷骰与结果处理。",
+  "commands.finalization.no_character": "请先创建或选择角色，再完成角色创建。",
+  "commands.finalization.unsupported": "该角色的规则系统没有提供创建终结表。",
+  "commands.finalization.creation_incomplete": "请先完成分阶段角色创建流程，再进行终结。",
+  "commands.finalization.roll_prompt": "角色创建已进入最后一步。使用 `.finalize roll` 进行这次强制且只能进行一次的掷骰。",
+  "commands.finalization.result": "终结掷骰 {roll}：{result}",
+  "commands.finalization.rule": "· {rule}",
+  "commands.finalization.choice": "· {id}: {options}",
+  "commands.finalization.choice_free": "· {id}: 输入自由文本值",
+  "commands.finalization.choice_usage": "使用 `.finalize {assignments}` 完成必选项。",
+  "commands.finalization.blocked": "该掷骰结果需要当前规则包中尚不存在的引用规则数据：{reference}。本次结果已保留且不能重掷；终结保持未完成状态。",
+  "commands.finalization.complete": "角色创建终结完成。该角色已可进入游戏。",
+  "commands.finalization.invalid": "无法应用该终结操作。请检查已掷出的结果以及所有必选项。",
+  "commands.finalization.save_failed": "终结变更未成功保存，因此不会视为已经应用。"
+}
