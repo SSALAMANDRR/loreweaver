@@ -9,13 +9,14 @@ from here; monkeypatch a helper where it is DEFINED (e.g. `gateway.commands.llm.
 from __future__ import annotations
 
 from gateway.commands.advancement import AdvancementCommands
+from gateway.commands.finalization import FinalizationCommands
 from gateway.commands.profile_creation import ProfileCreationCommands
 from gateway.commands.router import CommandRouter as _BaseCommandRouter
 from gateway.commands.types import CommandCtx, CommandReply, CommandSpec
 
 
-class CommandRouter(AdvancementCommands, ProfileCreationCommands, _BaseCommandRouter):
-    """Public router plus generic creation and advancement surfaces."""
+class CommandRouter(FinalizationCommands, AdvancementCommands, ProfileCreationCommands, _BaseCommandRouter):
+    """Public router plus generic creation, advancement and finalization surfaces."""
 
 
 __all__ = ["CommandCtx", "CommandReply", "CommandRouter", "CommandSpec"]
