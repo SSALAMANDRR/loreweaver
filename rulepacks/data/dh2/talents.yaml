@@ -18,6 +18,11 @@ talents:
     aptitudes: [Общительность, Лидерство]
     source: CH04_TAL_003
 
+  Бастион Железной Воли:
+    tier: 3
+    aptitudes: ["Сила Воли", Псайкер]
+    source: CH04_TAL_004
+
   Благоволение Варпа:
     tier: 3
     aptitudes: ["Сила Воли", Псайкер]
@@ -52,10 +57,35 @@ talents:
     aptitudes: [Ловкость, Полевое]
     source: CH04_TAL_010
 
+  Варп-блок:
+    tier: 3
+    aptitudes: ["Сила Воли", Псайкер]
+    source: CH04_TAL_011
+
+  Варп-Канал:
+    tier: 2
+    aptitudes: ["Сила Воли", Псайкер]
+    source: CH04_TAL_012
+
+  Варп-чувство:
+    tier: 1
+    aptitudes: [Восприятие, Псайкер]
+    source: CH04_TAL_013
+
+  Взрыв Люминена:
+    tier: 3
+    aptitudes: ["Навык Стрельбы", Техно]
+    source: CH04_TAL_014
+
   Вихрь Смерти:
     tier: 2
     aptitudes: ["Навык Рукопашной", Изящество]
     source: CH04_TAL_015
+
+  Вложенное Знание:
+    tier: 3
+    aptitudes: [Интеллект, Познание]
+    source: CH04_TAL_016
 
   Вскочить:
     tier: 1
@@ -173,6 +203,11 @@ talents:
     aptitudes: ["Сила Воли", Защита]
     source: CH04_TAL_035
 
+  Левитационная Трансценденция:
+    tier: 2
+    aptitudes: [Интеллект, Техно]
+    source: CH04_TAL_037
+
   Лицо В Толпе:
     tier: 2
     aptitudes: [Общительность, Общение]
@@ -187,6 +222,14 @@ talents:
     tier: 2
     aptitudes: [Интеллект, Техно]
     source: CH04_TAL_040
+
+  Мастерство:
+    tier: 3
+    aptitudes: [Интеллект, Познание]
+    source: CH04_TAL_042
+    specializations:
+      required: true
+      free: true
 
   Меткий Стрелок:
     tier: 2
@@ -236,6 +279,18 @@ talents:
     aptitudes: ["Навык Рукопашной", Нападение]
     source: CH04_TAL_051
 
+  Неотразимая Атака:
+    tier: 2
+    aptitudes: ["Навык Рукопашной", Изящество]
+    source: CH04_TAL_052
+    specializations:
+      required: true
+      free: false
+      choices: [Рукопашная, Стрелковая]
+      aptitude_overrides:
+        Рукопашная: ["Навык Рукопашной", Изящество]
+        Стрелковая: ["Навык Стрельбы", Изящество]
+
   Непреклонный:
     tier: 2
     aptitudes: ["Сила Воли", Защита]
@@ -245,6 +300,15 @@ talents:
     tier: 3
     aptitudes: ["Сила Воли", Защита]
     source: CH04_TAL_054
+
+  Несущий Смерть:
+    tier: 3
+    aptitudes: [Восприятие, Изящество]
+    source: CH04_TAL_055
+    specializations:
+      required: true
+      free: false
+      choices: [Рукопашная, Стрельба]
 
   Неубиваемый:
     tier: 3
@@ -273,6 +337,11 @@ talents:
         Рукопашное: ["Навык Рукопашной", Изящество]
         Стрелковое: ["Навык Стрельбы", Изящество]
 
+  Обоерукий мастер:
+    tier: 3
+    aptitudes: [Нападение, Изящество]
+    source: CH04_TAL_060
+
   Отринь ведьмовство:
     tier: 2
     aptitudes: ["Сила Воли", Защита]
@@ -288,10 +357,20 @@ talents:
     aptitudes: [Интеллект, Полевое]
     source: CH04_TAL_063
 
+  Призыв Железа:
+    tier: 1
+    aptitudes: ["Сила Воли", Техно]
+    source: CH04_TAL_064
+
   Пробивающий Удар:
     tier: 3
     aptitudes: [Сила, Нападение]
     source: CH04_TAL_065
+
+  Просангвина:
+    tier: 2
+    aptitudes: [Выносливость, Техно]
+    source: CH04_TAL_066
 
   Работа Под Прикрытием:
     tier: 2
@@ -359,6 +438,18 @@ talents:
     aptitudes: [Ловкость, Защита]
     source: CH04_TAL_078
 
+  Убийственная Точность:
+    tier: 2
+    aptitudes: ["Навык Рукопашной", Изящество]
+    source: CH04_TAL_079
+    specializations:
+      required: true
+      free: false
+      choices: [Рукопашное, Стрелковое]
+      aptitude_overrides:
+        Рукопашное: ["Навык Рукопашной", Изящество]
+        Стрелковое: ["Навык Стрельбы", Изящество]
+
   Убийственный Удар:
     tier: 2
     aptitudes: ["Навык Рукопашной", Нападение]
@@ -378,6 +469,11 @@ talents:
     tier: 3
     aptitudes: [Ловкость, Защита]
     source: CH04_TAL_083
+
+  Шок Люминена:
+    tier: 2
+    aptitudes: ["Навык Рукопашной", Техно]
+    source: CH04_TAL_084
 
   Яростный Натиск:
     tier: 3
