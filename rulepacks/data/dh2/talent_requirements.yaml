@@ -159,6 +159,18 @@ requirements:
       - skill: {name: TechUse, min_rank: 1}
       - skill: {name: "Trade::оружейник", min_rank: 1}
 
+  Мастер Клинка:
+    all:
+      - stat: {name: WS, min: 30}
+      - any:
+          - talent: {name: Выучка с Оружием, specialization: Цепное}
+          - talent: {name: Выучка с Оружием, specialization: Силовое}
+          - talent: {name: Выучка с Оружием, specialization: Низкотехнологичное}
+          - talent: {name: Выучка с Оружием, specialization: Шоковое}
+          - field_contains: {field: Talents, value: "Выучка с Оружием (Лазерное, Низкотехнологичное)"}
+          - field_contains: {field: Talents, value: "Выучка с Оружием (Цепное, Лазерное)"}
+          - field_contains: {field: Talents, value: "Выучка с Оружием (Низкотехнологичное, Твёрдотельное)"}
+
   Мастерство:
     selected_skill: {min_rank: 4}
 
