@@ -233,7 +233,9 @@ layers:
                 effects: {equipment: ["монозадачный серво-череп (Инструментальный)"]}
               optical_mechadendrite:
                 names: ["оптический механодендрит", "Optical Mechadendrite"]
-                effects: {equipment: ["оптический механодендрит"]}
+                effects:
+                  append_fields: {Implants: ["Оптический механодендрит"]}
+                  equipment: ["оптический механодендрит"]
           aptitude:
             options:
               knowledge:
@@ -518,14 +520,16 @@ layers:
       mystic:
         names: [Мистик, Mystic]
         display: {ru: Мистик, en: Mystic}
-        source: "DH2 RU v1.8 pp. 73-74"
+        source: "DH2 RU v1.8 pp. 73-74; Psyker elite immediate changes on pp. 107-108"
         rules:
           ability: "Смотрящий в Варп"
           ability_ru: "Мистик начинает игру с элитным улучшением Псайкер; рекомендуется Сила Воли не менее 35."
         effects:
           fields: {Role: Мистик}
+          attributes: {PsyRating: 1}
           append_fields:
-            Aptitudes: [Защита, Интеллект, Познание, Восприятие, "Сила Воли"]
+            Aptitudes: [Защита, Интеллект, Познание, Восприятие, "Сила Воли", Псайкер]
+            Traits: [Псайкер]
             RoleAbilities: ["Смотрящий в Варп"]
             EliteAdvances: [Псайкер]
         choices:
