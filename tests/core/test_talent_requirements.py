@@ -4,7 +4,7 @@ from core.advancement_purchase import AdvancementPurchaseError, advancement_budg
 from core.advancement_surface import available_advancement_surface, safe_next_advancement_purchase, safe_purchase_advancement
 from core.character_manager import CharacterSheet
 from core.rulepacks import load_rulepack
-from core.talent_advancement import load_talent_catalog
+from core.talent_advancement import load_talent_catalog, purchase_talent, quote_talent_purchase
 from core.talent_requirements import (
     load_talent_requirements,
     talent_requirements_met,
@@ -128,6 +128,21 @@ def test_requirement_failure_never_spends_xp_or_mutates_talents():
 
     with pytest.raises(AdvancementPurchaseError):
         safe_purchase_advancement(pack, character, "talent", "Быстрая Атака")
+
+    assert character.talents == before_talents
+    assert advancement_budget(pack, character) == before_budget
+
+
+def test_low_level_talent_api_cannot_bypass_prerequisites():
+    pack, character = _character("Навык Рукопашной", "Изящество")
+    character.attributes["WS"] = 29
+    before_budget = advancement_budget(pack, character)
+    before_talents = list(character.talents)
+
+    with pytest.raises(AdvancementPurchaseError):
+        quote_talent_purchase(pack, character, "Быстрая Атака")
+    with pytest.raises(AdvancementPurchaseError):
+        purchase_talent(pack, character, "Быстрая Атака")
 
     assert character.talents == before_talents
     assert advancement_budget(pack, character) == before_budget
