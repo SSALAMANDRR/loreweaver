@@ -33,6 +33,7 @@ defaults:
   WP: 1
   Fel: 1
   Inf: 1
+  PsyRating: 0
   Wounds: 0
   Damage: 0
   Fatigue: 0
@@ -71,6 +72,7 @@ alias:
   WP: ["Сила Воли", "Сила Воли (СВ)", СВ]
   Fel: [Общительность, "Общительность (О)", О]
   Inf: [Влияние, "Влияние (Вл)", Вл]
+  PsyRating: ["Пси-рейтинг", "Пси рейтинг", "Psy Rating"]
   Wounds: [Раны]
   Damage: [Урон]
   Fatigue: [Усталость]
@@ -315,6 +317,7 @@ display:
     WP: Сила Воли
     Fel: Общительность
     Inf: Влияние
+    PsyRating: Пси-рейтинг
     WSB: Бонус Навыка Рукопашной
     BSB: Бонус Навыка Стрельбы
     SB: Бонус Силы
@@ -337,6 +340,7 @@ display:
     Aptitudes: Склонности
     Talents: Таланты
     Traits: Черты
+    Implants: Имплантаты
     BackgroundAbilities: Способности предыстории
     RoleAbilities: Способности роли
     EliteAdvances: Элитные улучшения
@@ -379,6 +383,7 @@ display:
     WP: WP
     Fel: Fel
     Inf: Inf
+    PsyRating: Psy Rating
     WSB: WSB
     BSB: BSB
     SB: SB
@@ -401,6 +406,7 @@ display:
     Aptitudes: Aptitudes
     Talents: Talents
     Traits: Traits
+    Implants: Implants
     BackgroundAbilities: Background Abilities
     RoleAbilities: Role Abilities
     EliteAdvances: Elite Advances
@@ -455,6 +461,7 @@ sheet:
     WP: WP
     Fel: Fel
     Inf: Inf
+    PsyRating: PSY_RATING
     Wounds: WOUNDS
     Damage: DAMAGE
     Fatigue: FATIGUE
@@ -490,6 +497,7 @@ sheet:
     Aptitudes: aptitudes
     Talents: talents
     Traits: traits
+    Implants: implants
     BackgroundAbilities: background_abilities
     RoleAbilities: role_abilities
     EliteAdvances: elite_advances
@@ -504,6 +512,7 @@ sheet:
     WP: 1
     Fel: 1
     Inf: 1
+    PSY_RATING: 0
     WOUNDS: 0
     DAMAGE: 0
     FATIGUE: 0
@@ -516,6 +525,7 @@ sheet:
     aptitudes: []
     talents: []
     traits: []
+    implants: []
     background_abilities: []
     role_abilities: []
     elite_advances: []
