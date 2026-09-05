@@ -1,0 +1,342 @@
+version: 1
+count_stat: InfB
+minimum_availability: -10
+weapon_magazines: 2
+source: "Dark Heresy Second Edition RU OKP v1.8, Chapter II starting acquisitions plus Chapter V availability tables. Only entries whose availability is explicit in the structured Neon corpus are listed in this first catalog slice."
+
+items:
+  bolter:
+    name: Болтер
+    aliases: [Bolter]
+    availability: -30
+    kind: weapon
+    source: CH05_H076
+
+  flamer:
+    name: Огнемет
+    aliases: [Огнемёт, Flamer]
+    availability: -10
+    kind: weapon
+    source: CH05_H076
+
+  lasgun:
+    name: Лазган
+    aliases: [Lasgun]
+    availability: 10
+    kind: weapon
+    source: CH05_H076
+
+  long_las:
+    name: Лонглаз
+    aliases: [Long-Las, Longlas]
+    availability: -10
+    kind: weapon
+    source: CH05_H076
+
+  bow:
+    name: Лук
+    aliases: [Bow]
+    availability: 10
+    kind: weapon
+    source: CH05_H076
+
+  autogun:
+    name: Автоган
+    aliases: [Autogun]
+    availability: 0
+    kind: weapon
+    source: CH05_H078
+
+  hand_cannon:
+    name: Ручная пушка
+    aliases: [Hand Cannon]
+    availability: -10
+    kind: weapon
+    source: CH05_H078
+
+  shotgun:
+    name: Дробовик
+    aliases: [Shotgun]
+    availability: 0
+    kind: weapon
+    source: CH05_H078
+
+  sniper_rifle:
+    name: Снайперская винтовка
+    aliases: [Sniper Rifle]
+    availability: -10
+    kind: weapon
+    source: CH05_H078
+
+  stub_revolver:
+    name: Стаб-револьвер
+    aliases: [Stub Revolver]
+    availability: 20
+    kind: weapon
+    source: CH05_H078
+
+  tear_gas_grenade:
+    name: Слезоточивый газ
+    aliases: [Слезоточивая граната, Tear Gas Grenade]
+    availability: -10
+    kind: consumable
+    source: CH05_H102
+
+  hallucinogen_grenade:
+    name: Галюциногенная граната
+    aliases: [Галлюциногенная граната, Hallucinogen Grenade]
+    availability: -10
+    kind: consumable
+    source: CH05_H102
+
+  smoke_grenade:
+    name: Дымовая граната
+    aliases: [Smoke Grenade]
+    availability: 10
+    kind: consumable
+    source: CH05_H102
+
+  krak_rocket:
+    name: Крак-ракета
+    aliases: [Krak Missile]
+    availability: -10
+    kind: ammunition
+    source: CH05_H102
+
+  chain_blade:
+    name: Цепной клинок
+    aliases: [Chain Blade]
+    availability: -10
+    kind: weapon
+    source: CH05_H132
+
+  hunting_lance:
+    name: Охотничья пика
+    aliases: [Hunting Lance]
+    availability: -10
+    kind: weapon
+    source: CH05_H132
+
+  knife:
+    name: Нож
+    aliases: [Knife]
+    availability: 20
+    kind: weapon
+    source: CH05_H132
+
+  spear:
+    name: Копье
+    aliases: [Копьё, Spear]
+    availability: 10
+    kind: weapon
+    source: CH05_H132
+
+  sword:
+    name: Меч
+    aliases: [Sword]
+    availability: 10
+    kind: weapon
+    source: CH05_H132
+
+  warhammer:
+    name: Боевой молот
+    aliases: [Warhammer]
+    availability: -10
+    kind: weapon
+    source: CH05_H132
+
+  imperial_robes:
+    name: Имперские одеяния
+    aliases: [Imperial Robes]
+    availability: 0
+    kind: armour
+    source: CH05_H187
+
+  chainmail:
+    name: Кольчуга
+    aliases: [Chainmail]
+    availability: 10
+    kind: armour
+    source: CH05_H187
+
+  flak_gauntlets:
+    name: Флак-перчатки
+    aliases: [Flak Gauntlets]
+    availability: 0
+    kind: armour
+    source: CH05_H187
+
+  flak_vest:
+    name: Флак-жилет
+    aliases: [Flak Vest]
+    availability: 0
+    kind: armour
+    source: CH05_H187
+
+  flak_coat:
+    name: Флак-пальто
+    aliases: [Flak Coat]
+    availability: 0
+    kind: armour
+    source: CH05_H187
+
+  clothing:
+    name: Одежда
+    aliases: [Clothing]
+    availability: 30
+    kind: gear
+    source: CH05_H202
+
+  void_suit:
+    name: Пустотный скафандр
+    aliases: [Void Suit]
+    availability: -10
+    kind: gear
+    source: CH05_H202
+
+  respirator:
+    name: Респиратор
+    aliases: [Respirator]
+    availability: 0
+    kind: gear
+    source: CH05_H202
+
+  filter_plugs:
+    name: Фильтры-затычки
+    aliases: [Filter Plugs]
+    availability: 10
+    kind: gear
+    source: CH05_H202
+
+  desoleum_fungus:
+    name: Десолеумская поганка
+    aliases: [Desoleum Fungus]
+    availability: -10
+    kind: consumable
+    source: CH05_H225
+
+  slaught:
+    name: Забой
+    aliases: [Slaught]
+    availability: -10
+    kind: consumable
+    source: CH05_H225
+
+  recaf:
+    name: Рекаф
+    aliases: [Recaf]
+    availability: 30
+    kind: consumable
+    source: CH05_H225
+
+  stimm:
+    name: Стимм
+    aliases: [Stimm]
+    availability: 0
+    kind: consumable
+    source: CH05_H225
+
+  auspex:
+    name: Ауспик/сканер
+    aliases: [Ауспик, Auspex, Scanner]
+    availability: -10
+    kind: gear
+    source: CH05_H272
+
+  loudhailer:
+    name: Громкоговоритель
+    aliases: [Loudhailer]
+    availability: -10
+    kind: gear
+    source: CH05_H272
+
+  injector:
+    name: Инъектор
+    aliases: [Injector]
+    availability: 10
+    kind: gear
+    source: CH05_H272
+
+  las_cutter:
+    name: Лазрезак
+    aliases: [Las Cutter]
+    availability: 0
+    kind: gear
+    source: CH05_H272
+
+  magnoculars:
+    name: Магнокуляры
+    aliases: [Magnoculars]
+    availability: 0
+    kind: gear
+    source: CH05_H272
+
+  medikit:
+    name: Медпакет
+    aliases: [Medikit]
+    availability: 10
+    kind: gear
+    source: CH05_H272
+
+  manacles:
+    name: Наручники
+    aliases: [Manacles]
+    availability: 20
+    kind: gear
+    source: CH05_H272
+
+  pict_recorder:
+    name: Пикт рекордер
+    aliases: [Пикт-рекордер, Pict Recorder]
+    availability: 0
+    kind: gear
+    source: CH05_H272
+
+  psy_focus:
+    name: Пси-фокус
+    aliases: [Psy Focus]
+    availability: 0
+    kind: gear
+    source: CH05_H272
+
+  glow_globe:
+    name: Светошар/лампа
+    aliases: [Светошар, Лампа, Glow-globe]
+    availability: 30
+    kind: gear
+    source: CH05_H272
+
+  stummer:
+    name: Стуммер
+    aliases: [Stummer]
+    availability: 0
+    kind: gear
+    source: CH05_H272
+
+  surgical_needle:
+    name: Хирургические иглы
+    aliases: [Surgical Needles]
+    availability: 0
+    kind: gear
+    source: CH05_H272
+
+  expanding_rounds:
+    name: Экспансивные пули
+    aliases: [Expander Rounds]
+    availability: -10
+    kind: ammunition
+    source: CH05_H176
+
+  penetrator_rounds:
+    name: Пробивной заряд
+    aliases: [Penetrator Rounds]
+    availability: -10
+    kind: ammunition
+    source: CH05_H176
+
+  armour_piercing_rounds:
+    name: Бронебойные пули
+    aliases: [Armour-piercing Rounds]
+    availability: -10
+    kind: ammunition
+    source: CH05_H176
