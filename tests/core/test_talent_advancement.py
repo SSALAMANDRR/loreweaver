@@ -23,14 +23,15 @@ def _character(*aptitudes: str) -> tuple[object, CharacterSheet]:
     return pack, character
 
 
-def test_dh2_talent_catalog_enables_only_verified_no_prerequisite_purchases():
+def test_dh2_talent_catalog_contains_verified_purchasable_slice():
     pack = load_rulepack("dh2")
     catalog = load_talent_catalog(pack)
 
     assert catalog is not None
     assert catalog.field == "Talents"
-    assert len(catalog.talents) == 11
+    assert len(catalog.talents) == 64
     assert "Быстрая Перезарядка" in catalog.talents
+    assert "Амбидекстрия" in catalog.talents
     assert "Враг" not in catalog.talents
     assert "Крепкое Телосложение" not in catalog.talents
 

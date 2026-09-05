@@ -30,6 +30,7 @@ from core.talent_advancement import (
     purchase_talent,
     quote_talent_purchase,
 )
+from core.talent_requirements import require_talent_prerequisites, talent_requirements_met
 
 
 @dataclass(frozen=True)
@@ -99,6 +100,7 @@ def safe_next_advancement_purchase(
     if initialized_advancement_budget(pack, character, data_root=data_root) is None:
         raise AdvancementPurchaseError("character advancement budget is not initialized")
     if _normalize(category) == "talent" and load_talent_catalog(pack, data_root=data_root) is not None:
+        require_talent_prerequisites(pack, character, target, data_root=data_root)
         return quote_talent_purchase(pack, character, target, data_root=data_root)
     _require_specialization(pack, target)
     return next_advancement_purchase(pack, character, category, target, data_root=data_root)
@@ -117,6 +119,7 @@ def safe_purchase_advancement(
     if initialized_advancement_budget(pack, character, data_root=data_root) is None:
         raise AdvancementPurchaseError("character advancement budget is not initialized")
     if _normalize(category) == "talent" and load_talent_catalog(pack, data_root=data_root) is not None:
+        require_talent_prerequisites(pack, character, target, data_root=data_root)
         return purchase_talent(pack, character, target, data_root=data_root)
     safe_next_advancement_purchase(pack, character, category, target, data_root=data_root)
     return purchase_advancement(pack, character, category, target, data_root=data_root)
@@ -138,6 +141,7 @@ def available_advancement_surface(
     Talent catalogs enumerate unspecialized talents and finite specialization
     choices. Free-form talent specializations are intentionally omitted from the
     list but remain directly purchasable when the player names one explicitly.
+    Declared talent prerequisites are filtered before a quote reaches the player.
     """
 
     budget = initialized_advancement_budget(pack, character, data_root=data_root)
@@ -189,6 +193,8 @@ def available_advancement_surface(
                 continue
 
     for quote in available_talent_purchases(pack, character, data_root=data_root):
+        if not talent_requirements_met(pack, character, quote.target, data_root=data_root):
+            continue
         key = (_normalize(quote.category), _normalize(quote.target))
         if key not in seen:
             seen.add(key)

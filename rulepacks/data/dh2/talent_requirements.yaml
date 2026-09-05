@@ -1,0 +1,206 @@
+version: 1
+talent_field: Talents
+source: "Dark Heresy Second Edition RU OKP v1.8, Chapter IV tables 4-1 to 4-3 and talent descriptions. Human prerequisite prose is represented only where it maps deterministically to existing sheet state."
+
+requirements:
+  Аккуратный Допрос:
+    all:
+      - talent: {name: Скоординированный Допрос}
+      - stat: {name: Fel, min: 50}
+
+  Амбидекстрия:
+    stat: {name: Ag, min: 30}
+
+  Аура Власти:
+    all:
+      - stat: {name: Fel, min: 40}
+      - stat: {name: WP, min: 40}
+
+  Боевая ярость:
+    talent: {name: Неистовство}
+
+  Постоянная бдительность:
+    all:
+      - skill: {name: Awareness, min_rank: 2}
+      - any:
+          - stat: {name: Int, min: 35}
+          - stat: {name: Per, min: 35}
+
+  Бой Вслепую:
+    stat: {name: Per, min: 30}
+
+  Быстрая Атака:
+    stat: {name: WS, min: 30}
+
+  Вихрь Смерти:
+    stat: {name: WS, min: 40}
+
+  Вскочить:
+    stat: {name: Ag, min: 30}
+
+  Вспышка Озарения:
+    all:
+      - talent: {name: Сеть Контактов}
+      - talent: {name: Скоординированный Допрос}
+      - stat: {name: Int, min: 40}
+
+  Выбор Цели:
+    stat: {name: BS, min: 50}
+
+  Глаз Мстителя:
+    stat: {name: BS, min: 50}
+
+  Двойной Выстрел:
+    talent: {name: Обоерукий воин, any_specialization: true}
+
+  Длань Омниссии:
+    all:
+      - stat: {name: Int, min: 40}
+      - skill: {name: TechUse, min_rank: 2}
+
+  Железная Челюсть:
+    stat: {name: T, min: 40}
+
+  Искусный Стук:
+    stat: {name: Int, min: 30}
+
+  Искушённый:
+    stat: {name: WP, min: 40}
+
+  Истинная Стойкость:
+    stat: {name: T, min: 40}
+
+  Контратака:
+    stat: {name: WS, min: 40}
+
+  Костолом:
+    all:
+      - talent: {name: Амбидекстрия}
+      - stat: {name: Ag, min: 35}
+      - stat: {name: WS, min: 35}
+
+  Крепкие Бицепсы:
+    stat: {name: S, min: 45}
+
+  Крепкий Орешек:
+    stat: {name: WP, min: 40}
+
+  Лицо В Толпе:
+    all:
+      - stat: {name: Fel, min: 35}
+      - talent: {name: Разговор с Толпой}
+
+  Мастер Боя:
+    stat: {name: WS, min: 30}
+
+  Мастер Брони:
+    all:
+      - stat: {name: Int, min: 35}
+      - skill: {name: TechUse, min_rank: 1}
+      - skill: {name: "Trade::оружейник", min_rank: 1}
+
+  Меткий Стрелок:
+    stat: {name: BS, min: 35}
+
+  Молниеносная Атака:
+    talent: {name: Быстрая Атака}
+
+  Мощный Выстрел:
+    stat: {name: BS, min: 40}
+
+  Мягкое Приземление:
+    stat: {name: Ag, min: 30}
+
+  Негде Прятаться:
+    stat: {name: Per, min: 30}
+
+  Независимое Прицеливание:
+    stat: {name: BS, min: 40}
+
+  Неостановимый Натиск:
+    stat: {name: WS, min: 35}
+
+  Несокрушимая вера:
+    all:
+      - talent: {name: Искушённый}
+      - talent: {name: Сопротивление, specialization: Страх}
+      - stat: {name: WP, min: 45}
+
+  Неубиваемый:
+    all:
+      - stat: {name: WP, min: 50}
+      - stat: {name: T, min: 50}
+
+  Нечеловеческая Скорость:
+    all:
+      - stat: {name: WS, min: 40}
+      - stat: {name: Ag, min: 50}
+
+  Отринь ведьмовство:
+    stat: {name: WP, min: 35}
+
+  Превосходный Хирургеон:
+    skill: {name: Medicae, min_rank: 2}
+
+  Пробивающий Удар:
+    talent: {name: Сокрушительный Удар}
+
+  Работа Под Прикрытием:
+    stat: {name: Int, min: 35}
+
+  Разговор с Толпой:
+    stat: {name: Fel, min: 30}
+
+  Разоружение:
+    stat: {name: Ag, min: 30}
+
+  Связи:
+    stat: {name: Fel, min: 30}
+
+  Семижильный:
+    stat: {name: T, min: 40}
+
+  Сеть Контактов:
+    all:
+      - talent: {name: Работа Под Прикрытием}
+      - stat: {name: Int, min: 35}
+
+  Скоординированный Допрос:
+    all:
+      - talent: {name: Разговор с Толпой}
+      - any:
+          - stat: {name: S, min: 40}
+          - stat: {name: WP, min: 40}
+      - skill: {name: Interrogation, min_rank: 1}
+
+  Сокрушительный Удар:
+    stat: {name: WS, min: 40}
+
+  Стрельба от Бедра:
+    all:
+      - stat: {name: BS, min: 40}
+      - stat: {name: Ag, min: 40}
+
+  Трудная Мишень:
+    stat: {name: Ag, min: 40}
+
+  Убийственный Удар:
+    stat: {name: WS, min: 50}
+
+  Удар Асассина:
+    all:
+      - stat: {name: Ag, min: 40}
+      - skill: {name: Acrobatics, min_rank: 1}
+
+  Чуткая Интуиция:
+    stat: {name: Int, min: 35}
+
+  Шаг В Сторону:
+    all:
+      - stat: {name: Ag, min: 40}
+      - any:
+          - skill: {name: Dodge, min_rank: 1}
+          - skill: {name: Parry, min_rank: 1}
+
+  Яростный Натиск:
+    stat: {name: S, min: 50}

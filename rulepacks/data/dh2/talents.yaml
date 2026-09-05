@@ -1,12 +1,71 @@
 version: 1
 field: Talents
-source: "Dark Heresy Second Edition RU OKP v1.8, Chapter IV pp. 145-162; only XP-purchasable talents with no prerequisites are enabled in this slice."
+source: "Dark Heresy Second Edition RU OKP v1.8, Chapter IV pp. 145-162. Catalog entries are enabled only when their prerequisites are represented structurally or explicitly absent."
 
 talents:
+  Аккуратный Допрос:
+    tier: 3
+    aptitudes: [Интеллект, Изящество]
+    source: CH04_TAL_001
+
+  Амбидекстрия:
+    tier: 1
+    aptitudes: ["Навык Рукопашной", "Навык Стрельбы"]
+    source: CH04_TAL_002
+
+  Аура Власти:
+    tier: 3
+    aptitudes: [Общительность, Лидерство]
+    source: CH04_TAL_003
+
+  Боевая ярость:
+    tier: 2
+    aptitudes: [Сила, Защита]
+    source: CH04_TAL_006
+
+  Постоянная бдительность:
+    tier: 2
+    aptitudes: [Восприятие, Защита]
+    source: CH04_TAL_007
+    specializations:
+      required: true
+      free: false
+      choices: [Восприятие, Интеллект]
+
+  Бой Вслепую:
+    tier: 1
+    aptitudes: [Восприятие, Полевое]
+    source: CH04_TAL_008
+
+  Быстрая Атака:
+    tier: 2
+    aptitudes: ["Навык Рукопашной", Изящество]
+    source: CH04_TAL_009
+
   Быстрая Перезарядка:
     tier: 1
     aptitudes: [Ловкость, Полевое]
     source: CH04_TAL_010
+
+  Вихрь Смерти:
+    tier: 2
+    aptitudes: ["Навык Рукопашной", Изящество]
+    source: CH04_TAL_015
+
+  Вскочить:
+    tier: 1
+    aptitudes: [Ловкость, Общая]
+    source: CH04_TAL_018
+
+  Вспышка Озарения:
+    tier: 3
+    aptitudes: [Восприятие, Познание]
+    source: CH04_TAL_019
+
+  Выбор Цели:
+    tier: 3
+    aptitudes: ["Навык Стрельбы", Изящество]
+    source: CH04_TAL_020
 
   Выучка с Оружием:
     tier: 1
@@ -42,6 +101,106 @@ talents:
     aptitudes: [Ловкость, Изящество]
     source: CH04_TAL_023
 
+  Глаз Мстителя:
+    tier: 3
+    aptitudes: ["Навык Стрельбы", Нападение]
+    source: CH04_TAL_024
+
+  Двойной Выстрел:
+    tier: 2
+    aptitudes: [Изящество, Нападение]
+    source: CH04_TAL_025
+
+  Длань Омниссии:
+    tier: 1
+    aptitudes: [Интеллект, Техно]
+    source: CH04_TAL_026
+
+  Железная Челюсть:
+    tier: 1
+    aptitudes: [Выносливость, Защита]
+    source: CH04_TAL_027
+
+  Искусный Стук:
+    tier: 1
+    aptitudes: [Интеллект, Техно]
+    source: CH04_TAL_028
+
+  Искушённый:
+    tier: 1
+    aptitudes: ["Сила Воли", Защита]
+    source: CH04_TAL_029
+
+  Истинная Стойкость:
+    tier: 3
+    aptitudes: [Выносливость, Защита]
+    source: CH04_TAL_031
+
+  Контратака:
+    tier: 2
+    aptitudes: ["Навык Рукопашной", Защита]
+    source: CH04_TAL_032
+
+  Костолом:
+    tier: 2
+    aptitudes: [Сила, Нападение]
+    source: CH04_TAL_033
+
+  Крепкие Бицепсы:
+    tier: 2
+    aptitudes: [Сила, Нападение]
+    source: CH04_TAL_034
+
+  Крепкий Орешек:
+    tier: 1
+    aptitudes: ["Сила Воли", Защита]
+    source: CH04_TAL_035
+
+  Лицо В Толпе:
+    tier: 2
+    aptitudes: [Общительность, Общение]
+    source: CH04_TAL_038
+
+  Мастер Боя:
+    tier: 2
+    aptitudes: ["Навык Рукопашной", Защита]
+    source: CH04_TAL_039
+
+  Мастер Брони:
+    tier: 2
+    aptitudes: [Интеллект, Техно]
+    source: CH04_TAL_040
+
+  Меткий Стрелок:
+    tier: 2
+    aptitudes: ["Навык Стрельбы", Изящество]
+    source: CH04_TAL_043
+
+  Молниеносная Атака:
+    tier: 3
+    aptitudes: ["Навык Рукопашной", Изящество]
+    source: CH04_TAL_044
+
+  Мощный Выстрел:
+    tier: 3
+    aptitudes: ["Навык Стрельбы", Нападение]
+    source: CH04_TAL_045
+
+  Мягкое Приземление:
+    tier: 1
+    aptitudes: [Ловкость, Полевое]
+    source: CH04_TAL_046
+
+  Негде Прятаться:
+    tier: 1
+    aptitudes: [Восприятие, Нападение]
+    source: CH04_TAL_047
+
+  Независимое Прицеливание:
+    tier: 2
+    aptitudes: ["Навык Стрельбы", Изящество]
+    source: CH04_TAL_048
+
   Неистовство:
     tier: 1
     aptitudes: [Сила, Нападение]
@@ -54,6 +213,26 @@ talents:
     specializations:
       required: true
       free: true
+
+  Неостановимый Натиск:
+    tier: 2
+    aptitudes: ["Навык Рукопашной", Нападение]
+    source: CH04_TAL_051
+
+  Несокрушимая вера:
+    tier: 3
+    aptitudes: ["Сила Воли", Защита]
+    source: CH04_TAL_054
+
+  Неубиваемый:
+    tier: 3
+    aptitudes: [Выносливость, Защита]
+    source: CH04_TAL_056
+
+  Нечеловеческая Скорость:
+    tier: 3
+    aptitudes: [Ловкость, Нападение]
+    source: CH04_TAL_057
 
   Нокдаун:
     tier: 1
@@ -72,10 +251,68 @@ talents:
         Рукопашное: ["Навык Рукопашной", Изящество]
         Стрелковое: ["Навык Стрельбы", Изящество]
 
+  Отринь ведьмовство:
+    tier: 2
+    aptitudes: ["Сила Воли", Защита]
+    source: CH04_TAL_061
+
   Плечом к Плечу:
     tier: 1
     aptitudes: [Общая, Нападение]
     source: CH04_TAL_062
+
+  Превосходный Хирургеон:
+    tier: 3
+    aptitudes: [Интеллект, Полевое]
+    source: CH04_TAL_063
+
+  Пробивающий Удар:
+    tier: 3
+    aptitudes: [Сила, Нападение]
+    source: CH04_TAL_065
+
+  Работа Под Прикрытием:
+    tier: 2
+    aptitudes: [Интеллект, Познание]
+    source: CH04_TAL_067
+
+  Разговор с Толпой:
+    tier: 1
+    aptitudes: [Общая, Общение]
+    source: CH04_TAL_068
+
+  Разоружение:
+    tier: 1
+    aptitudes: ["Навык Рукопашной", Защита]
+    source: CH04_TAL_069
+
+  Связи:
+    tier: 1
+    aptitudes: [Общительность, Общение]
+    source: CH04_TAL_070
+    specializations:
+      required: true
+      free: true
+
+  Семижильный:
+    tier: 2
+    aptitudes: [Выносливость, Защита]
+    source: CH04_TAL_071
+
+  Сеть Контактов:
+    tier: 2
+    aptitudes: [Общительность, Лидерство]
+    source: CH04_TAL_072
+
+  Скоординированный Допрос:
+    tier: 2
+    aptitudes: [Интеллект, Общение]
+    source: CH04_TAL_073
+
+  Сокрушительный Удар:
+    tier: 3
+    aptitudes: ["Навык Рукопашной", Нападение]
+    source: CH04_TAL_074
 
   Сопротивление:
     tier: 1
@@ -89,3 +326,38 @@ talents:
     tier: 3
     aptitudes: [Ловкость, Полевое]
     source: CH04_TAL_076
+
+  Стрельба от Бедра:
+    tier: 2
+    aptitudes: ["Навык Стрельбы", Изящество]
+    source: CH04_TAL_077
+
+  Трудная Мишень:
+    tier: 2
+    aptitudes: [Ловкость, Защита]
+    source: CH04_TAL_078
+
+  Убийственный Удар:
+    tier: 2
+    aptitudes: ["Навык Рукопашной", Нападение]
+    source: CH04_TAL_080
+
+  Удар Асассина:
+    tier: 3
+    aptitudes: ["Навык Рукопашной", Полевое]
+    source: CH04_TAL_081
+
+  Чуткая Интуиция:
+    tier: 1
+    aptitudes: [Восприятие, Общение]
+    source: CH04_TAL_082
+
+  Шаг В Сторону:
+    tier: 3
+    aptitudes: [Ловкость, Защита]
+    source: CH04_TAL_083
+
+  Яростный Натиск:
+    tier: 3
+    aptitudes: [Сила, Нападение]
+    source: CH04_TAL_085
