@@ -39,6 +39,16 @@ def test_legacy_psyker_elite_marker_remains_a_psy_rating_prerequisite_fallback()
     assert talent_requirements_met(pack, sheet, "Варп-чувство")
 
 
+def test_warp_lock_resolves_okp_strong_minded_name_to_unyielding_talent():
+    pack = load_rulepack("dh2")
+    sheet = CharacterSheet("Psyker", "dh2")
+    sheet.attributes["WP"] = 50
+    sheet.attributes["PSY_RATING"] = 1
+    sheet.talents.append("Непреклонный")
+
+    assert talent_requirements_met(pack, sheet, "Варп-блок")
+
+
 def test_structured_implant_field_unlocks_cybernetic_talent_requirement():
     pack = load_rulepack("dh2")
     sheet = CharacterSheet("Tech-Priest", "dh2")
