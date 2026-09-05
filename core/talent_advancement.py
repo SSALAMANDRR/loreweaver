@@ -5,6 +5,7 @@ Catalog entries are quoted and purchased only after their structured prerequisit
 sidecar has been satisfied. Specializations remain explicit player choices;
 free-form specializations are accepted only when the catalog says so. Catalogs
 may also declare spelling/legacy aliases that normalize to canonical choices.
+Repeatable talents may declare a pack-driven purchase cap and sheet deltas.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from core.advancement_purchase import (
     AdvancementPurchaseResult,
     advancement_budget,
 )
+from core.sheets import set_sheet_value, sheet_value
 from core.talent_requirements import require_talent_prerequisites
 from core.yaml_safety import safe_load_no_aliases
 
@@ -44,6 +46,16 @@ class TalentSpecializations:
 
 
 @dataclass(frozen=True)
+class TalentRepeatable:
+    """Pack-declared repeat limit and immediate sheet effects."""
+
+    max_stat: str
+    max_multiplier: int
+    attribute_deltas: Mapping[str, int]
+    indexed_storage: bool
+
+
+@dataclass(frozen=True)
 class TalentEntry:
     """One XP-purchasable talent with resolved purchase metadata."""
 
@@ -51,6 +63,7 @@ class TalentEntry:
     tier: int
     aptitudes: tuple[str, ...]
     specializations: TalentSpecializations | None = None
+    repeatable: TalentRepeatable | None = None
     source: str = ""
 
 
@@ -102,6 +115,80 @@ def _string_list(value: Any, *, where: str, allow_empty: bool = False) -> tuple[
     return items
 
 
+def _positive_int(value: Any, *, where: str) -> int:
+    if isinstance(value, bool):
+        raise AdvancementPurchaseError(f"{where} must be a positive integer")
+    try:
+        number = int(value)
+    except (TypeError, ValueError) as exc:
+        raise AdvancementPurchaseError(f"{where} must be a positive integer") from exc
+    if number <= 0:
+        raise AdvancementPurchaseError(f"{where} must be a positive integer")
+    return number
+
+
+def _parse_repeatable(name: str, raw: Any) -> TalentRepeatable | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, Mapping):
+        raise AdvancementPurchaseError(f"talent {name!r}.repeatable must be a mapping")
+    unknown = set(raw) - {"max_purchases", "attribute_deltas", "indexed_storage"}
+    if unknown:
+        raise AdvancementPurchaseError(
+            f"talent {name!r}.repeatable has unknown keys {sorted(unknown)}"
+        )
+
+    maximum = raw.get("max_purchases")
+    if not isinstance(maximum, Mapping):
+        raise AdvancementPurchaseError(f"talent {name!r}.repeatable.max_purchases must be a mapping")
+    unknown_max = set(maximum) - {"stat", "multiplier"}
+    if unknown_max:
+        raise AdvancementPurchaseError(
+            f"talent {name!r}.repeatable.max_purchases has unknown keys {sorted(unknown_max)}"
+        )
+    max_stat = str(maximum.get("stat") or "").strip()
+    if not max_stat:
+        raise AdvancementPurchaseError(f"talent {name!r}.repeatable.max_purchases.stat is required")
+    max_multiplier = _positive_int(
+        maximum.get("multiplier", 1),
+        where=f"talent {name!r}.repeatable.max_purchases.multiplier",
+    )
+
+    deltas_raw = raw.get("attribute_deltas") or {}
+    if not isinstance(deltas_raw, Mapping) or not deltas_raw:
+        raise AdvancementPurchaseError(
+            f"talent {name!r}.repeatable.attribute_deltas must be a non-empty mapping"
+        )
+    deltas: dict[str, int] = {}
+    for stat_raw, delta_raw in deltas_raw.items():
+        stat = str(stat_raw).strip()
+        if not stat or isinstance(delta_raw, bool):
+            raise AdvancementPurchaseError(
+                f"talent {name!r}.repeatable.attribute_deltas must map stat ids to non-zero integers"
+            )
+        try:
+            delta = int(delta_raw)
+        except (TypeError, ValueError) as exc:
+            raise AdvancementPurchaseError(
+                f"talent {name!r}.repeatable.attribute_deltas must map stat ids to non-zero integers"
+            ) from exc
+        if delta == 0:
+            raise AdvancementPurchaseError(
+                f"talent {name!r}.repeatable.attribute_deltas may not contain zero deltas"
+            )
+        deltas[stat] = delta
+
+    indexed = raw.get("indexed_storage", False)
+    if not isinstance(indexed, bool):
+        raise AdvancementPurchaseError(f"talent {name!r}.repeatable.indexed_storage must be boolean")
+    return TalentRepeatable(
+        max_stat=max_stat,
+        max_multiplier=max_multiplier,
+        attribute_deltas=deltas,
+        indexed_storage=indexed,
+    )
+
+
 def load_talent_catalog(pack: Any, *, data_root: Path | None = None) -> TalentCatalog | None:
     """Load and validate an optional ``talents.yaml`` purchase catalog."""
 
@@ -139,7 +226,7 @@ def load_talent_catalog(pack: Any, *, data_root: Path | None = None) -> TalentCa
             raise AdvancementPurchaseError(f"talent catalog contains duplicate talent {name!r}")
         claimed.add(name_key)
 
-        unknown_entry = set(entry_raw) - {"tier", "aptitudes", "specializations", "source"}
+        unknown_entry = set(entry_raw) - {"tier", "aptitudes", "specializations", "repeatable", "source"}
         if unknown_entry:
             raise AdvancementPurchaseError(f"talent {name!r} has unknown keys {sorted(unknown_entry)}")
         tier_raw = entry_raw.get("tier")
@@ -252,11 +339,18 @@ def load_talent_catalog(pack: Any, *, data_root: Path | None = None) -> TalentCa
                 aptitude_overrides=overrides,
             )
 
+        repeatable = _parse_repeatable(name, entry_raw.get("repeatable"))
+        if repeatable is not None and specialization_spec is not None:
+            raise AdvancementPurchaseError(
+                f"talent {name!r} may not combine repeatable purchases with specializations"
+            )
+
         talents[name] = TalentEntry(
             name=name,
             tier=tier,
             aptitudes=aptitudes,
             specializations=specialization_spec,
+            repeatable=repeatable,
             source=str(entry_raw.get("source") or "").strip(),
         )
 
@@ -360,6 +454,21 @@ def _canonical_target(name: str, specialization: str | None) -> str:
     return name if specialization is None else f"{name}::{specialization}"
 
 
+def _owned_base_count(values: list[Any], entry: TalentEntry) -> int:
+    wanted_name = _normalize(entry.name)
+    count = 0
+    for raw in values:
+        if not isinstance(raw, str):
+            continue
+        try:
+            owned_name, _owned_specialization = _split_target(raw)
+        except AdvancementPurchaseError:
+            continue
+        if _normalize(owned_name) == wanted_name:
+            count += 1
+    return count
+
+
 def _owns_talent(values: list[Any], entry: TalentEntry, specialization: str | None) -> bool:
     wanted_name = _normalize(entry.name)
     wanted_specialization = _normalize(specialization or "")
@@ -388,6 +497,13 @@ def _existing_budget(pack: Any, character: Any, *, data_root: Path | None = None
     return budget
 
 
+def _repeatable_limit(pack: Any, character: Any, entry: TalentEntry) -> int:
+    policy = entry.repeatable
+    if policy is None:
+        return 1
+    return max(0, sheet_value(character, pack, policy.max_stat) * policy.max_multiplier)
+
+
 def quote_talent_purchase(
     pack: Any,
     character: Any,
@@ -403,8 +519,20 @@ def quote_talent_purchase(
     budget = _existing_budget(pack, character, data_root=data_root)
     values = _talent_field(character, pack, catalog)
     entry, specialization, aptitudes = _resolve_entry(catalog, target)
-    if _owns_talent(values, entry, specialization):
-        raise AdvancementPurchaseError(f"talent {_storage_text(entry.name, specialization)!r} is already owned")
+
+    if entry.repeatable is None:
+        if _owns_talent(values, entry, specialization):
+            raise AdvancementPurchaseError(f"talent {_storage_text(entry.name, specialization)!r} is already owned")
+        current_value = 0
+        next_value = 1
+    else:
+        current_value = _owned_base_count(values, entry)
+        limit = _repeatable_limit(pack, character, entry)
+        if current_value >= limit:
+            raise AdvancementPurchaseError(
+                f"talent {entry.name!r} has reached its purchase limit of {limit}"
+            )
+        next_value = current_value + 1
 
     canonical_target = _canonical_target(entry.name, specialization)
     require_talent_prerequisites(pack, character, canonical_target, data_root=data_root)
@@ -421,8 +549,8 @@ def quote_talent_purchase(
         category="talent",
         target=canonical_target,
         stage=cost_quote.stage,
-        current_value=0,
-        next_value=1,
+        current_value=current_value,
+        next_value=next_value,
         aptitude_matches=cost_quote.aptitude_matches,
         cost=cost_quote.cost,
         available_xp=budget.available_xp,
@@ -436,7 +564,7 @@ def purchase_talent(
     *,
     data_root: Path | None = None,
 ) -> AdvancementPurchaseResult:
-    """Atomically append one legal catalog talent and spend its quoted XP."""
+    """Atomically append one legal catalog talent, apply effects and spend XP."""
 
     quote = quote_talent_purchase(pack, character, target, data_root=data_root)
     if quote.cost > quote.available_xp:
@@ -451,7 +579,19 @@ def purchase_talent(
     snapshot = copy.deepcopy(vars(character))
     try:
         values = _talent_field(character, pack, catalog)
-        values.append(_storage_text(entry.name, specialization))
+        storage_specialization = specialization
+        if entry.repeatable is not None and entry.repeatable.indexed_storage:
+            storage_specialization = str(quote.next_value)
+        values.append(_storage_text(entry.name, storage_specialization))
+
+        if entry.repeatable is not None:
+            for stat, delta in entry.repeatable.attribute_deltas.items():
+                set_sheet_value(
+                    character,
+                    pack,
+                    stat,
+                    sheet_value(character, pack, stat) + delta,
+                )
 
         secondary = getattr(character, "secondary_attributes", None)
         if not isinstance(secondary, dict):
@@ -475,8 +615,8 @@ def purchase_talent(
                 "target": quote.target,
                 "stage": quote.stage,
                 "cost": quote.cost,
-                "before": 0,
-                "after": 1,
+                "before": quote.current_value,
+                "after": quote.next_value,
             }
         )
         state["available"] = available - quote.cost
