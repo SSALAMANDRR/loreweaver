@@ -7,8 +7,9 @@ primitives according to ``creation_flow.yaml`` and persists the current stage on
 the character.
 
 No concrete rule-system vocabulary lives here. A pack decides which layers run,
-in what order, whether one layer must reuse the selected creation profile, and
-where advancement / starting-equipment stages occur.
+in what order, whether one layer must reuse the selected creation profile,
+whether duplicate-policy values are deferred to an explicit resolution stage,
+and where advancement / starting-equipment stages occur.
 """
 
 from __future__ import annotations
@@ -22,9 +23,12 @@ from typing import Any
 from core.advancement_purchase import initialize_advancement_budget
 from core.character_manager import CharacterSheet
 from core.creation_layers import (
+    CreationDuplicateRequirement,
     CreationLayerResult,
     apply_creation_layer,
+    creation_duplicate_requirements,
     load_creation_layers,
+    resolve_creation_duplicates,
     resolve_creation_layer_option,
 )
 from core.creation_profiles import CreationProfileResult, generate_profiled_character
@@ -39,7 +43,7 @@ from core.yaml_safety import safe_load_no_aliases
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _BUILTIN_DATA_ROOT = _REPO_ROOT / "rulepacks" / "data"
 _STATE_KEY = "__creation_flow__"
-_ALLOWED_KINDS = {"profile", "layer", "advancement", "starting_equipment"}
+_ALLOWED_KINDS = {"profile", "layer", "duplicates", "advancement", "starting_equipment"}
 
 
 class CreationFlowError(ValueError):
@@ -52,6 +56,7 @@ class CreationFlowStage:
     kind: str
     layer_id: str = ""
     option_from_profile: bool = False
+    defer_duplicates: bool = False
 
 
 @dataclass(frozen=True)
@@ -81,6 +86,12 @@ class CreationFlowStart:
 @dataclass(frozen=True)
 class CreationFlowLayerResult:
     result: CreationLayerResult
+    status: CreationFlowStatus
+
+
+@dataclass(frozen=True)
+class CreationFlowDuplicateResult:
+    replacements: Mapping[str, tuple[str, ...]]
     status: CreationFlowStatus
 
 
@@ -136,10 +147,11 @@ def load_creation_flow_spec(pack: Any, *, data_root: Path | None = None) -> Crea
     stages: list[CreationFlowStage] = []
     seen_ids: set[str] = set()
     profile_count = 0
+    duplicate_stage_count = 0
     for index, entry in enumerate(stages_raw):
         if not isinstance(entry, Mapping):
             raise CreationFlowError(f"creation-flow stage {index} must be a mapping")
-        extra = set(entry) - {"id", "kind", "layer", "option_from_profile"}
+        extra = set(entry) - {"id", "kind", "layer", "option_from_profile", "defer_duplicates"}
         if extra:
             raise CreationFlowError(f"creation-flow stage {index} has unknown keys {sorted(extra)}")
         stage_id = str(entry.get("id") or "").strip()
@@ -156,9 +168,14 @@ def load_creation_flow_spec(pack: Any, *, data_root: Path | None = None) -> Crea
 
         layer_id = str(entry.get("layer") or "").strip()
         option_from_profile = entry.get("option_from_profile", False)
+        defer_duplicates = entry.get("defer_duplicates", False)
         if not isinstance(option_from_profile, bool):
             raise CreationFlowError(
                 f"creation-flow stage {stage_id!r}.option_from_profile must be boolean"
+            )
+        if not isinstance(defer_duplicates, bool):
+            raise CreationFlowError(
+                f"creation-flow stage {stage_id!r}.defer_duplicates must be boolean"
             )
         if kind == "layer":
             if not layer_id:
@@ -167,24 +184,35 @@ def load_creation_flow_spec(pack: Any, *, data_root: Path | None = None) -> Crea
                 raise CreationFlowError(
                     f"creation-flow stage {stage_id!r} names unknown creation layer {layer_id!r}"
                 )
-        elif layer_id or option_from_profile:
+        elif layer_id or option_from_profile or defer_duplicates:
             raise CreationFlowError(
                 f"creation-flow stage {stage_id!r} may use layer options only when kind=layer"
             )
 
         if kind == "profile":
             profile_count += 1
+        if kind == "duplicates":
+            duplicate_stage_count += 1
         stages.append(
             CreationFlowStage(
                 id=stage_id,
                 kind=kind,
                 layer_id=layer_id,
                 option_from_profile=option_from_profile,
+                defer_duplicates=defer_duplicates,
             )
         )
 
     if profile_count != 1 or stages[0].kind != "profile":
         raise CreationFlowError("creation-flow must contain exactly one profile stage and it must be first")
+    if duplicate_stage_count > 1:
+        raise CreationFlowError("creation-flow may contain at most one duplicate-resolution stage")
+    duplicate_indexes = [index for index, stage in enumerate(stages) if stage.kind == "duplicates"]
+    for index, stage in enumerate(stages):
+        if stage.defer_duplicates and not any(duplicate_index > index for duplicate_index in duplicate_indexes):
+            raise CreationFlowError(
+                f"creation-flow stage {stage.id!r} defers duplicates without a later duplicate-resolution stage"
+            )
     return CreationFlowSpec(stages=tuple(stages))
 
 
@@ -262,6 +290,11 @@ def _prepare_current_stage(
 ) -> None:
     while int(state["stage_index"]) < len(spec.stages):
         stage = spec.stages[int(state["stage_index"])]
+        if stage.kind == "duplicates":
+            if creation_duplicate_requirements(pack, character, data_root=data_root):
+                return
+            _complete_current_stage(spec, state)
+            continue
         if stage.kind == "advancement":
             if initialize_advancement_budget(pack, character, data_root=data_root) is None:
                 raise CreationFlowError("creation flow requires advancement rules but the pack has none")
@@ -367,6 +400,7 @@ def apply_creation_flow_layer(
             target,
             selections=selections,
             duplicate_replacements=duplicate_replacements,
+            defer_duplicates=stage.defer_duplicates,
             roller=roller,
             data_root=data_root,
         )
@@ -376,6 +410,60 @@ def apply_creation_flow_layer(
         _complete_current_stage(spec, current_state)
         _prepare_current_stage(pack, character, spec, current_state, data_root=data_root)
         return CreationFlowLayerResult(result=result, status=_status(spec, current_state))
+    except Exception:
+        vars(character).clear()
+        vars(character).update(snapshot)
+        raise
+
+
+def creation_flow_duplicate_requirements(
+    pack: Any,
+    character: Any,
+    *,
+    data_root: Path | None = None,
+) -> tuple[CreationDuplicateRequirement, ...]:
+    """Return replacement requirements only while the flow is at its duplicate stage."""
+
+    spec = load_creation_flow_spec(pack, data_root=data_root)
+    if spec is None:
+        raise CreationFlowError("rulepack has no creation-flow sidecar")
+    state = _validated_state(spec, character)
+    status = _status(spec, state)
+    if status.complete:
+        return ()
+    stage = spec.stages[status.stage_index]
+    if stage.kind != "duplicates":
+        return ()
+    return creation_duplicate_requirements(pack, character, data_root=data_root)
+
+
+def resolve_creation_flow_duplicates(
+    pack: Any,
+    character: Any,
+    replacements: Mapping[str, Any] | None,
+    *,
+    data_root: Path | None = None,
+) -> CreationFlowDuplicateResult:
+    """Resolve the current duplicate stage and enter advancement only afterwards."""
+
+    spec = load_creation_flow_spec(pack, data_root=data_root)
+    if spec is None:
+        raise CreationFlowError("rulepack has no creation-flow sidecar")
+    state = _validated_state(spec, character)
+    status = _status(spec, state)
+    if status.complete:
+        raise CreationFlowError("character creation flow is already complete")
+    stage = spec.stages[status.stage_index]
+    if stage.kind != "duplicates":
+        raise CreationFlowError(f"current creation-flow stage {stage.id!r} is not duplicate resolution")
+
+    snapshot = copy.deepcopy(vars(character))
+    try:
+        resolved = resolve_creation_duplicates(pack, character, replacements, data_root=data_root)
+        current_state = _validated_state(spec, character)
+        _complete_current_stage(spec, current_state)
+        _prepare_current_stage(pack, character, spec, current_state, data_root=data_root)
+        return CreationFlowDuplicateResult(replacements=resolved, status=_status(spec, current_state))
     except Exception:
         vars(character).clear()
         vars(character).update(snapshot)
