@@ -9,7 +9,7 @@
   "commands.creation.options": "可用选项：{options}",
   "commands.creation.choice": "· {id}: {options}",
   "commands.creation.choice_free": "· {id}: 直接输入专精文本",
-  "commands.creation.choice_specialized": "{option}::<专精>",
+  "commands.creation.choice_specialized": "{option}::<{{专精}}>",
   "commands.creation.layer_browse": "使用 `.create <选项>` 查看该选项要求的选择。",
   "commands.creation.layer_usage": "使用 `.create <选项> | {choices}` 应用。",
   "commands.creation.fixed_apply": "使用 `.create apply` 应用这个已经选定的阶段。",
