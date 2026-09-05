@@ -3,7 +3,7 @@
   "commands.creation.no_character": "Create or select a character before continuing character creation.",
   "commands.creation.unsupported": "This character's rule system does not expose a staged creation flow.",
   "commands.creation.not_started": "This character does not have an active staged creation flow.",
-  "commands.creation.complete": "Character creation is complete.",
+  "commands.creation.complete": "Staged character-creation choices are complete.",
   "commands.creation.header": "Character creation · stage: {stage}",
   "commands.creation.reroll": "You may reroll one generated characteristic. The second result is final. Available characteristics: {characteristics}",
   "commands.creation.reroll_usage": "Use `.create reroll <characteristic>` to take the reroll, or `.create done` to keep the original rolls.",
