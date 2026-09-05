@@ -1,6 +1,6 @@
 version: 1
 talent_field: Talents
-source: "Dark Heresy Second Edition RU OKP v1.8, Chapter IV tables 4-1 to 4-3 and talent descriptions. Human prerequisite prose is represented only where it maps deterministically to existing sheet state. A bare Chapter IV 'psy rating' prerequisite requires Psy Rating 1+ with an EliteAdvances Psyker fallback for legacy sheets. Cybernetic prerequisites prefer the structured Implants field and retain equipment fallback for legacy sheets."
+source: "Dark Heresy Second Edition RU OKP v1.8, Chapter IV tables 4-1 to 4-3 and talent descriptions. Human prerequisite prose is represented only where it maps deterministically to existing sheet state. A bare Chapter IV 'psy rating' prerequisite requires Psy Rating 1+ with an EliteAdvances Psyker fallback for legacy sheets. Cybernetic prerequisites prefer the structured Implants field and retain equipment fallback for legacy sheets. The OKP Warp Lock text names an otherwise undefined 'Могучий Разум'; the English core identifies that prerequisite as Strong Minded, mapped here to the existing OKP talent Непреклонный."
 
 requirements:
   Аккуратный Допрос:
@@ -48,7 +48,7 @@ requirements:
       - any:
           - stat: {name: PsyRating, min: 1}
           - field_contains: {field: EliteAdvances, value: Псайкер}
-      - talent: {name: Могучий Разум}
+      - talent: {name: Непреклонный}
       - stat: {name: WP, min: 50}
 
   Варп-Канал:
