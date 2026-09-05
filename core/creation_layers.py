@@ -59,6 +59,13 @@ class CreationLayerResult:
     skills_set: Mapping[str, int]
 
 
+@dataclass(frozen=True)
+class CreationDuplicateRequirement:
+    field: str
+    count: int
+    choices: tuple[str, ...]
+
+
 def _normalize(value: str) -> str:
     return " ".join(str(value).strip().casefold().replace("_", " ").split())
 
@@ -239,6 +246,109 @@ def _list_values(current: Any) -> list[Any]:
     raise CreationLayerError("append_fields target must be list-like")
 
 
+def creation_duplicate_requirements(
+    pack: Any,
+    character: Any,
+    *,
+    data_root: Path | None = None,
+) -> tuple[CreationDuplicateRequirement, ...]:
+    """Describe unresolved duplicates left intentionally in policy-controlled fields."""
+
+    requirements: list[CreationDuplicateRequirement] = []
+    for canonical_field, choices in load_creation_policy(pack, data_root=data_root).items():
+        field_name = _declared_field_name(pack, canonical_field)
+        values = _list_values(getattr(character, field_name, None))
+        if not all(isinstance(item, str) and item.strip() for item in values):
+            raise CreationLayerError(
+                f"duplicate-replacement field {canonical_field!r} must contain only non-empty strings"
+            )
+        normalized = [_normalize(item) for item in values]
+        duplicate_count = len(normalized) - len(set(normalized))
+        if duplicate_count <= 0:
+            continue
+        present = set(normalized)
+        available = tuple(choice for choice in choices if _normalize(choice) not in present)
+        if len(available) < duplicate_count:
+            raise CreationLayerError(
+                f"duplicate-replacement field {canonical_field!r} has too few unused replacement choices"
+            )
+        requirements.append(
+            CreationDuplicateRequirement(
+                field=canonical_field,
+                count=duplicate_count,
+                choices=available,
+            )
+        )
+    return tuple(requirements)
+
+
+def resolve_creation_duplicates(
+    pack: Any,
+    character: Any,
+    replacements: Mapping[str, Any] | None,
+    *,
+    data_root: Path | None = None,
+) -> Mapping[str, tuple[str, ...]]:
+    """Atomically replace every deferred duplicate with explicit policy choices."""
+
+    policy = load_creation_policy(pack, data_root=data_root)
+    requirements = {item.field: item for item in creation_duplicate_requirements(pack, character, data_root=data_root)}
+    queues = _replacement_queues(replacements, policy)
+    missing = [field for field in requirements if field not in queues]
+    if missing:
+        raise CreationLayerError(f"duplicate replacements are required for fields: {', '.join(missing)}")
+    extra = set(queues) - set(requirements)
+    if extra:
+        raise CreationLayerError(f"duplicate replacements were supplied for fields without duplicates: {sorted(extra)}")
+
+    snapshot = copy.deepcopy(vars(character))
+    resolved: dict[str, tuple[str, ...]] = {}
+    try:
+        for canonical_field, requirement in requirements.items():
+            queue = queues[canonical_field]
+            if len(queue) != requirement.count:
+                raise CreationLayerError(
+                    f"duplicate-replacement field {canonical_field!r} requires exactly {requirement.count} choices"
+                )
+            pool = {_normalize(item): item for item in policy[canonical_field]}
+            field_name = _declared_field_name(pack, canonical_field)
+            values = _list_values(getattr(character, field_name, None))
+            original_present = {_normalize(item) for item in values}
+            seen_original: set[str] = set()
+            selected: set[str] = set()
+            chosen: list[str] = []
+            rebuilt: list[str] = []
+            for value_raw in values:
+                value = str(value_raw).strip()
+                key = _normalize(value)
+                if key not in seen_original:
+                    seen_original.add(key)
+                    rebuilt.append(value)
+                    continue
+                replacement_raw = queue.pop(0)
+                replacement_key = _normalize(replacement_raw)
+                replacement = pool.get(replacement_key)
+                if replacement is None:
+                    raise CreationLayerError(
+                        f"replacement {replacement_raw!r} is not allowed for field {canonical_field!r}"
+                    )
+                if replacement_key in original_present or replacement_key in selected:
+                    raise CreationLayerError(
+                        f"replacement {replacement!r} for field {canonical_field!r} is already present"
+                    )
+                selected.add(replacement_key)
+                chosen.append(replacement)
+                rebuilt.append(replacement)
+            setattr(character, field_name, rebuilt)
+            resolved[canonical_field] = tuple(chosen)
+        refresh_sheet(character, pack)
+    except Exception:
+        vars(character).clear()
+        vars(character).update(snapshot)
+        raise
+    return resolved
+
+
 def _append_unique(current: Any, incoming: list[Any]) -> list[Any]:
     values = _list_values(current)
     for value in incoming:
@@ -276,6 +386,8 @@ def _append_with_policy(
     canonical_field: str,
     policy: Mapping[str, tuple[str, ...]],
     replacement_queues: dict[str, list[str]],
+    *,
+    defer_duplicates: bool = False,
 ) -> list[Any]:
     choices = policy.get(canonical_field)
     if choices is None:
@@ -302,7 +414,9 @@ def _append_with_policy(
             values.append(value)
             present.add(normalized)
             continue
-
+        if defer_duplicates:
+            values.append(value)
+            continue
         if not queue:
             raise CreationLayerError(
                 f"duplicate value {value!r} for field {canonical_field!r} requires a player replacement choice"
@@ -347,6 +461,7 @@ def _apply_effects(
     *,
     duplicate_policy: Mapping[str, tuple[str, ...]] | None = None,
     replacement_queues: dict[str, list[str]] | None = None,
+    defer_duplicates: bool = False,
 ) -> tuple[list[str], dict[str, int]]:
     if raw is None:
         return [], {}
@@ -382,6 +497,7 @@ def _apply_effects(
                 canonical_field,
                 duplicate_policy,
                 replacement_queues,
+                defer_duplicates=defer_duplicates,
             ),
         )
 
@@ -473,6 +589,7 @@ def _apply_choice_group(
     *,
     duplicate_policy: Mapping[str, tuple[str, ...]] | None = None,
     replacement_queues: dict[str, list[str]] | None = None,
+    defer_duplicates: bool = False,
 ) -> tuple[list[str], dict[str, int]]:
     if "skill_family" in group and "options" not in group:
         canonical, rank = _apply_specialization(pack, character, group, selection)
@@ -509,6 +626,7 @@ def _apply_choice_group(
         roller,
         duplicate_policy=duplicate_policy,
         replacement_queues=replacement_queues,
+        defer_duplicates=defer_duplicates,
     )
     if "skill_family" in option:
         canonical, rank = _apply_specialization(pack, character, option, specialization)
@@ -528,15 +646,17 @@ def apply_creation_layer(
     *,
     selections: Mapping[str, Any] | None = None,
     duplicate_replacements: Mapping[str, Any] | None = None,
+    defer_duplicates: bool = False,
     data_root: Path | None = None,
     roller: DiceRoller | None = None,
 ) -> CreationLayerResult:
     """Apply one selected layer option and all explicit player sub-choices.
 
-    If the pack declares a duplicate-replacement policy for a list-like field,
-    each duplicate generated by this layer consumes one explicit replacement
-    from ``duplicate_replacements[field]``. Missing, invalid and unused choices
-    fail loudly. The character is rolled back to its pre-layer state on failure.
+    By default every duplicate in a policy-controlled list consumes one explicit
+    replacement from ``duplicate_replacements[field]``. A higher-level creation
+    flow may instead set ``defer_duplicates`` to preserve duplicate values until
+    its explicit replacement stage. Both modes remain deterministic and neither
+    ever chooses a replacement for the player.
     """
     layers = load_creation_layers(pack, data_root=data_root)
     layer = layers.get(layer_id)
@@ -565,7 +685,9 @@ def apply_creation_layer(
         raise CreationLayerError(f"creation option {option_id!r} got unknown choices {sorted(extra)}")
 
     duplicate_policy = load_creation_policy(pack, data_root=data_root)
-    replacement_queues = _replacement_queues(duplicate_replacements, duplicate_policy)
+    if defer_duplicates and duplicate_replacements:
+        raise CreationLayerError("deferred duplicate mode cannot also consume replacement choices")
+    replacement_queues = {} if defer_duplicates else _replacement_queues(duplicate_replacements, duplicate_policy)
     roller = roller or DiceRoller()
 
     try:
@@ -581,6 +703,7 @@ def apply_creation_layer(
             roller,
             duplicate_policy=duplicate_policy,
             replacement_queues=replacement_queues,
+            defer_duplicates=defer_duplicates,
         )
         for group_id_raw, group in choices.items():
             group_id = str(group_id_raw)
@@ -595,6 +718,7 @@ def apply_creation_layer(
                 roller,
                 duplicate_policy=duplicate_policy,
                 replacement_queues=replacement_queues,
+                defer_duplicates=defer_duplicates,
             )
             equipment_added.extend(equipment)
             skills_set.update(skills)
