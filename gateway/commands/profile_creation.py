@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+from core.advancement_purchase import initialize_advancement_budget
 from core.character_manager import CharacterNameTakenError
 from core.character_rules import render_validation_notice, validate_sheet
 from core.creation_profiles import (
@@ -79,6 +80,7 @@ class ProfileCreationCommands:
                 name,
                 roller=ctx.services.dice,
             )
+            initialize_advancement_budget(pack, generated.character)
         except CreationProfileError:
             return ctx.i18n.t("commands.error.bad_args")
 

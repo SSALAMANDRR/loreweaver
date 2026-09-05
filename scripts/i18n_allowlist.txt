@@ -8,6 +8,15 @@ core/prompt_sections.py
 core/rulepacks.py
 core/skills.py
 
+# Developer-facing advancement/creation validators. Their diagnostics are
+# author/programmer errors, never player-facing UI; command layers localize
+# user-visible failures before returning them.
+core/advancement.py
+core/advancement_purchase.py
+core/creation_layers.py
+core/creation_profiles.py
+core/sheets.py
+
 # Narrow runner exemptions for bot-on parser tokens.
 gateway/runner.py::开启
 gateway/runner.py::啟用
@@ -32,14 +41,6 @@ core/panels.py
 # Same convention for the presentation.yaml (演出资料包) schema validator (M19): author-time
 # diagnostics, wrapped by core/pack.py into localized PackError text before any human sees them.
 core/presentation.py
-
-# Developer-facing diagnostics for rulepack character-creation/advancement data and sheet schema.
-# These modules validate pack authoring data or internal character state; their exception text is
-# diagnostic, while actual player-facing creation output is localized at the command/UI layer.
-core/advancement.py
-core/creation_layers.py
-core/creation_profiles.py
-core/sheets.py
 
 # The Scribe's NPC boundary-watch prompt block (_NPC_WATCH_BLOCK): model-facing instruction
 # text, the same nature as the module's main _PROMPT (which the regex-shape heuristic happens

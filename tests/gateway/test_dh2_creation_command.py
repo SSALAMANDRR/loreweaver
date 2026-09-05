@@ -1,6 +1,8 @@
 from agent.context import AgentCtx
 from agent.services import build_services
+from core.advancement_purchase import advancement_budget
 from core.dice_engine import seed_dice
+from core.rulepacks import load_rulepack
 from gateway.commands import CommandRouter
 from infra.config import Settings
 from infra.embeddings import FakeEmbeddings
@@ -39,6 +41,10 @@ async def test_dh2_make_char_accepts_canonical_profile_id_and_character_name():
     assert character.attributes["FATE"] == character.attributes["FATE_THRESHOLD"]
     for key in ("WS", "BS", "S", "T", "Ag", "Int", "Per", "WP", "Fel", "Inf"):
         assert 22 <= character.attributes[key] <= 40
+
+    budget = advancement_budget(load_rulepack("dh2"), character)
+    assert budget is not None
+    assert (budget.starting_xp, budget.available_xp, budget.spent_xp) == (1000, 1000, 0)
 
 
 async def test_dh2_make_char_accepts_multiword_profile_alias_with_pipe_separator():

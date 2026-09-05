@@ -1,0 +1,14 @@
+# Sequential purchase semantics for DH2 Chapter II advancement tables.
+# Costs and aptitude requirements remain in advancement.yaml; this sidecar only
+# declares how the next stage is inferred and how a successful purchase mutates
+# the sheet.
+version: 1
+progressions:
+  characteristic:
+    stages: [simple, intermediate, trained, proficient, expert]
+    stage_source: history
+    step: 5
+  skill:
+    stages: [known, trained, experienced, veteran]
+    stage_source: value
+    step: 1
