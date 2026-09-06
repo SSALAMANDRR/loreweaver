@@ -2,8 +2,8 @@
 
 This mixin is deliberately transport/UI agnostic. In manual mode a normal
 ``.check`` computes and freezes the same deterministic inputs the automatic
-lane would use, persists one pending roll, and emits a private structured
-``roll_request`` frame. A rich client decides how to render that request.
+lane would use and persists one pending roll. ``net.state`` exposes that
+request only to its owner; a rich client decides how to render it.
 
 Submission re-enters the existing check implementation with a one-shot dice
 provider on a shallow copy of ``Services``. Nothing mutates the deployment-wide
@@ -24,7 +24,6 @@ from core.manual_roll import (
     ROLL_MODE_AUTO,
     ROLL_MODE_MANUAL,
     ManualRollError,
-    PendingRoll,
     clear_pending_roll,
     get_roll_mode,
     load_pending_roll,
@@ -43,7 +42,6 @@ from gateway.commands.checks import (
     _target_value,
 )
 from gateway.commands.types import CommandCtx, CommandSpec
-from gateway.hub import Event
 
 
 _ROLL_MODE_WORDS = frozenset({"rollmode", "roll_mode"})
@@ -92,6 +90,7 @@ def _hidden_spec(canonical: str, handler, *, private_reply: bool) -> CommandSpec
         slash=None,
         help_key="commands.help.roll",
         private_reply=private_reply,
+        echo_input=False,
     )
 
 
@@ -107,14 +106,6 @@ def _difficulty_label(resolver, difficulty_id: str | None, locale: str) -> str: 
             return str(words[0])
         return difficulty.id
     return difficulty_id
-
-
-def _request_event(pending: PendingRoll) -> Event:
-    return Event.panel(pending.wire(), private=True)
-
-
-def _cancel_event(request_id: str) -> Event:
-    return Event.panel({"type": "roll_cancel", "request_id": request_id}, private=True)
 
 
 def _parse_submit_args(args: str) -> tuple[str, list[int]]:
@@ -208,8 +199,8 @@ class ManualRollCommands:
             if token in _ROLL_MODE_WORDS:
                 return _hidden_spec("rollmode", self.cmd_roll_mode, private_reply=True), args.strip()
             if token == _ROLL_SUBMIT_WORD:
-                # The result of this internal command is normal table content:
-                # only the raw command echo is private by the existing turn lane.
+                # The result is normal table content (dice + check result); only the
+                # service command itself is hidden from the conversation.
                 return _hidden_spec(_ROLL_SUBMIT_WORD, self.cmd_manual_roll_submit, private_reply=False), args.strip()
         return super().resolve(text, locale)
 
@@ -224,10 +215,7 @@ class ManualRollCommands:
             return ctx.fail(ctx.i18n.t("commands.manual_roll.mode_usage"))
         mode = await set_roll_mode(ctx.services.store, ctx.user_id, ctx.chat_key, arg)
         if mode == ROLL_MODE_AUTO:
-            pending = await load_pending_roll(ctx.services.store, ctx.chat_key, ctx.user_id)
-            if pending is not None:
-                await clear_pending_roll(ctx.services.store, ctx.chat_key, ctx.user_id)
-                ctx.events.append(_cancel_event(pending.request_id))
+            await clear_pending_roll(ctx.services.store, ctx.chat_key, ctx.user_id)
         return ctx.i18n.t("commands.manual_roll.mode", mode=mode)
 
     async def cmd_check(self, ctx: CommandCtx) -> str:
@@ -237,7 +225,6 @@ class ManualRollCommands:
 
         existing = await load_pending_roll(ctx.services.store, ctx.chat_key, ctx.user_id)
         if existing is not None:
-            ctx.events.append(_request_event(existing))
             return ctx.fail(ctx.i18n.t("commands.manual_roll.pending"))
 
         character = await ctx.services.characters.get_character(ctx.user_id, ctx.chat_key)
@@ -265,9 +252,8 @@ class ManualRollCommands:
             context={"fingerprint": prepared.fingerprint},
         )
         await save_pending_roll(ctx.services.store, ctx.chat_key, pending)
-        ctx.events.append(_request_event(pending))
-        # No fake table result exists yet. Mark the textual half private and empty;
-        # the structured request above is the real response a rich client renders.
+        # No fake table result exists yet. The post-command state snapshot carries
+        # pending_roll to this viewer and the Studio owns how that is rendered.
         return ctx.fail("")
 
     async def cmd_manual_roll_submit(self, ctx: CommandCtx) -> str:
@@ -309,7 +295,6 @@ class ManualRollCommands:
             current = None
         if current is None or current.fingerprint != original_fingerprint:
             await clear_pending_roll(ctx.services.store, ctx.chat_key, ctx.user_id)
-            ctx.events.append(_cancel_event(pending.request_id))
             return ctx.fail(ctx.i18n.t("commands.manual_roll.stale"))
 
         # Reuse the ordinary check implementation verbatim, but give THIS command
@@ -328,5 +313,4 @@ class ManualRollCommands:
             raise ManualRollError("manual roll was not consumed by the check lane")  # i18n-exempt: internal invariant
         ctx.failed = shadow_ctx.failed
         await clear_pending_roll(ctx.services.store, ctx.chat_key, ctx.user_id)
-        ctx.events.append(_cancel_event(pending.request_id))
         return rendered
