@@ -1,0 +1,5 @@
+{
+  "commands.readiness.creation": "Finish staged character creation with `.create` before using character-driven play commands.",
+  "commands.readiness.finalization": "Finish the character's required finalization with `.finalize` before using character-driven play commands.",
+  "commands.readiness.blocked": "Character finalization is waiting on a missing rule dependency: {reference}. The rolled result is preserved; do not reroll it."
+}
