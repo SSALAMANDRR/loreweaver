@@ -3,7 +3,7 @@
   "commands.creation.no_character": "请先创建或选择角色，再继续角色创建。",
   "commands.creation.unsupported": "该角色的规则系统没有提供分阶段创建流程。",
   "commands.creation.not_started": "该角色没有正在进行的分阶段创建流程。",
-  "commands.creation.complete": "角色创建已完成。",
+  "commands.creation.complete": "分阶段角色创建选项已完成。",
   "commands.creation.header": "角色创建 · 当前阶段：{stage}",
   "commands.creation.reroll": "你可以重掷一个已生成的属性，并且必须接受第二次结果。可重掷属性：{characteristics}",
   "commands.creation.reroll_usage": "使用 `.create reroll <属性>` 进行重掷，或使用 `.create done` 保留原始结果。",
