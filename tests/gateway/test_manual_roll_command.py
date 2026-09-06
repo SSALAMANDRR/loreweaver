@@ -137,10 +137,10 @@ async def test_valid_manual_d100_reuses_normal_check_grading_and_records_provena
     assert cancel.data == {"type": "roll_cancel", "request_id": request["request_id"]}
     assert await load_pending_roll(services.store, ctx.chat_key, ctx.user_id) is None
 
-    report = await services.battles.get_current_session(ctx.chat_key)
+    report = await services.battles.generator.get_current_session(ctx.chat_key)
     assert report is not None
     last_check = report.skill_checks[-1]
-    assert last_check.details["source"] == "manual"
+    assert last_check["source"] == "manual"
 
 
 async def test_manual_submit_fails_closed_if_the_check_context_changed_while_waiting():
