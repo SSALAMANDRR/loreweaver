@@ -33,6 +33,10 @@ class CommandSpec:
     # `Member.deliver`), falling back to the normal broadcast only when there is no
     # `origin` member (e.g. a non-hub transport).
     private_reply: bool = False
+    # Internal protocol-backed commands may need the normal command execution,
+    # events, persistence and state refresh while having no human-authored command
+    # line to echo into the transcript. True preserves every existing command.
+    echo_input: bool = True
     # Operator surfaces that `.help` hides from players (dev rooms, model, reset,
     # variable curation, …). `required_level > 0` is treated the same way. A
     # player still sees verbs they can usefully type (rolls, claim, recap);
