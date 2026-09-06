@@ -90,7 +90,6 @@ def _hidden_spec(canonical: str, handler, *, private_reply: bool) -> CommandSpec
         slash=None,
         help_key="commands.help.roll",
         private_reply=private_reply,
-        echo_input=False,
     )
 
 
