@@ -72,11 +72,11 @@ class _OneShotManualDice:
 
     def roll_for_check(self, resolver, *, params=None, modifiers=None):  # noqa: ANN001, ANN201 - DiceRoller protocol
         if self.used:
-            raise ManualRollError("manual roll provider may be consumed only once")
+            raise ManualRollError("manual roll provider may be consumed only once")  # i18n-exempt: internal invariant
         if params:
-            raise ManualRollError("manual check parameters are not supported by this request")
+            raise ManualRollError("manual check parameters are not supported by this request")  # i18n-exempt: internal invariant
         if modifiers:
-            raise ManualRollError("manual named roll modifiers are not supported by this request")
+            raise ManualRollError("manual named roll modifiers are not supported by this request")  # i18n-exempt: internal invariant
         self.used = True
         return self.rolled
 
@@ -120,7 +120,7 @@ def _cancel_event(request_id: str) -> Event:
 def _parse_submit_args(args: str) -> tuple[str, list[int]]:
     request_id, separator, raw_faces = args.strip().partition(" ")
     if not request_id or not separator or not raw_faces.strip():
-        raise ManualRollError("submission needs request id and die faces")
+        raise ManualRollError("submission needs request id and die faces")  # i18n-exempt: internal parser diagnostic
     faces: list[int] = []
     for token in _FACE_SPLIT_RE.split(raw_faces.strip()):
         if not token:
@@ -128,9 +128,9 @@ def _parse_submit_args(args: str) -> tuple[str, list[int]]:
         try:
             faces.append(int(token))
         except ValueError as exc:
-            raise ManualRollError("manual die faces must be integers") from exc
+            raise ManualRollError("manual die faces must be integers") from exc  # i18n-exempt: internal parser diagnostic
     if not faces:
-        raise ManualRollError("submission contains no die faces")
+        raise ManualRollError("submission contains no die faces")  # i18n-exempt: internal parser diagnostic
     return request_id, faces
 
 
@@ -140,11 +140,11 @@ async def _prepare_check(ctx: CommandCtx, character: CharacterSheet, args: str) 
     pack = await _pack_for_character(ctx, character)
     resolver = pack.resolver
     if resolver is None:
-        raise ManualRollError(f"rulepack {pack.system!r} has no check resolver")
+        raise ManualRollError(f"rulepack {pack.system!r} has no check resolver")  # i18n-exempt: internal invariant
     check = resolver.check
     times, rest = _split_multi(args or check.default_skill)
     if times != 1:
-        raise ManualRollError("manual mode currently accepts one check at a time")
+        raise ManualRollError("manual mode currently accepts one check at a time")  # i18n-exempt: internal capability gate
     parsed = _parse_check_args(rest, pack, default_name=check.default_skill)
     variant = await _get_rule_variant(ctx)
     modifiers, _applied = favor_modifiers(check, parsed.bonus, parsed.penalty)
@@ -152,7 +152,7 @@ async def _prepare_check(ctx: CommandCtx, character: CharacterSheet, args: str) 
         # Bonus/penalty/advantage mechanics may change how many dice are thrown or
         # which face is kept. Do not pretend a plain face list models them until
         # the manual substrate explicitly supports that transform.
-        raise ManualRollError("named roll modifiers are not supported in manual mode yet")
+        raise ManualRollError("named roll modifiers are not supported in manual mode yet")  # i18n-exempt: internal capability gate
 
     if resolver.target_kind == "dc":
         target_value = parsed.temp_value
@@ -278,12 +278,11 @@ class ManualRollCommands:
             return ctx.fail(ctx.i18n.t("commands.manual_roll.no_pending"))
         try:
             request_id, faces = _parse_submit_args(ctx.args)
-        except ManualRollError as exc:
+        except ManualRollError:
             return ctx.fail(
                 ctx.i18n.t(
                     "commands.manual_roll.bad_faces",
                     expression=pending.expression,
-                    reason=str(exc),
                 )
             )
         if request_id != pending.request_id:
@@ -293,12 +292,11 @@ class ManualRollCommands:
 
         try:
             rolled = manual_roll_detail(pending.expression, faces)
-        except ManualRollError as exc:
+        except ManualRollError:
             return ctx.fail(
                 ctx.i18n.t(
                     "commands.manual_roll.bad_faces",
                     expression=pending.expression,
-                    reason=str(exc),
                 )
             )
 
@@ -327,7 +325,7 @@ class ManualRollCommands:
 
         rendered = await super().cmd_check(shadow_ctx)
         if not manual_dice.used:
-            raise ManualRollError("manual roll was not consumed by the check lane")
+            raise ManualRollError("manual roll was not consumed by the check lane")  # i18n-exempt: internal invariant
         ctx.failed = shadow_ctx.failed
         await clear_pending_roll(ctx.services.store, ctx.chat_key, ctx.user_id)
         ctx.events.append(_cancel_event(pending.request_id))
