@@ -93,6 +93,21 @@ async def test_blocked_finalization_exposes_reference_without_allowing_character
     assert "do not reroll" in reply
 
 
+async def test_invalid_managed_state_fails_closed_instead_of_allowing_character_play():
+    services = _services()
+    router = CommandRouter(services)
+    ctx = AgentCtx(chat_key="cli:dm:readiness-invalid", user_id="u1", locale="en")
+    sheet = _managed_sheet(complete_flow=False)
+    sheet.secondary_attributes["__creation_flow__"]["stage_index"] = "broken"
+    await services.characters.save_character(ctx.user_id, ctx.chat_key, sheet)
+
+    reply = await router.dispatch(ctx, ".check Awareness")
+
+    assert reply is not None
+    assert "managed creation state is invalid" in reply
+    assert "blocked" in reply
+
+
 async def test_finalized_managed_character_can_use_character_checks():
     services = _services()
     router = CommandRouter(services)
