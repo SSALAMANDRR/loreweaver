@@ -4,7 +4,7 @@
   "commands.manual_roll.pending": "请先完成当前待处理的手动掷骰，再开始新的掷骰。",
   "commands.manual_roll.no_pending": "当前没有可提交的手动掷骰。",
   "commands.manual_roll.bad_request": "这个手动掷骰请求已经不是当前请求。",
-  "commands.manual_roll.bad_faces": "这些骰面无法满足 {expression}：{reason}",
+  "commands.manual_roll.bad_faces": "这些骰面与请求的掷骰 {expression} 不匹配。",
   "commands.manual_roll.unsupported": "这个掷骰暂时不能使用实体骰：{expression}",
   "commands.manual_roll.stale": "等待骰子期间检定条件发生了变化。待处理掷骰已取消，请重新发起检定。"
 }
