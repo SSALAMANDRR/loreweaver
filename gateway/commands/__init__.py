@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from gateway.commands.advancement import AdvancementCommands
 from gateway.commands.finalization import FinalizationCommands
+from gateway.commands.manual_roll import ManualRollCommands
 from gateway.commands.profile_creation import ProfileCreationCommands
 from gateway.commands.readiness import ReadinessCommands
 from gateway.commands.router import CommandRouter as _BaseCommandRouter
@@ -18,12 +19,13 @@ from gateway.commands.types import CommandCtx, CommandReply, CommandSpec
 
 class CommandRouter(
     ReadinessCommands,
+    ManualRollCommands,
     FinalizationCommands,
     AdvancementCommands,
     ProfileCreationCommands,
     _BaseCommandRouter,
 ):
-    """Public router plus generic creation, advancement, finalization and readiness surfaces."""
+    """Public router plus generic creation, advancement, finalization, readiness and manual-roll surfaces."""
 
 
 __all__ = ["CommandCtx", "CommandReply", "CommandRouter", "CommandSpec"]
