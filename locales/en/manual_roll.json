@@ -1,0 +1,10 @@
+{
+  "commands.manual_roll.mode": "Dice input mode: {mode}.",
+  "commands.manual_roll.mode_usage": "Usage: .rollmode auto|manual",
+  "commands.manual_roll.pending": "Finish the pending manual roll before starting another one.",
+  "commands.manual_roll.no_pending": "There is no pending manual roll to submit.",
+  "commands.manual_roll.bad_request": "That manual roll request is no longer current.",
+  "commands.manual_roll.bad_faces": "Those dice cannot satisfy {expression}: {reason}",
+  "commands.manual_roll.unsupported": "This roll cannot use physical dice yet: {expression}",
+  "commands.manual_roll.stale": "The check changed while waiting for the dice. The pending roll was cancelled; start the check again."
+}
