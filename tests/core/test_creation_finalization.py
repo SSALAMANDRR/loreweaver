@@ -1,3 +1,4 @@
+import copy
 from dataclasses import dataclass
 
 import pytest
@@ -55,13 +56,12 @@ def test_dh2_finalization_table_covers_the_mandatory_divination_roll():
 
     assert spec is not None
     assert spec.roll == "1d100"
-    covered = {
+    covered = [
         value
         for row in spec.rows
         for value in range(row.minimum, row.maximum + 1)
-    }
-    assert covered == set(range(1, 101))
-    assert len(spec.rows) == 20
+    ]
+    assert covered == list(range(1, 101))
 
 
 def test_choice_free_divination_applies_immediately_and_finalizes():
@@ -85,7 +85,7 @@ def test_choice_free_divination_applies_immediately_and_finalizes():
 
 def test_divination_choices_are_pending_until_player_resolves_every_group():
     pack, sheet = _completed_creation_sheet()
-    before = sheet.to_dict()
+    before = copy.deepcopy(sheet.to_dict())
 
     rolled = roll_creation_finalization(pack, sheet, roller=_FixedRoller(18))
 
