@@ -1,0 +1,5 @@
+{
+  "commands.readiness.creation": "请先使用 `.create` 完成分阶段角色创建，再使用依赖角色卡的游戏命令。",
+  "commands.readiness.finalization": "请先使用 `.finalize` 完成角色必需的最终创建步骤，再使用依赖角色卡的游戏命令。",
+  "commands.readiness.blocked": "角色最终创建正在等待缺失的规则依赖：{reference}。已掷出的结果会保留，请不要重新掷骰。"
+}
