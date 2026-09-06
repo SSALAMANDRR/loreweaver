@@ -2,8 +2,8 @@
 
 This mixin is deliberately transport/UI agnostic. In manual mode a normal
 ``.check`` computes and freezes the same deterministic inputs the automatic
-lane would use and persists one pending roll. ``net.state`` exposes that
-request only to its owner; a rich client decides how to render it.
+lane would use, persists one pending roll, and emits a private semantic
+``roll_request`` frame. A rich client decides how to render that request.
 
 Submission re-enters the existing check implementation with a one-shot dice
 provider on a shallow copy of ``Services``. Nothing mutates the deployment-wide
@@ -24,6 +24,7 @@ from core.manual_roll import (
     ROLL_MODE_AUTO,
     ROLL_MODE_MANUAL,
     ManualRollError,
+    PendingRoll,
     clear_pending_roll,
     get_roll_mode,
     load_pending_roll,
@@ -42,6 +43,7 @@ from gateway.commands.checks import (
     _target_value,
 )
 from gateway.commands.types import CommandCtx, CommandSpec
+from gateway.hub import Event
 
 
 _ROLL_MODE_WORDS = frozenset({"rollmode", "roll_mode"})
@@ -107,6 +109,14 @@ def _difficulty_label(resolver, difficulty_id: str | None, locale: str) -> str: 
     return difficulty_id
 
 
+def _request_event(pending: PendingRoll) -> Event:
+    return Event.panel(pending.wire(), private=True)
+
+
+def _cancel_event(request_id: str) -> Event:
+    return Event.panel({"type": "roll_cancel", "request_id": request_id}, private=True)
+
+
 def _parse_submit_args(args: str) -> tuple[str, list[int]]:
     request_id, separator, raw_faces = args.strip().partition(" ")
     if not request_id or not separator or not raw_faces.strip():
@@ -139,9 +149,6 @@ async def _prepare_check(ctx: CommandCtx, character: CharacterSheet, args: str) 
     variant = await _get_rule_variant(ctx)
     modifiers, _applied = favor_modifiers(check, parsed.bonus, parsed.penalty)
     if modifiers:
-        # Bonus/penalty/advantage mechanics may change how many dice are thrown or
-        # which face is kept. Do not pretend a plain face list models them until
-        # the manual substrate explicitly supports that transform.
         raise ManualRollError("named roll modifiers are not supported in manual mode yet")  # i18n-exempt: internal capability gate
 
     if resolver.target_kind == "dc":
@@ -154,8 +161,6 @@ async def _prepare_check(ctx: CommandCtx, character: CharacterSheet, args: str) 
         modifier = 0
 
     expression = resolver.roll
-    # Fail before storing anything when the expression cannot yet be represented
-    # as physical dice. This is the one syntax gate both request and submission use.
     parse_manual_dice_expression(expression)
     effective = resolver.effective_target(target_value, difficulty=parsed.difficulty)
     display_name = pack.display_name(parsed.canonical, ctx.locale)
@@ -199,7 +204,7 @@ class ManualRollCommands:
                 return _hidden_spec("rollmode", self.cmd_roll_mode, private_reply=True), args.strip()
             if token == _ROLL_SUBMIT_WORD:
                 # The result is normal table content (dice + check result); only the
-                # service command itself is hidden from the conversation.
+                # raw matched command echo is private to the submitting connection.
                 return _hidden_spec(_ROLL_SUBMIT_WORD, self.cmd_manual_roll_submit, private_reply=False), args.strip()
         return super().resolve(text, locale)
 
@@ -214,7 +219,10 @@ class ManualRollCommands:
             return ctx.fail(ctx.i18n.t("commands.manual_roll.mode_usage"))
         mode = await set_roll_mode(ctx.services.store, ctx.user_id, ctx.chat_key, arg)
         if mode == ROLL_MODE_AUTO:
-            await clear_pending_roll(ctx.services.store, ctx.chat_key, ctx.user_id)
+            pending = await load_pending_roll(ctx.services.store, ctx.chat_key, ctx.user_id)
+            if pending is not None:
+                await clear_pending_roll(ctx.services.store, ctx.chat_key, ctx.user_id)
+                ctx.events.append(_cancel_event(pending.request_id))
         return ctx.i18n.t("commands.manual_roll.mode", mode=mode)
 
     async def cmd_check(self, ctx: CommandCtx) -> str:
@@ -224,6 +232,7 @@ class ManualRollCommands:
 
         existing = await load_pending_roll(ctx.services.store, ctx.chat_key, ctx.user_id)
         if existing is not None:
+            ctx.events.append(_request_event(existing))
             return ctx.fail(ctx.i18n.t("commands.manual_roll.pending"))
 
         character = await ctx.services.characters.get_character(ctx.user_id, ctx.chat_key)
@@ -251,8 +260,7 @@ class ManualRollCommands:
             context={"fingerprint": prepared.fingerprint},
         )
         await save_pending_roll(ctx.services.store, ctx.chat_key, pending)
-        # No fake table result exists yet. The post-command state snapshot carries
-        # pending_roll to this viewer and the Studio owns how that is rendered.
+        ctx.events.append(_request_event(pending))
         return ctx.fail("")
 
     async def cmd_manual_roll_submit(self, ctx: CommandCtx) -> str:
@@ -265,10 +273,7 @@ class ManualRollCommands:
             request_id, faces = _parse_submit_args(ctx.args)
         except ManualRollError:
             return ctx.fail(
-                ctx.i18n.t(
-                    "commands.manual_roll.bad_faces",
-                    expression=pending.expression,
-                )
+                ctx.i18n.t("commands.manual_roll.bad_faces", expression=pending.expression)
             )
         if request_id != pending.request_id:
             return ctx.fail(ctx.i18n.t("commands.manual_roll.bad_request"))
@@ -279,10 +284,7 @@ class ManualRollCommands:
             rolled = manual_roll_detail(pending.expression, faces)
         except ManualRollError:
             return ctx.fail(
-                ctx.i18n.t(
-                    "commands.manual_roll.bad_faces",
-                    expression=pending.expression,
-                )
+                ctx.i18n.t("commands.manual_roll.bad_faces", expression=pending.expression)
             )
 
         character = await ctx.services.characters.get_character(ctx.user_id, ctx.chat_key)
@@ -294,11 +296,9 @@ class ManualRollCommands:
             current = None
         if current is None or current.fingerprint != original_fingerprint:
             await clear_pending_roll(ctx.services.store, ctx.chat_key, ctx.user_id)
+            ctx.events.append(_cancel_event(pending.request_id))
             return ctx.fail(ctx.i18n.t("commands.manual_roll.stale"))
 
-        # Reuse the ordinary check implementation verbatim, but give THIS command
-        # invocation a private Services copy whose dice source returns the physical
-        # faces exactly once. Other rooms/users keep the real shared DiceRoller.
         manual_dice = _OneShotManualDice(rolled)
         shadow_services = copy.copy(ctx.services)
         shadow_services.dice = manual_dice
@@ -312,4 +312,5 @@ class ManualRollCommands:
             raise ManualRollError("manual roll was not consumed by the check lane")  # i18n-exempt: internal invariant
         ctx.failed = shadow_ctx.failed
         await clear_pending_roll(ctx.services.store, ctx.chat_key, ctx.user_id)
+        ctx.events.append(_cancel_event(pending.request_id))
         return rendered
