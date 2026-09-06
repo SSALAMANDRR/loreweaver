@@ -21,9 +21,12 @@ async def _not_ready_notice(ctx: CommandCtx) -> str | None:
         return None
     try:
         pack = load_rulepack(character.system)
-        readiness = character_readiness(pack, character)
     except Exception:
         return None
+    try:
+        readiness = character_readiness(pack, character)
+    except Exception:
+        return ctx.i18n.t("commands.readiness.invalid")
     if readiness.ready:
         return None
     if readiness.phase == "creation":
