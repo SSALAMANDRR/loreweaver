@@ -288,12 +288,13 @@ def new_pending_roll(
 
 def _pending_key(user_id: str) -> str:
     digest = hashlib.sha256(str(user_id).encode("utf-8")).hexdigest()[:24]
-    return f"{PENDING_ROLL_PREFIX}{digest}"
+    # Keep the literal owner prefix visible to the room-state architecture scanner.
+    return PENDING_ROLL_PREFIX + digest
 
 
 def _mode_key(chat_key: str) -> str:
     digest = hashlib.sha256(str(chat_key).encode("utf-8")).hexdigest()[:24]
-    return f"{ROLL_MODE_STORE_PREFIX}{digest}"
+    return ROLL_MODE_STORE_PREFIX + digest
 
 
 async def load_pending_roll(store: Any, chat_key: str, user_id: str) -> PendingRoll | None:
