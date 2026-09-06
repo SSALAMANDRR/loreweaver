@@ -14,6 +14,7 @@ core/skills.py
 core/advancement.py
 core/advancement_purchase.py
 core/advancement_surface.py
+core/character_readiness.py
 core/creation_finalization.py
 core/creation_flow.py
 core/creation_layers.py
