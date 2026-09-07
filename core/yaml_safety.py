@@ -25,6 +25,11 @@ from typing import Any
 
 import yaml
 
+# Sidecars and frontmatter are small; large imported documents should not be retained merely
+# because two callers happened to parse them. This keeps the speedup useful without turning the
+# cache itself into a memory-retention surface for untrusted multi-megabyte YAML.
+_CACHE_MAX_TEXT = 256 * 1024
+
 
 class NoAliasSafeLoader(yaml.SafeLoader):
     """A `yaml.SafeLoader` that raises on any YAML alias node (`*name`).
@@ -47,14 +52,9 @@ class NoAliasSafeLoader(yaml.SafeLoader):
         return super().compose_node(parent, index)
 
 
-@lru_cache(maxsize=256)
+@lru_cache(maxsize=64)
 def _parse_no_aliases_cached(text: str) -> Any:
-    """Parse one immutable text payload once.
-
-    Advancement discovery repeatedly asks several sidecar loaders for the same
-    YAML during one state projection. Caching at this shared parse seam removes
-    the expensive PyYAML work without changing any caller's API.
-    """
+    """Parse one small immutable text payload once."""
 
     return yaml.load(text, Loader=NoAliasSafeLoader)
 
@@ -69,9 +69,13 @@ def safe_load_no_aliases(text: str) -> Any:
     class of attack (see `NoAliasSafeLoader`) at parse time, before the result is ever handed to
     calling code.
 
-    The cached parse result is deep-copied before returning. Callers therefore retain
-    the old isolation guarantee: mutating one loaded mapping cannot poison a later load
-    of identical text.
+    Repeated small documents use a bounded parse cache and are deep-copied before return, so
+    callers retain the old isolation guarantee. Large documents bypass the cache entirely.
     """
 
-    return copy.deepcopy(_parse_no_aliases_cached(text))
+    parsed = (
+        _parse_no_aliases_cached(text)
+        if len(text) <= _CACHE_MAX_TEXT
+        else yaml.load(text, Loader=NoAliasSafeLoader)
+    )
+    return copy.deepcopy(parsed)
