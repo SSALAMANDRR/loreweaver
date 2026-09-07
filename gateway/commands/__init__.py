@@ -9,7 +9,6 @@ from here; monkeypatch a helper where it is DEFINED (e.g. `gateway.commands.llm.
 from __future__ import annotations
 
 from gateway.commands.advancement import AdvancementCommands
-from gateway.commands.creation_ui import CreationUiCommands
 from gateway.commands.finalization import FinalizationCommands
 from gateway.commands.manual_roll import ManualRollCommands
 from gateway.commands.manual_roll_reconnect import ManualRollReconnectCommands
@@ -20,7 +19,6 @@ from gateway.commands.types import CommandCtx, CommandReply, CommandSpec
 
 
 class CommandRouter(
-    CreationUiCommands,
     ReadinessCommands,
     ManualRollReconnectCommands,
     ManualRollCommands,
