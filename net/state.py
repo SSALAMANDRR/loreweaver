@@ -29,6 +29,7 @@ from agent.context import AgentCtx
 from agent.npc import list_companions
 from agent.services import Services
 from core.character_manager import CharacterSheet, character_resources, has_character, resource_label_map
+from core.creation_surface import creation_catalog_surface, creation_state_surface
 from core.documents import KEEPER_VIEWER, MODULE_POOL_ID, MVU_ID, PLAYER_VIEWER, SCENE_ID
 from core.modvars import MODVARS_DOC_ID, MODVARS_DOC_TYPE, wire_entries
 from infra.usage_stats import USAGE_STATS_KEY
@@ -51,6 +52,16 @@ async def build_room_state(services: Services, ctx: AgentCtx) -> dict[str, Any]:
 
     if sheet is not None:
         state["character"] = await _character_payload(services, ctx.chat_key, sheet, ctx.locale)
+        # Creation is durable character lifecycle state, so it belongs in the same
+        # reconnect-safe snapshot as the sheet rather than in a transient side channel.
+        try:
+            from core.rulepacks import load_rulepack
+
+            creation = creation_state_surface(load_rulepack(sheet.system), sheet, ctx.locale)
+        except Exception:
+            creation = None
+        if creation is not None:
+            state["creation"] = creation
 
     scene = await _scene(services, ctx.chat_key)
     if scene is not None:
@@ -76,21 +87,21 @@ async def build_room_state(services: Services, ctx: AgentCtx) -> dict[str, Any]:
     if pregens:
         state["pregens"] = pregens
 
-    systems = _rule_systems()
+    systems = _rule_systems(ctx.locale)
     if systems:
         state["systems"] = systems
 
     return state
 
 
-def _rule_systems() -> list[dict[str, str]]:
-    """Every discoverable rule system, with the command word that makes a character in it.
+def _rule_systems(locale: str = "en") -> list[dict[str, Any]]:
+    """Every discoverable rule system plus its generic character-creation surface.
 
     What a client needs to offer "create a character" WITHOUT knowing any rule system:
-    the id to name and the dialect word to send. A pack that ships its own system
-    therefore appears in every client's picker with no client release — the same reason
-    resolution, sheets and commands are pack data (iron rule #1). Nothing secret rides
-    here: the install banner prints the packs and `.help` prints their command words.
+    the id to name, the dialect word to send, and (when declared by the pack) the
+    profiled/staged creation catalog. A pack that ships its own system therefore
+    appears in every client's picker with no client release — the same reason
+    resolution, sheets and commands are pack data (iron rule #1).
 
     A system with no `make_char` binding still lists (it can be imported into); it simply
     carries no word to create with. Both lookups are cached in `core.rulepacks`, so
@@ -103,16 +114,22 @@ def _rule_systems() -> list[dict[str, str]]:
     """
     from core.rulepacks import available_systems, load_rulepack, own_make_char_word
 
-    entries: list[dict[str, str]] = []
+    entries: list[dict[str, Any]] = []
     for system in available_systems():
         try:
             pack = load_rulepack(system)
         except Exception:
             continue  # a pack that will not load cannot be offered; the doctor reports it
-        entry = {"id": pack.system}
+        entry: dict[str, Any] = {"id": pack.system}
         word = own_make_char_word(pack)
         if word is not None:
             entry["make_char"] = word
+        try:
+            creation = creation_catalog_surface(pack, locale)
+        except Exception:
+            creation = {"staged": False, "requires_profile": False, "profiles": []}
+        if creation["staged"] or creation["requires_profile"]:
+            entry["creation"] = creation
         entries.append(entry)
     return entries
 
