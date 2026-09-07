@@ -97,4 +97,9 @@ class CreationActionCommands:
         ctx.failed = shadow.failed
         if shadow.failed:
             return ctx.fail(rendered)
+        # Some legacy public handlers return the localized bad-arguments diagnostic
+        # without marking their CommandCtx failed. The rich-client lane must not turn
+        # that diagnostic into a silent success just because it suppresses prose.
+        if rendered == ctx.i18n.t("commands.error.bad_args"):
+            return ctx.fail(rendered)
         return ""
