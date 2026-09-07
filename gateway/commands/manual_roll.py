@@ -45,7 +45,6 @@ from gateway.commands.checks import (
 from gateway.commands.types import CommandCtx, CommandSpec
 from gateway.hub import Event
 
-
 _ROLL_MODE_WORDS = frozenset({"rollmode", "roll_mode"})
 _ROLL_SUBMIT_WORD = "__roll_submit"
 _FACE_SPLIT_RE = re.compile(r"[\s,;]+")
