@@ -1,0 +1,134 @@
+version: 1
+
+# Presentation only. Mechanical authority remains in creation_flow.yaml,
+# creation.yaml, advancement.yaml and starting_equipment.yaml.
+stages:
+  characteristics:
+    ru:
+      title: Характеристики и родной мир
+      description: Выберите родной мир. Он определяет, какие стартовые характеристики получают преимущество или штраф, а также задаёт часть исходных параметров персонажа. После выбора Loreweaver бросит стартовые характеристики по правилам DH2.
+      choice: Выберите один родной мир.
+      effect: Выбор влияет на генерацию характеристик и дальнейшие преимущества родного мира.
+    en:
+      title: Characteristics and home world
+      description: Choose a home world. It determines which starting characteristics are favoured or penalised and supplies part of the character's starting profile. Loreweaver then rolls the starting characteristics using the DH2 rules.
+      choice: Choose one home world.
+      effect: This choice affects characteristic generation and later home-world benefits.
+
+  characteristic_reroll:
+    ru:
+      title: Переброс характеристики
+      description: После генерации характеристик вы можете один раз перебросить одну из них. Новый результат заменяет старый даже тогда, когда оказался хуже. Если текущие значения устраивают, переброс можно пропустить.
+      choice: Выберите одну характеристику для переброса или оставьте текущие значения.
+      effect: Повторный результат становится окончательным.
+    en:
+      title: Characteristic reroll
+      description: After generating characteristics you may reroll one of them once. The new result replaces the old result even if it is worse. You may skip the reroll if you prefer the current values.
+      choice: Choose one characteristic to reroll or keep the current values.
+      effect: The rerolled value is final.
+
+  home_world:
+    ru:
+      title: Преимущества родного мира
+      description: Теперь применяются остальные эффекты уже выбранного родного мира: раны, судьба, склонности, способности и обязательные выборы, если они предусмотрены этим миром.
+      choice: Сделайте требуемые родным миром дополнительные выборы.
+      effect: Эти преимущества добавляются к листу персонажа и остаются с ним после создания.
+    en:
+      title: Home-world benefits
+      description: Apply the remaining effects of the already selected home world: wounds, fate, aptitudes, abilities and any mandatory choices declared by that world.
+      choice: Make any additional choices required by the home world.
+      effect: These benefits are added to the character sheet permanently.
+
+  background:
+    ru:
+      title: Предыстория
+      description: Предыстория описывает, чем персонаж занимался до начала текущей истории. Она даёт стартовые навыки, таланты, склонности, способности и снаряжение и может требовать нескольких дополнительных выборов.
+      choice: Выберите одну предысторию и заполните все появившиеся поля.
+      effect: Полученные навыки, таланты и снаряжение добавляются сразу.
+    en:
+      title: Background
+      description: A background describes what the character did before the current story. It grants starting skills, talents, aptitudes, abilities and equipment and may require several additional choices.
+      choice: Choose one background and complete every choice it requires.
+      effect: The granted skills, talents and equipment are applied immediately.
+
+  role:
+    ru:
+      title: Роль
+      description: Роль определяет механический архетип персонажа и то, в каких направлениях ему проще развиваться. Это не обязанность служить Инквизиции и не должность в сюжете.
+      choice: Выберите одну роль и её обязательные варианты.
+      effect: Роль добавляет склонности, способность и связанные с ней стартовые таланты.
+    en:
+      title: Role
+      description: A role defines the character's mechanical archetype and the directions in which they develop efficiently. It does not require service to the Inquisition and is not a narrative job title.
+      choice: Choose one role and complete its required options.
+      effect: The role grants aptitudes, an ability and its associated starting talents.
+
+  duplicate_aptitudes:
+    ru:
+      title: Повторяющиеся склонности
+      description: Родной мир, предыстория и роль могли дать одну и ту же склонность несколько раз. По правилам DH2 каждый такой дубликат заменяется новой допустимой склонностью.
+      choice: Выберите отдельную замену для каждого дубликата. Одну и ту же замену нельзя использовать дважды.
+      effect: После этого набор стартовых склонностей станет уникальным и будет использоваться при расчёте стоимости улучшений.
+    en:
+      title: Duplicate aptitudes
+      description: Home world, background and role may grant the same aptitude more than once. Under the DH2 rules every duplicate must be replaced with another allowed aptitude.
+      choice: Choose a different replacement for every duplicate. The same replacement cannot be selected twice.
+      effect: The resulting starting aptitude set is unique and is used to calculate advancement costs.
+
+  advancement:
+    ru:
+      title: Стартовый опыт
+      description: Потратьте стартовые 1000 XP на характеристики, навыки и таланты. Цена зависит от совпадения требуемых склонностей с вашими. Покупки применяются сразу, а неистраченный опыт сохраняется.
+      choice: Купите нужные улучшения и завершите этап, когда будете готовы.
+      effect: Улучшения сразу меняют лист персонажа; оставшиеся XP можно сохранить для игры.
+    en:
+      title: Starting experience
+      description: Spend the starting 1000 XP on characteristics, skills and talents. Cost depends on how many required aptitudes you possess. Purchases apply immediately and unspent XP is retained.
+      choice: Buy the advances you want and finish the step when ready.
+      effect: Purchases immediately change the sheet; remaining XP carries into play.
+
+  starting_equipment:
+    ru:
+      title: Стартовое снаряжение
+      description: Выберите положенное персонажу дополнительное стартовое снаряжение. Уже полученные от предыстории предметы остаются на листе и не расходуют эти приобретения.
+      choice: Выберите доступные предметы, пока счётчик стартовых приобретений не станет равен нулю.
+      effect: Выбранные предметы добавляются в инвентарь. После последнего выбора механическое создание завершено.
+    en:
+      title: Starting equipment
+      description: Choose the character's additional starting acquisitions. Equipment already granted by the background remains on the sheet and does not consume these selections.
+      choice: Choose available items until the remaining starting-acquisition count reaches zero.
+      effect: Selected items are added to inventory. Mechanical creation finishes after the final selection.
+
+choice_groups:
+  trained_skill: {ru: Обученное умение, en: Trained skill}
+  social_skill: {ru: Социальное умение, en: Social skill}
+  psychic_skill: {ru: Психическое умение, en: Psychic skill}
+  scholastic_lore: {ru: Учёные знания, en: Scholastic lore}
+  weapon_training: {ru: Выучка с оружием, en: Weapon training}
+  starting_weapon: {ru: Стартовое оружие, en: Starting weapon}
+  melee_weapon: {ru: Оружие ближнего боя, en: Melee weapon}
+  weapon_package: {ru: Комплект оружия, en: Weapon package}
+  armour: {ru: Броня, en: Armour}
+  augment: {ru: Аугментация, en: Augmentation}
+  focus: {ru: Дополнительное оснащение, en: Additional gear}
+  aptitude: {ru: Склонность, en: Aptitude}
+  combat_aptitude: {ru: Боевая склонность, en: Combat aptitude}
+  role_talent: {ru: Талант роли, en: Role talent}
+
+advancement_categories:
+  characteristic: {ru: Характеристика, en: Characteristic}
+  skill: {ru: Умение, en: Skill}
+  talent: {ru: Талант, en: Talent}
+
+advancement_stages:
+  simple: {ru: Простое, en: Simple}
+  intermediate: {ru: Среднее, en: Intermediate}
+  trained: {ru: Обученное, en: Trained}
+  proficient: {ru: Опытное, en: Proficient}
+  expert: {ru: Экспертное, en: Expert}
+  known: {ru: Знает, en: Known}
+  experienced: {ru: Опытен, en: Experienced}
+  veteran: {ru: Ветеран, en: Veteran}
+  tier_1: {ru: Уровень 1, en: Tier 1}
+  tier_2: {ru: Уровень 2, en: Tier 2}
+  tier_3: {ru: Уровень 3, en: Tier 3}
