@@ -119,8 +119,17 @@ def _locale_candidates(locale: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys((locale_key, language, "en")))
 
 
-def stage_presentation(pack: Any, stage_id: str, locale: str) -> dict[str, str]:
-    stages = _mapping(load_creation_presentation(pack).get("stages"))
+def stage_presentation(
+    pack: Any,
+    stage_id: str,
+    locale: str,
+    *,
+    presentation: Mapping[str, Any] | None = None,
+) -> dict[str, str]:
+    """Resolve one stage guide, optionally reusing a caller-loaded sidecar."""
+
+    data = presentation if presentation is not None else load_creation_presentation(pack)
+    stages = _mapping(data.get("stages"))
     localized = _mapping(stages.get(stage_id))
     for candidate in _locale_candidates(locale):
         payload = localized.get(candidate)
@@ -139,12 +148,23 @@ def presentation_label(
     key: str,
     locale: str,
     fallback: str,
+    *,
+    presentation: Mapping[str, Any] | None = None,
 ) -> str:
+    """Resolve one presentation token, optionally reusing a loaded sidecar.
+
+    Advancement lists can contain dozens of rows. Re-reading and reparsing the
+    same YAML once per label turns a single XP purchase into hundreds of file
+    parses, especially painful on Windows. Callers that render a batch therefore
+    load the sidecar once and pass it here.
+    """
+
     if section not in _ALLOWED_SECTIONS - {"stages"}:
         raise CreationPresentationError(
             f"unsupported presentation label section {section!r}"  # i18n-exempt: internal validation
         )
-    table = _mapping(load_creation_presentation(pack).get(section))
+    data = presentation if presentation is not None else load_creation_presentation(pack)
+    table = _mapping(data.get(section))
     localized = _mapping(table.get(key))
     for candidate in _locale_candidates(locale):
         value = localized.get(candidate)
