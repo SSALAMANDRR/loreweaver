@@ -1,7 +1,7 @@
 """Presentation-only metadata for staged character creation.
 
 A rulepack may ship ``rulepacks/data/<system>/creation_presentation.yaml`` to
-explain creation stages and label otherwise-canonical UI tokens.  This module
+explain creation stages and label otherwise-canonical UI tokens. This module
 never changes character mechanics; it only localizes authored strings for rich
 clients.
 """
@@ -16,7 +16,9 @@ from core.yaml_safety import safe_load_no_aliases
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _BUILTIN_DATA_ROOT = _REPO_ROOT / "rulepacks" / "data"
-_ALLOWED_SECTIONS = frozenset({"stages", "choice_groups", "advancement_stages", "advancement_categories"})
+_ALLOWED_SECTIONS = frozenset(
+    {"stages", "choice_groups", "advancement_stages", "advancement_categories"}
+)
 _ALLOWED_STAGE_KEYS = frozenset({"title", "description", "choice", "effect"})
 
 
@@ -50,39 +52,56 @@ def _candidate_sidecars(pack: Any, data_root: Path | None = None) -> list[Path]:
     return candidates
 
 
-def load_creation_presentation(pack: Any, *, data_root: Path | None = None) -> Mapping[str, Any]:
-    path = next((candidate for candidate in _candidate_sidecars(pack, data_root) if candidate.is_file()), None)
+def load_creation_presentation(
+    pack: Any,
+    *,
+    data_root: Path | None = None,
+) -> Mapping[str, Any]:
+    path = next(
+        (candidate for candidate in _candidate_sidecars(pack, data_root) if candidate.is_file()),
+        None,
+    )
     if path is None:
         return {}
     try:
         raw = safe_load_no_aliases(path.read_text(encoding="utf-8")) or {}
     except Exception as exc:
-        raise CreationPresentationError(f"could not load creation presentation {path.name!r}: {exc}") from exc
+        raise CreationPresentationError(
+            f"could not load creation presentation {path.name!r}: {exc}"
+        ) from exc
     if not isinstance(raw, Mapping):
         raise CreationPresentationError("creation presentation root must be a mapping")
     if int(raw.get("version", 1)) != 1:
         raise CreationPresentationError("unsupported creation presentation version")
     unknown = set(raw) - ({"version"} | _ALLOWED_SECTIONS)
     if unknown:
-        raise CreationPresentationError(f"creation presentation has unknown root keys {sorted(unknown)}")
+        raise CreationPresentationError(
+            f"creation presentation has unknown root keys {sorted(unknown)}"
+        )
     for section in _ALLOWED_SECTIONS:
         value = raw.get(section) or {}
         if not isinstance(value, Mapping):
-            raise CreationPresentationError(f"creation presentation {section} must be a mapping")
+            raise CreationPresentationError(
+                f"creation presentation {section} must be a mapping"
+            )
     stages = _mapping(raw.get("stages"))
     for stage_id, localized in stages.items():
         if not str(stage_id).strip() or not isinstance(localized, Mapping):
             raise CreationPresentationError("creation presentation contains an invalid stage")
         for locale, payload in localized.items():
             if not str(locale).strip() or not isinstance(payload, Mapping):
-                raise CreationPresentationError(f"creation presentation stage {stage_id!r} locale must be a mapping")
+                raise CreationPresentationError(
+                    f"creation presentation stage {stage_id!r} locale must be a mapping"
+                )
             extra = set(payload) - _ALLOWED_STAGE_KEYS
             if extra:
                 raise CreationPresentationError(
                     f"creation presentation stage {stage_id!r} has unknown keys {sorted(extra)}"
                 )
             if not all(isinstance(value, str) for value in payload.values()):
-                raise CreationPresentationError(f"creation presentation stage {stage_id!r} values must be text")
+                raise CreationPresentationError(
+                    f"creation presentation stage {stage_id!r} values must be text"
+                )
     return raw
 
 
@@ -106,9 +125,17 @@ def stage_presentation(pack: Any, stage_id: str, locale: str) -> dict[str, str]:
     return {}
 
 
-def presentation_label(pack: Any, section: str, key: str, locale: str, fallback: str) -> str:
+def presentation_label(
+    pack: Any,
+    section: str,
+    key: str,
+    locale: str,
+    fallback: str,
+) -> str:
     if section not in _ALLOWED_SECTIONS - {"stages"}:
-        raise CreationPresentationError(f"unsupported presentation label section {section!r}")
+        raise CreationPresentationError(
+            f"unsupported presentation label section {section!r}"
+        )
     table = _mapping(load_creation_presentation(pack).get(section))
     localized = _mapping(table.get(key))
     for candidate in _locale_candidates(locale):
