@@ -30,12 +30,12 @@ stages:
   home_world:
     ru:
       title: Преимущества родного мира
-      description: Теперь применяются остальные эффекты уже выбранного родного мира: раны, судьба, склонности, способности и обязательные выборы, если они предусмотрены этим миром.
+      description: "Теперь применяются остальные эффекты уже выбранного родного мира: раны, судьба, склонности, способности и обязательные выборы, если они предусмотрены этим миром."
       choice: Сделайте требуемые родным миром дополнительные выборы.
       effect: Эти преимущества добавляются к листу персонажа и остаются с ним после создания.
     en:
       title: Home-world benefits
-      description: Apply the remaining effects of the already selected home world: wounds, fate, aptitudes, abilities and any mandatory choices declared by that world.
+      description: "Apply the remaining effects of the already selected home world: wounds, fate, aptitudes, abilities and any mandatory choices declared by that world."
       choice: Make any additional choices required by the home world.
       effect: These benefits are added to the character sheet permanently.
 
