@@ -22,7 +22,6 @@ from agent.services import build_services
 from core import pack as core_pack
 from core import rulepacks as core_rulepacks
 from core import skills as core_skills
-from core.dice_engine import seed_dice
 from gateway.commands import CommandRouter
 from gateway.panels import installed_pack_homes
 from gateway.runner import GatewayRunner
@@ -158,7 +157,6 @@ def main(argv: list[str] | None = None) -> int:
     runner = build_runner(settings)
     if _uses_demo_llm(runner.services):
         print(i18n.t("cli.offline_demo_notice"), file=sys.stderr)
-    seed_dice(0)
 
     try:
         return asyncio.run(_run_cli(runner, exec_cmd=args.exec_cmd, script=args.script))
@@ -583,7 +581,6 @@ def _run_serve(settings: Settings, i18n: I18n, args: argparse.Namespace) -> int:
     server = build_tui_server(settings, keystore, host=args.host, port=args.port)
     if _uses_demo_llm(server.services):
         print(i18n.t("cli.offline_demo_notice"), file=sys.stderr)
-    seed_dice(0)
 
     # A clean shutdown (Ctrl-C, or the listener stopping) exits 0; a startup failure exits non-zero
     # so systemd's `Restart=on-failure` fires and scripts/automation don't read "no ticket" as success.
