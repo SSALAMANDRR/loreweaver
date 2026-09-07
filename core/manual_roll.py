@@ -22,8 +22,9 @@ import hashlib
 import json
 import re
 import uuid
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from core.check_outcome import RollDetail
 from infra.room_facets import STORAGE_ROOM_STATE, RoomStateFacet
@@ -134,7 +135,7 @@ class PendingRoll:
         )
 
     @classmethod
-    def load(cls, raw: str) -> "PendingRoll":
+    def load(cls, raw: str) -> PendingRoll:
         try:
             data = json.loads(raw)
         except (json.JSONDecodeError, TypeError) as exc:
