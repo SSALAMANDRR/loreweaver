@@ -35,8 +35,8 @@ fields:
       ru: Уточнение положения
       en: Status details
     placeholder:
-      ru: Например: бывший комиссар-дезертир, возглавляющий преступную группировку
-      en: For example: former commissar turned deserter and underworld boss
+      ru: "Например: бывший комиссар-дезертир, возглавляющий преступную группировку"
+      en: "For example: former commissar turned deserter and underworld boss"
 
   allegiance:
     kind: choice
@@ -65,8 +65,8 @@ fields:
       ru: Личная цель
       en: Personal goal
     placeholder:
-      ru: Например: построить собственную криминальную империю в городе-улье
-      en: For example: build a criminal empire in a hive city
+      ru: "Например: построить собственную криминальную империю в городе-улье"
+      en: "For example: build a criminal empire in a hive city"
 
   campaign_context:
     kind: textarea
@@ -75,5 +75,5 @@ fields:
       ru: Контекст кампании
       en: Campaign context
     placeholder:
-      ru: Например: город-улей разваливается на фоне вторжения Хаоса
-      en: For example: a hive city is collapsing under a Chaos invasion
+      ru: "Например: город-улей разваливается на фоне вторжения Хаоса"
+      en: "For example: a hive city is collapsing under a Chaos invasion"
