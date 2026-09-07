@@ -1,6 +1,6 @@
 from agent.context import AgentCtx
 from agent.services import build_services
-from core.advancement_purchase import advancement_budget
+from core.creation_flow import creation_flow_status, load_creation_flow_spec
 from core.dice_engine import seed_dice
 from core.rulepacks import load_rulepack
 from gateway.commands import CommandRouter
@@ -33,7 +33,7 @@ async def test_dh2_make_char_accepts_canonical_profile_id_and_character_name():
     reply = await router.dispatch(ctx, ".dh2 forge_world Varro")
 
     assert reply is not None and "dh2" in reply
-    assert "1000 XP" in reply and ".advance" in reply
+    assert "characteristic_reroll" in reply and ".create" in reply
     character = await services.characters.get_character("u1", ctx.chat_key)
     assert character.name == "Varro"
     assert character.system == "dh2"
@@ -43,9 +43,11 @@ async def test_dh2_make_char_accepts_canonical_profile_id_and_character_name():
     for key in ("WS", "BS", "S", "T", "Ag", "Int", "Per", "WP", "Fel", "Inf"):
         assert 22 <= character.attributes[key] <= 40
 
-    budget = advancement_budget(load_rulepack("dh2"), character)
-    assert budget is not None
-    assert (budget.starting_xp, budget.available_xp, budget.spent_xp) == (1000, 1000, 0)
+    pack = load_rulepack("dh2")
+    status = creation_flow_status(pack, character)
+    spec = load_creation_flow_spec(pack)
+    assert status is not None and spec is not None and not status.complete
+    assert spec.stages[status.stage_index].id == "characteristic_reroll"
 
 
 async def test_dh2_make_char_accepts_multiword_profile_alias_with_pipe_separator():
