@@ -81,6 +81,11 @@ def document_point_id(document_id: str, chunk_index: int) -> str:
     return f"{document_id}:{chunk_index}"
 
 
+def _normalize_newlines(text: str) -> str:
+    """Canonicalize decoded source text so persisted knowledge is OS-independent."""
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
 class DocumentProcessor:
     """Document parser: TXT/PDF/DOCX text extraction + character-based chunking.
 
@@ -100,11 +105,11 @@ class DocumentProcessor:
         try:
             for encoding in ("utf-8", "gbk", "gb2312", "big5"):
                 try:
-                    return file_content.decode(encoding)
+                    return _normalize_newlines(file_content.decode(encoding))
                 except UnicodeDecodeError:
                     continue
             # All strict decodes failed: fall back to error-tolerant utf-8.
-            return file_content.decode("utf-8", errors="ignore")
+            return _normalize_newlines(file_content.decode("utf-8", errors="ignore"))
         except Exception as e:
             raise ValueError(t("document.error.txt_parse_failed", error=str(e))) from e
 
