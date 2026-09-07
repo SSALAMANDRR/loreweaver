@@ -1,0 +1,79 @@
+version: 1
+optional: true
+
+# Narrative context is intentionally separate from deterministic DH2 mechanics.
+# The classic acolyte premise is one option, not an engine assumption.
+fields:
+  status:
+    kind: choice
+    required: true
+    display:
+      ru: Текущее положение
+      en: Current status
+    options:
+      inquisition:
+        display: {ru: Служитель Инквизиции, en: Inquisition operative}
+      imperial_service:
+        display: {ru: Имперский служащий, en: Imperial servant}
+      independent:
+        display: {ru: Независимый, en: Independent}
+      criminal:
+        display: {ru: Преступник / криминальный деятель, en: Criminal / underworld figure}
+      deserter:
+        display: {ru: Дезертир / беглец, en: Deserter / fugitive}
+      renegade:
+        display: {ru: Отступник, en: Renegade}
+      chaos:
+        display: {ru: Хаосит / еретик, en: Chaos devotee / heretic}
+      other:
+        display: {ru: Другое, en: Other}
+
+  status_detail:
+    kind: text
+    required: false
+    display:
+      ru: Уточнение положения
+      en: Status details
+    placeholder:
+      ru: Например: бывший комиссар-дезертир, возглавляющий преступную группировку
+      en: For example: former commissar turned deserter and underworld boss
+
+  allegiance:
+    kind: choice
+    required: false
+    display:
+      ru: Отношение к Империуму
+      en: Attitude toward the Imperium
+    options:
+      loyal:
+        display: {ru: Лоялен, en: Loyal}
+      pragmatic:
+        display: {ru: Прагматичен, en: Pragmatic}
+      disillusioned:
+        display: {ru: Разочарован, en: Disillusioned}
+      hiding:
+        display: {ru: Скрывается от властей, en: Hiding from authorities}
+      hostile:
+        display: {ru: Враждебен, en: Hostile}
+      other:
+        display: {ru: Другое, en: Other}
+
+  goal:
+    kind: textarea
+    required: false
+    display:
+      ru: Личная цель
+      en: Personal goal
+    placeholder:
+      ru: Например: построить собственную криминальную империю в городе-улье
+      en: For example: build a criminal empire in a hive city
+
+  campaign_context:
+    kind: textarea
+    required: false
+    display:
+      ru: Контекст кампании
+      en: Campaign context
+    placeholder:
+      ru: Например: город-улей разваливается на фоне вторжения Хаоса
+      en: For example: a hive city is collapsing under a Chaos invasion
