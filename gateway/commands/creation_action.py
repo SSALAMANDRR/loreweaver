@@ -1,21 +1,27 @@
 """Hidden rich-client mutation lane for structured character creation.
 
 The public `.create`, pack make-character word, and `.advance` handlers remain the
-single mutation authority.  Rich clients need to invoke those same handlers without
-putting their implementation commands and success prose into the narrative log, so
-this adapter delegates to them on a shadow context and suppresses successful text.
-Failures keep the underlying localized diagnostic.
+single mutation authority for deterministic creation mechanics. Rich clients invoke
+those same handlers without putting implementation commands and success prose into the
+narrative log. Pack-declared narrative character context is deliberately non-mechanical;
+its hidden action validates through ``core.character_context`` and persists the same
+sheet state directly.
 """
 
 from __future__ import annotations
 
 import copy
+import json
+from collections.abc import Mapping
+from urllib.parse import unquote
 
+from core.character_context import CharacterContextError, set_character_context
+from core.character_manager import has_character
 from core.rulepacks import load_rulepack, own_make_char_word
 from gateway.commands.types import CommandCtx, CommandSpec
 
 _CREATION_ACTION_WORD = "__creation_action"
-_ACTIONS = frozenset({"start", "create", "advance"})
+_ACTIONS = frozenset({"start", "create", "advance", "context"})
 
 
 def _hidden_spec(handler) -> CommandSpec:  # noqa: ANN001
@@ -39,8 +45,24 @@ def _start_parts(raw: str) -> tuple[str, str, str] | None:
     return parts[0], parts[1], parts[2]
 
 
+def _context_payload(raw: str) -> tuple[bool, Mapping[str, object]] | None:
+    text = raw.strip()
+    if text.casefold() == "skip":
+        return True, {}
+    verb, separator, encoded = text.partition(" ")
+    if verb.casefold() != "set" or not separator or not encoded.strip():
+        return None
+    try:
+        decoded = json.loads(unquote(encoded.strip()))
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(decoded, Mapping):
+        return None
+    return False, decoded
+
+
 class CreationActionCommands:
-    """Delegate hidden GUI actions to the existing public deterministic handlers."""
+    """Delegate hidden GUI actions to existing deterministic engine primitives."""
 
     def resolve(self, text: str, locale: str):  # noqa: ANN201 - mirrors CommandRouter.resolve
         stripped = text.strip()
@@ -57,6 +79,26 @@ class CreationActionCommands:
         action = action.casefold()
         if not separator or action not in _ACTIONS:
             return ctx.fail(ctx.i18n.t("commands.error.bad_args"))
+
+        if action == "context":
+            parsed_context = _context_payload(payload)
+            if parsed_context is None:
+                return ctx.fail(ctx.i18n.t("commands.error.bad_args"))
+            skip, values = parsed_context
+            character = await ctx.services.characters.get_character(ctx.user_id, ctx.chat_key)
+            if not has_character(character):
+                return ctx.fail(ctx.i18n.t("commands.error.bad_args"))
+            try:
+                pack = load_rulepack(character.system)
+                set_character_context(pack, character, values, skip=skip)
+                await ctx.services.characters.save_character(ctx.user_id, ctx.chat_key, character)
+            except (CharacterContextError, Exception) as exc:
+                # CharacterContextError is the expected validation path; the broad
+                # boundary also keeps a storage/provider failure from escaping this
+                # private service command as an unhandled turn exception.
+                del exc
+                return ctx.fail(ctx.i18n.t("commands.error.bad_args"))
+            return ""
 
         shadow = copy.copy(ctx)
         # `copy.copy` intentionally shares the events list: if an underlying handler
