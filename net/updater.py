@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import shutil
 import sys
 from dataclasses import dataclass
 
@@ -29,13 +30,39 @@ class UpdateResult:
     output: str
 
 
+def _windows_update_shell() -> str:
+    """Return the Windows PowerShell executable used for operator update commands."""
+    discovered = shutil.which("pwsh") or shutil.which("powershell") or shutil.which("powershell.exe")
+    if discovered:
+        return discovered
+    system_root = os.environ.get("SystemRoot", r"C:\Windows")
+    return os.path.join(system_root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
+
+
 async def run_update_command(command: str) -> UpdateResult:
-    """Run the configured update command; return ``ok`` plus the tail of its combined output."""
-    proc = await asyncio.create_subprocess_shell(
-        command,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.STDOUT,
-    )
+    """Run the configured update command; return ``ok`` plus the tail of its combined output.
+
+    On Windows the operator-facing configuration is executed by PowerShell rather than
+    ``cmd.exe``. This keeps command chaining and failure semantics consistent with the
+    shell Windows operators actually use, while POSIX hosts keep their native shell.
+    """
+    if os.name == "nt":
+        proc = await asyncio.create_subprocess_exec(
+            _windows_update_shell(),
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+    else:
+        proc = await asyncio.create_subprocess_shell(
+            command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
     try:
         stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=_UPDATE_TIMEOUT_SECONDS)
     except TimeoutError:
