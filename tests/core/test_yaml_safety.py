@@ -54,6 +54,17 @@ def test_empty_document_is_none_like_plain_safe_load() -> None:
     assert safe_load_no_aliases("") == yaml.safe_load("")
 
 
+def test_repeated_cached_loads_return_independent_objects() -> None:
+    text = "items: [one, two]\nmetadata:\n  scope: room\n"
+    first = safe_load_no_aliases(text)
+    second = safe_load_no_aliases(text)
+
+    first["items"].append("three")
+    first["metadata"]["scope"] = "changed"
+
+    assert second == {"items": ["one", "two"], "metadata": {"scope": "room"}}
+
+
 # ---------------------------------------------------------------------------
 # (b) A trivial alias pair is rejected.
 # ---------------------------------------------------------------------------
