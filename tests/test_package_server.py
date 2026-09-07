@@ -74,7 +74,12 @@ def test_server_tar_materializes_symlinks_as_regular_files(tmp_path, monkeypatch
     bundle.mkdir()
     target = bundle / "library-real.so"
     target.write_bytes(b"shared-library")
-    (bundle / "library.so").symlink_to(target.name)
+    try:
+        (bundle / "library.so").symlink_to(target.name)
+    except OSError as exc:
+        if getattr(exc, "winerror", None) == 1314:
+            pytest.skip("Windows process lacks symlink privilege; archive behavior is covered when symlinks are available")
+        raise
     monkeypatch.setattr(package_server, "DIST_DIR", tmp_path / "dist")
 
     archive = package_server.make_archive(bundle, "linux-x64")
