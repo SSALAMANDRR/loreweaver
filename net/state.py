@@ -155,12 +155,21 @@ async def resolve_active_character(services: Services, ctx: AgentCtx) -> Charact
 async def _character_payload(
     services: Services, chat_key: str, sheet: CharacterSheet, locale: str | None = None
 ) -> dict[str, Any]:
-    """Protocol 2.0: vitals ride a generic ``resources`` list ({id,label,value,max})
-    instead of per-system field names — a client renders meters without knowing
-    any rule system. The sheet layer declares its own resources (M16 stage B:
-    `core.character_manager.character_resources`, pack-driven); the WIRE shape
-    is final. Labels resolve to ``locale`` here, at the per-viewer boundary (M19)."""
-    attrs = _wire_attributes(sheet)
+    """Protocol 2.0 character snapshot plus additive presentation labels.
+
+    Storage keys stay canonical on the wire so edits can write them back exactly.
+    ``attribute_labels`` is a presentation-only map for rich clients, resolved from
+    the same rulepack display table that creation uses. Resource backing slots are
+    omitted from the attribute table because those values already ride as meters.
+    """
+    try:
+        from core.rulepacks import load_rulepack
+
+        pack = load_rulepack(sheet.system)
+    except Exception:
+        pack = None
+
+    attrs = _wire_attributes(sheet, pack)
     resources = character_resources(sheet, locale)
 
     status_effects: list[Any] = []
@@ -179,36 +188,54 @@ async def _character_payload(
         "attributes": attrs,
         "status_effects": status_effects,
     }
+    spec = getattr(pack, "sheet_spec", None) if pack is not None else None
+    if spec is not None:
+        payload["system_label"] = spec.label or sheet.system
+        canonical_by_key = spec.key_to_canonical()
+        payload["attribute_labels"] = {
+            key: pack.display_name(canonical_by_key.get(key, key), locale or "en")
+            for key in attrs
+        }
     avatar = getattr(sheet, "avatar", None)
     if isinstance(avatar, dict):
         payload["avatar"] = avatar
     return payload
 
 
-def _wire_attributes(sheet: CharacterSheet) -> dict[str, Any]:
-    """`state.character.attributes`: the sheet's CHARACTERISTICS, in the pack's order.
+def _wire_attributes(sheet: CharacterSheet, pack: Any | None = None) -> dict[str, Any]:
+    """The sheet's editable characteristic slots, in pack declaration order.
 
-    The stored attributes dict also carries what the sheet layer writes beside them —
-    the vitals (`HP`/`SAN`/`MP` and their maxima) and derived values (`IDEA`, `KNOW`,
-    …). Those are not attributes to a table: the vitals ride `resources` as meters, and
-    a derived value is computed, not owned. Sending them here forced every client to
-    know, per system, which keys to hide and how to order the rest — the TUI kept a
-    CoC table and a D&D table for exactly that. So the wire carries the keys the pack's
-    `sheet.attributes` declares, in declaration order; a pack that declares none (a
-    system with no sheet spec) sends the dict as stored, since nothing else can say
-    what it means.
+    A resource's value/max slots are presentation duplicates, not a second set of
+    character characteristics. They are filtered generically from ``sheet.resources``;
+    the resource meters keep carrying the same values. Unknown/unresolvable packs retain
+    the historical fallback of sending stored attributes verbatim.
     """
-    from core.rulepacks import load_rulepack
-
     stored = dict(sheet.attributes)
-    try:
-        spec = load_rulepack(sheet.system).sheet_spec
-        declared = list(spec.attributes.keys()) if spec is not None else []
-    except Exception:
-        declared = []
+    if pack is None:
+        try:
+            from core.rulepacks import load_rulepack
+
+            pack = load_rulepack(sheet.system)
+        except Exception:
+            pack = None
+    spec = getattr(pack, "sheet_spec", None) if pack is not None else None
+    declared = list(spec.attributes.keys()) if spec is not None else []
     if not declared:
         return stored
-    return {key: stored[key] for key in declared if key in stored}
+
+    resource_keys: set[str] = set()
+    for resource in spec.resources:
+        if resource.source != "attributes":
+            continue
+        if resource.value_key:
+            resource_keys.add(resource.value_key)
+        if resource.max_key:
+            resource_keys.add(resource.max_key)
+    return {
+        key: stored[key]
+        for key in declared
+        if key in stored and key not in resource_keys
+    }
 
 
 async def _party(
