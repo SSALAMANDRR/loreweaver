@@ -21,10 +21,10 @@ from typing import Any
 from core.character_manager import CharacterSheet
 from core.check_roll import favor_modifiers
 from core.manual_roll import (
-    ROLL_MODE_AUTO,
-    ROLL_MODE_MANUAL,
     ManualRollError,
     PendingRoll,
+    ROLL_MODE_AUTO,
+    ROLL_MODE_MANUAL,
     clear_pending_roll,
     get_roll_mode,
     load_pending_roll,
