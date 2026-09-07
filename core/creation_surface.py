@@ -12,6 +12,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from core.advancement_surface import available_advancement_surface
+from core.character_context import character_context_surface
 from core.creation_flow import (
     CreationFlowStatus,
     creation_flow_duplicate_requirements,
@@ -183,7 +184,12 @@ def creation_catalog_surface(pack: RulePack, locale: str) -> dict[str, Any]:
 
 
 def creation_state_surface(pack: RulePack, character: Any, locale: str) -> dict[str, Any] | None:
-    """Project the current persisted staged-creation step, or ``None`` if unmanaged."""
+    """Project the current persisted staged-creation step, or ``None`` if unmanaged.
+
+    Optional narrative character context is attached to the same reconnect-safe
+    lifecycle surface. It is pack-declared and deliberately separate from mechanics:
+    a client can ask who this character is *now* without core learning setting lore.
+    """
 
     status = creation_flow_status(pack, character)
     if status is None:
@@ -201,6 +207,9 @@ def creation_state_surface(pack: RulePack, character: Any, locale: str) -> dict[
         "completed_stages": list(status.completed_stages),
         "stage": None,
     }
+    context = character_context_surface(pack, character, locale)
+    if context is not None:
+        frame["context"] = context
     if status.complete:
         return frame
 
