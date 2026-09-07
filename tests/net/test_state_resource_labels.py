@@ -1,10 +1,11 @@
-"""M19 item 8: `sheet.resources` labels resolve to the VIEWER's locale.
+"""M19 item 8: sheet presentation labels resolve to the VIEWER's locale.
 
 A pack's resource labels used to be one frozen string, so a bar authored in Chinese
 read 潮位 to an English player and vice versa. Labels are now declared per locale and
 resolved at the wire boundary — the same room, the same character, two connections,
-two readings. The party roster additionally persists its meters at sync time, so its
-stored label must NOT be what ships either.
+two readings. Characteristic labels use the same viewer-localized rulepack display
+table while retaining canonical storage keys for edits. The party roster additionally
+persists its meters at sync time, so its stored label must NOT be what ships either.
 """
 
 from __future__ import annotations
@@ -21,14 +22,21 @@ from infra.embeddings import FakeEmbeddings
 from infra.llm import FakeLLM
 from net.state import build_room_state
 
-# A minimal self-contained system whose one meter is authored in two languages.
+# A minimal self-contained system whose sheet and one meter are authored in two languages.
 CHAOZHAN_YAML = """\
 names: [chaozhan-fixture]
 defaults:
-  潮感: 50
+  Focus: 50
+display:
+  en: {Focus: Focus}
+  zh: {Focus: 定力}
 sheet:
   label: Tide-reader
-  attributes: {CHAO: 4, CHAOMAX: 9}
+  attr_keys:
+    Focus: FOCUS
+    Tide: CHAO
+    TideMax: CHAOMAX
+  attributes: {FOCUS: 5, CHAO: 4, CHAOMAX: 9}
   resources:
     - {id: chao, label: {en: Tide, zh: 潮位}, value: CHAO, max: CHAOMAX}
     - {id: ledger, label: Ledger, value: CHAO, max: CHAOMAX}
@@ -77,6 +85,19 @@ async def test_two_viewers_of_one_room_read_their_own_labels(tmp_path: Path) -> 
         assert zh_labels["chao"] == "潮位" and en_labels["chao"] == "Tide"
         # A single-language label is not a bug to route around: both viewers read it.
         assert zh_labels["ledger"] == en_labels["ledger"] == "Ledger"
+
+        # Storage identity stays FOCUS so a rich client can write `.st FOCUS=...`,
+        # while the visible label belongs to this viewer's locale.
+        assert zh_state["character"]["attributes"] == {"FOCUS": 5}
+        assert en_state["character"]["attributes"] == {"FOCUS": 5}
+        assert zh_state["character"]["attribute_labels"] == {"FOCUS": "定力"}
+        assert en_state["character"]["attribute_labels"] == {"FOCUS": "Focus"}
+        assert zh_state["character"]["system_label"] == "Tide-reader"
+
+        # CHAO/CHAOMAX already ride the resource meters; duplicating them in the
+        # characteristic table would make a client render the same value twice.
+        assert "CHAO" not in zh_state["character"]["attributes"]
+        assert "CHAOMAX" not in zh_state["character"]["attributes"]
 
         # The party roster stored ONE label at sync time; the wire re-labels anyway.
         zh_party = {res["id"]: res["label"] for res in zh_state["party"][0]["resources"]}
