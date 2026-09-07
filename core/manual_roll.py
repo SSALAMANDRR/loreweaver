@@ -29,7 +29,6 @@ from typing import Any
 from core.check_outcome import RollDetail
 from infra.room_facets import STORAGE_ROOM_STATE, RoomStateFacet
 
-
 PENDING_ROLL_PREFIX = "pending_roll."
 ROLL_MODE_STORE_PREFIX = "manual_roll_mode."
 ROLL_MODE_AUTO = "auto"
