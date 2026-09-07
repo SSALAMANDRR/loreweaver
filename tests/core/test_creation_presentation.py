@@ -17,7 +17,19 @@ def test_dh2_creation_presentation_localizes_stage_guidance_without_core_rule_kn
 def test_dh2_creation_presentation_localizes_generic_ui_tokens():
     pack = load_rulepack("dh2")
 
-    assert presentation_label(pack, "choice_groups", "trained_skill", "ru", "trained_skill") == "Обученное умение"
-    assert presentation_label(pack, "advancement_stages", "simple", "ru", "simple") == "Простое"
-    assert presentation_label(pack, "advancement_categories", "talent", "ru", "talent") == "Талант"
-    assert presentation_label(pack, "advancement_stages", "unknown", "ru", "fallback") == "fallback"
+    assert (
+        presentation_label(pack, "choice_groups", "trained_skill", "ru", "trained_skill")
+        == "Обученное умение"
+    )
+    assert (
+        presentation_label(pack, "advancement_stages", "simple", "ru", "simple")
+        == "Простое"
+    )
+    assert (
+        presentation_label(pack, "advancement_categories", "talent", "ru", "talent")
+        == "Талант"
+    )
+    assert (
+        presentation_label(pack, "advancement_stages", "unknown", "ru", "fallback")
+        == "fallback"
+    )
