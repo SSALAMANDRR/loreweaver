@@ -46,6 +46,16 @@ async def test_state_restores_current_creation_stage_from_the_saved_character():
     assert stage["can_skip"] is True
     assert any(target["id"] == "WS" and isinstance(target["value"], int) for target in stage["targets"])
 
+    context = creation["context"]
+    assert context["available"] is True
+    assert context["optional"] is True
+    assert context["complete"] is False
+    fields = {entry["id"]: entry for entry in context["fields"]}
+    assert fields["status"]["label"] == "Текущее положение"
+    statuses = {entry["id"]: entry["label"] for entry in fields["status"]["options"]}
+    assert statuses["inquisition"] == "Служитель Инквизиции"
+    assert statuses["deserter"] == "Дезертир / беглец"
+
 
 async def test_state_projects_layer_options_choices_and_authored_rule_detail():
     services = _services()
