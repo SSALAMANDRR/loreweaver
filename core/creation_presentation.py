@@ -33,9 +33,11 @@ def _mapping(value: Any) -> Mapping[str, Any]:
 def _candidate_sidecars(pack: Any, data_root: Path | None = None) -> list[Path]:
     system = str(getattr(pack, "system", "")).strip()
     if not system:
-        raise CreationPresentationError("pack has no system id")
+        raise CreationPresentationError("pack has no system id")  # i18n-exempt: internal validation
     if any(part in system for part in ("/", "\\", "..")):
-        raise CreationPresentationError("pack system id is not safe for a presentation path")
+        raise CreationPresentationError(
+            "pack system id is not safe for a presentation path"  # i18n-exempt: internal validation
+        )
     if data_root is not None:
         return [Path(data_root) / system / "creation_presentation.yaml"]
 
@@ -67,40 +69,46 @@ def load_creation_presentation(
         raw = safe_load_no_aliases(path.read_text(encoding="utf-8")) or {}
     except Exception as exc:
         raise CreationPresentationError(
-            f"could not load creation presentation {path.name!r}: {exc}"
+            f"could not load creation presentation {path.name!r}: {exc}"  # i18n-exempt: internal validation
         ) from exc
     if not isinstance(raw, Mapping):
-        raise CreationPresentationError("creation presentation root must be a mapping")
+        raise CreationPresentationError(
+            "creation presentation root must be a mapping"  # i18n-exempt: internal validation
+        )
     if int(raw.get("version", 1)) != 1:
-        raise CreationPresentationError("unsupported creation presentation version")
+        raise CreationPresentationError(
+            "unsupported creation presentation version"  # i18n-exempt: internal validation
+        )
     unknown = set(raw) - ({"version"} | _ALLOWED_SECTIONS)
     if unknown:
         raise CreationPresentationError(
-            f"creation presentation has unknown root keys {sorted(unknown)}"
+            f"creation presentation has unknown root keys {sorted(unknown)}"  # i18n-exempt: internal validation
         )
     for section in _ALLOWED_SECTIONS:
         value = raw.get(section) or {}
         if not isinstance(value, Mapping):
             raise CreationPresentationError(
-                f"creation presentation {section} must be a mapping"
+                f"creation presentation {section} must be a mapping"  # i18n-exempt: internal validation
             )
     stages = _mapping(raw.get("stages"))
     for stage_id, localized in stages.items():
         if not str(stage_id).strip() or not isinstance(localized, Mapping):
-            raise CreationPresentationError("creation presentation contains an invalid stage")
+            raise CreationPresentationError(
+                "creation presentation contains an invalid stage"  # i18n-exempt: internal validation
+            )
         for locale, payload in localized.items():
             if not str(locale).strip() or not isinstance(payload, Mapping):
                 raise CreationPresentationError(
-                    f"creation presentation stage {stage_id!r} locale must be a mapping"
+                    f"creation presentation stage {stage_id!r} locale must be a mapping"  # i18n-exempt: internal validation
                 )
             extra = set(payload) - _ALLOWED_STAGE_KEYS
             if extra:
                 raise CreationPresentationError(
-                    f"creation presentation stage {stage_id!r} has unknown keys {sorted(extra)}"
+                    f"creation presentation stage {stage_id!r} has unknown keys {sorted(extra)}"  # i18n-exempt: internal validation
                 )
             if not all(isinstance(value, str) for value in payload.values()):
                 raise CreationPresentationError(
-                    f"creation presentation stage {stage_id!r} values must be text"
+                    f"creation presentation stage {stage_id!r} values must be text"  # i18n-exempt: internal validation
                 )
     return raw
 
@@ -134,7 +142,7 @@ def presentation_label(
 ) -> str:
     if section not in _ALLOWED_SECTIONS - {"stages"}:
         raise CreationPresentationError(
-            f"unsupported presentation label section {section!r}"
+            f"unsupported presentation label section {section!r}"  # i18n-exempt: internal validation
         )
     table = _mapping(load_creation_presentation(pack).get(section))
     localized = _mapping(table.get(key))
