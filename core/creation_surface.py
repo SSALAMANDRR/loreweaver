@@ -21,6 +21,7 @@ from core.creation_flow import (
     load_creation_flow_spec,
 )
 from core.creation_layers import load_creation_layers, resolve_creation_layer_option
+from core.creation_presentation import presentation_label, stage_presentation
 from core.rulepacks import RulePack
 from core.starting_equipment import available_starting_items, starting_equipment_budget
 
@@ -44,9 +45,6 @@ def _localized_label(raw: Mapping[str, Any], locale: str, fallback: str) -> str:
 
     names = raw.get("names") or []
     if isinstance(names, (list, tuple)):
-        # Prefer a name that matches the requested language when packs order their
-        # aliases that way; otherwise the first declared human label is still better
-        # than exposing an internal id.
         values = [str(value).strip() for value in names if isinstance(value, str) and value.strip()]
         if values:
             return values[0]
@@ -54,13 +52,7 @@ def _localized_label(raw: Mapping[str, Any], locale: str, fallback: str) -> str:
 
 
 def _localized_rule_text(raw: Mapping[str, Any], locale: str) -> list[str]:
-    """Best-effort authored explanatory text, without interpreting rule semantics.
-
-    Packs often keep a small ``rules`` mapping beside an option.  Keys are pack-owned;
-    clients must not know them.  We merely prefer values explicitly suffixed for the
-    viewer language (``*_ru``/``*_en``), then fall back to ordinary human strings.
-    This is presentation-only and never feeds any rule decision.
-    """
+    """Best-effort authored explanatory text, without interpreting rule semantics."""
 
     rules = _mapping(raw.get("rules"))
     if not rules:
@@ -80,7 +72,7 @@ def _localized_rule_text(raw: Mapping[str, Any], locale: str) -> list[str]:
     return localized or fallback
 
 
-def _stage(pack: RulePack, status: CreationFlowStatus):  # noqa: ANN202 - concrete dataclass is internal detail
+def _stage(pack: RulePack, status: CreationFlowStatus):  # noqa: ANN202 - internal dataclass
     spec = load_creation_flow_spec(pack)
     if spec is None or status.complete or status.stage_index >= len(spec.stages):
         return None
@@ -104,7 +96,7 @@ def _layer_options(pack: RulePack, status: CreationFlowStatus) -> tuple[tuple[st
     )
 
 
-def _choice_wire(group_id: str, raw: Mapping[str, Any], locale: str) -> dict[str, Any]:
+def _choice_wire(pack: RulePack, group_id: str, raw: Mapping[str, Any], locale: str) -> dict[str, Any]:
     options = _mapping(raw.get("options"))
     option_rows: list[dict[str, Any]] = []
     for option_id, option_raw in options.items():
@@ -121,9 +113,10 @@ def _choice_wire(group_id: str, raw: Mapping[str, Any], locale: str) -> dict[str
         )
 
     family = str(raw.get("skill_family") or raw.get("field_template") or "").strip()
+    authored = _localized_label(raw, locale, group_id)
     return {
         "id": group_id,
-        "label": _localized_label(raw, locale, group_id),
+        "label": presentation_label(pack, "choice_groups", group_id, locale, authored),
         "free": not option_rows,
         "family": family,
         "options": option_rows,
@@ -131,6 +124,7 @@ def _choice_wire(group_id: str, raw: Mapping[str, Any], locale: str) -> dict[str
 
 
 def _layer_option_wire(
+    pack: RulePack,
     option_id: str,
     raw: Mapping[str, Any],
     locale: str,
@@ -143,7 +137,7 @@ def _layer_option_wire(
         "label": _localized_label(raw, locale, option_id),
         "fixed": fixed,
         "choices": [
-            _choice_wire(str(group_id), group_raw, locale)
+            _choice_wire(pack, str(group_id), group_raw, locale)
             for group_id, group_raw in choices.items()
             if isinstance(group_raw, Mapping)
         ],
@@ -175,12 +169,17 @@ def creation_catalog_surface(pack: RulePack, locale: str) -> dict[str, Any]:
         for profile_id, raw in _profile_map(pack).items()
         if isinstance(raw, Mapping)
     ]
-    staged = load_creation_flow_spec(pack) is not None
-    return {
-        "staged": staged,
+    spec = load_creation_flow_spec(pack)
+    payload: dict[str, Any] = {
+        "staged": spec is not None,
         "requires_profile": bool(profiles),
         "profiles": profiles,
     }
+    if spec is not None and spec.stages:
+        presentation = stage_presentation(pack, spec.stages[0].id, locale)
+        if presentation:
+            payload["presentation"] = presentation
+    return payload
 
 
 def creation_state_surface(pack: RulePack, character: Any, locale: str) -> dict[str, Any] | None:
@@ -219,6 +218,9 @@ def creation_state_surface(pack: RulePack, character: Any, locale: str) -> dict[
         return frame
 
     stage_wire: dict[str, Any] = {"id": stage.id, "kind": stage.kind}
+    presentation = stage_presentation(pack, stage.id, locale)
+    if presentation:
+        stage_wire["presentation"] = presentation
 
     if stage.kind == "profile_reroll":
         attributes = getattr(character, "attributes", {}) or {}
@@ -237,7 +239,7 @@ def creation_state_surface(pack: RulePack, character: Any, locale: str) -> dict[
         stage_wire["layer"] = stage.layer_id
         stage_wire["fixed"] = fixed
         stage_wire["options"] = [
-            _layer_option_wire(option_id, raw, locale, fixed=fixed)
+            _layer_option_wire(pack, option_id, raw, locale, fixed=fixed)
             for option_id, raw in _layer_options(pack, status)
         ]
 
@@ -265,9 +267,15 @@ def creation_state_surface(pack: RulePack, character: Any, locale: str) -> dict[
             stage_wire["purchases"] = [
                 {
                     "category": quote.category,
+                    "category_label": presentation_label(
+                        pack, "advancement_categories", quote.category, locale, quote.category
+                    ),
                     "target": quote.target,
                     "label": _target_label(pack, quote.target, locale),
                     "stage": quote.stage,
+                    "stage_label": presentation_label(
+                        pack, "advancement_stages", quote.stage, locale, quote.stage
+                    ),
                     "current": quote.current_value,
                     "next": quote.next_value,
                     "cost": quote.cost,
