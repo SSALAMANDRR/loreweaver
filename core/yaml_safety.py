@@ -19,6 +19,8 @@ alias is FIRST composed — before any expansion happens, not after the tree is 
 
 from __future__ import annotations
 
+import copy
+from functools import lru_cache
 from typing import Any
 
 import yaml
@@ -45,6 +47,18 @@ class NoAliasSafeLoader(yaml.SafeLoader):
         return super().compose_node(parent, index)
 
 
+@lru_cache(maxsize=256)
+def _parse_no_aliases_cached(text: str) -> Any:
+    """Parse one immutable text payload once.
+
+    Advancement discovery repeatedly asks several sidecar loaders for the same
+    YAML during one state projection. Caching at this shared parse seam removes
+    the expensive PyYAML work without changing any caller's API.
+    """
+
+    return yaml.load(text, Loader=NoAliasSafeLoader)
+
+
 def safe_load_no_aliases(text: str) -> Any:
     """`yaml.safe_load(text)`, but reject any document that uses an anchor/alias (`&`/`*`).
 
@@ -54,5 +68,10 @@ def safe_load_no_aliases(text: str) -> Any:
     anchors/aliases, and raises `yaml.YAMLError` for one that does — closing off the alias-bomb
     class of attack (see `NoAliasSafeLoader`) at parse time, before the result is ever handed to
     calling code.
+
+    The cached parse result is deep-copied before returning. Callers therefore retain
+    the old isolation guarantee: mutating one loaded mapping cannot poison a later load
+    of identical text.
     """
-    return yaml.load(text, Loader=NoAliasSafeLoader)
+
+    return copy.deepcopy(_parse_no_aliases_cached(text))
