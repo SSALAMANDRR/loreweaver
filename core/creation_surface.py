@@ -21,7 +21,11 @@ from core.creation_flow import (
     load_creation_flow_spec,
 )
 from core.creation_layers import load_creation_layers, resolve_creation_layer_option
-from core.creation_presentation import presentation_label, stage_presentation
+from core.creation_presentation import (
+    load_creation_presentation,
+    presentation_label,
+    stage_presentation,
+)
 from core.rulepacks import RulePack
 from core.starting_equipment import available_starting_items, starting_equipment_budget
 
@@ -96,7 +100,13 @@ def _layer_options(pack: RulePack, status: CreationFlowStatus) -> tuple[tuple[st
     )
 
 
-def _choice_wire(pack: RulePack, group_id: str, raw: Mapping[str, Any], locale: str) -> dict[str, Any]:
+def _choice_wire(
+    pack: RulePack,
+    group_id: str,
+    raw: Mapping[str, Any],
+    locale: str,
+    presentation: Mapping[str, Any],
+) -> dict[str, Any]:
     options = _mapping(raw.get("options"))
     option_rows: list[dict[str, Any]] = []
     for option_id, option_raw in options.items():
@@ -116,7 +126,14 @@ def _choice_wire(pack: RulePack, group_id: str, raw: Mapping[str, Any], locale: 
     authored = _localized_label(raw, locale, group_id)
     return {
         "id": group_id,
-        "label": presentation_label(pack, "choice_groups", group_id, locale, authored),
+        "label": presentation_label(
+            pack,
+            "choice_groups",
+            group_id,
+            locale,
+            authored,
+            presentation=presentation,
+        ),
         "free": not option_rows,
         "family": family,
         "options": option_rows,
@@ -128,6 +145,7 @@ def _layer_option_wire(
     option_id: str,
     raw: Mapping[str, Any],
     locale: str,
+    presentation: Mapping[str, Any],
     *,
     fixed: bool,
 ) -> dict[str, Any]:
@@ -137,7 +155,7 @@ def _layer_option_wire(
         "label": _localized_label(raw, locale, option_id),
         "fixed": fixed,
         "choices": [
-            _choice_wire(pack, str(group_id), group_raw, locale)
+            _choice_wire(pack, str(group_id), group_raw, locale, presentation)
             for group_id, group_raw in choices.items()
             if isinstance(group_raw, Mapping)
         ],
@@ -170,13 +188,19 @@ def creation_catalog_surface(pack: RulePack, locale: str) -> dict[str, Any]:
         if isinstance(raw, Mapping)
     ]
     spec = load_creation_flow_spec(pack)
+    presentation_data = load_creation_presentation(pack)
     payload: dict[str, Any] = {
         "staged": spec is not None,
         "requires_profile": bool(profiles),
         "profiles": profiles,
     }
     if spec is not None and spec.stages:
-        presentation = stage_presentation(pack, spec.stages[0].id, locale)
+        presentation = stage_presentation(
+            pack,
+            spec.stages[0].id,
+            locale,
+            presentation=presentation_data,
+        )
         if presentation:
             payload["presentation"] = presentation
     return payload
@@ -196,6 +220,7 @@ def creation_state_surface(pack: RulePack, character: Any, locale: str) -> dict[
     spec = load_creation_flow_spec(pack)
     if spec is None:
         return None
+    presentation_data = load_creation_presentation(pack)
 
     frame: dict[str, Any] = {
         "active": True,
@@ -218,7 +243,12 @@ def creation_state_surface(pack: RulePack, character: Any, locale: str) -> dict[
         return frame
 
     stage_wire: dict[str, Any] = {"id": stage.id, "kind": stage.kind}
-    presentation = stage_presentation(pack, stage.id, locale)
+    presentation = stage_presentation(
+        pack,
+        stage.id,
+        locale,
+        presentation=presentation_data,
+    )
     if presentation:
         stage_wire["presentation"] = presentation
 
@@ -239,7 +269,14 @@ def creation_state_surface(pack: RulePack, character: Any, locale: str) -> dict[
         stage_wire["layer"] = stage.layer_id
         stage_wire["fixed"] = fixed
         stage_wire["options"] = [
-            _layer_option_wire(pack, option_id, raw, locale, fixed=fixed)
+            _layer_option_wire(
+                pack,
+                option_id,
+                raw,
+                locale,
+                presentation_data,
+                fixed=fixed,
+            )
             for option_id, raw in _layer_options(pack, status)
         ]
 
@@ -268,13 +305,23 @@ def creation_state_surface(pack: RulePack, character: Any, locale: str) -> dict[
                 {
                     "category": quote.category,
                     "category_label": presentation_label(
-                        pack, "advancement_categories", quote.category, locale, quote.category
+                        pack,
+                        "advancement_categories",
+                        quote.category,
+                        locale,
+                        quote.category,
+                        presentation=presentation_data,
                     ),
                     "target": quote.target,
                     "label": _target_label(pack, quote.target, locale),
                     "stage": quote.stage,
                     "stage_label": presentation_label(
-                        pack, "advancement_stages", quote.stage, locale, quote.stage
+                        pack,
+                        "advancement_stages",
+                        quote.stage,
+                        locale,
+                        quote.stage,
+                        presentation=presentation_data,
                     ),
                     "current": quote.current_value,
                     "next": quote.next_value,
