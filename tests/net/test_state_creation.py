@@ -22,6 +22,7 @@ async def test_state_advertises_profiled_creation_without_client_rule_knowledge(
     creation = dh2["creation"]
     assert creation["staged"] is True
     assert creation["requires_profile"] is True
+    assert creation["presentation"]["title"] == "Характеристики и родной мир"
     profiles = {entry["id"]: entry["label"] for entry in creation["profiles"]}
     assert profiles["hive_world"] == "Мир-улей"
 
@@ -43,6 +44,8 @@ async def test_state_restores_current_creation_stage_from_the_saved_character():
     stage = creation["stage"]
     assert stage["id"] == "characteristic_reroll"
     assert stage["kind"] == "profile_reroll"
+    assert stage["presentation"]["title"] == "Переброс характеристики"
+    assert "окончательным" in stage["presentation"]["effect"]
     assert stage["can_skip"] is True
     assert any(target["id"] == "WS" and isinstance(target["value"], int) for target in stage["targets"])
 
@@ -69,12 +72,14 @@ async def test_state_projects_layer_options_choices_and_authored_rule_detail():
     stage = state["creation"]["stage"]
     assert stage["id"] == "background"
     assert stage["kind"] == "layer"
+    assert stage["presentation"]["title"] == "Предыстория"
     options = {entry["id"]: entry for entry in stage["options"]}
     arbites = options["adeptus_arbites"]
     assert arbites["label"] == "Адептус Арбитрес"
     assert "Воплощение Закона" not in arbites.get("detail", [])
     assert any("перебросить" in text.casefold() for text in arbites["detail"])
     choices = {entry["id"]: entry for entry in arbites["choices"]}
+    assert choices["trained_skill"]["label"] == "Обученное умение"
     assert {entry["id"] for entry in choices["trained_skill"]["options"]} == {
         "inquiry",
         "interrogation",
