@@ -1,5 +1,8 @@
+from urllib.parse import quote
+
 from agent.context import AgentCtx
 from agent.services import build_services
+from core.character_context import character_context_values
 from core.creation_flow import creation_flow_status
 from core.rulepacks import load_rulepack
 from gateway.commands import CommandRouter
@@ -53,3 +56,25 @@ async def test_hidden_creation_action_preserves_underlying_failures():
 
     assert reply is not None and reply.error is True
     assert reply.text
+
+
+async def test_hidden_context_action_persists_non_inquisition_premise_silently():
+    services = _services()
+    router = CommandRouter(services)
+    ctx = AgentCtx(chat_key="cli:dm:creation-action-context", user_id="u1", locale="ru")
+    await router.dispatch_reply(ctx, ".__creation_action start dh2 | hive_world | Мордекай")
+    payload = quote(
+        '{"status":"deserter","status_detail":"бывший комиссар и криминальный лидер",'
+        '"allegiance":"disillusioned","goal":"построить криминальную империю",'
+        '"campaign_context":"нашествие Хаоса"}',
+        safe="",
+    )
+
+    reply = await router.dispatch_reply(ctx, f".__creation_action context set {payload}")
+
+    assert reply is not None and reply.error is False and reply.text == ""
+    saved = await services.characters.get_character(ctx.user_id, ctx.chat_key)
+    values = character_context_values(saved)
+    assert values["status"] == "deserter"
+    assert values["allegiance"] == "disillusioned"
+    assert values["goal"] == "построить криминальную империю"
