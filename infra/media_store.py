@@ -433,7 +433,16 @@ class MediaStore:
 
 
 def _safe_room(room: str) -> str:
+    """Return a filesystem-safe room directory key for the current platform.
+
+    POSIX keeps the historical readable layout. Windows uses a hash because room
+    keys such as ``tui:group:arkham`` contain forbidden characters, and because
+    NTFS is normally case-insensitive. Hashing the exact room id avoids both the
+    invalid-name failure and cross-room aliasing without changing protocol ids.
+    """
     text = str(room or "room")
+    if os.name == "nt":
+        return f"room-{hashlib.sha256(text.encode('utf-8')).hexdigest()}"
     return re.sub(r"[^A-Za-z0-9_.:-]+", "_", text).strip("._") or "room"
 
 
