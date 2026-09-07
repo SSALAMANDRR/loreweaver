@@ -50,7 +50,12 @@ def test_symlink_escaping_base_is_rejected(tmp_path):
     outside = tmp_path / "outside.txt"
     outside.write_text("top secret")
     link = base / "link.txt"
-    link.symlink_to(outside)
+    try:
+        link.symlink_to(outside)
+    except OSError as exc:
+        if getattr(exc, "winerror", None) == 1314:
+            pytest.skip("Windows process lacks symlink privilege; confinement is covered when symlinks are available")
+        raise
     fs = LocalFs(base)
     with pytest.raises(ValueError, match="escapes the allowed base directory"):
         fs.get_file("link.txt")
