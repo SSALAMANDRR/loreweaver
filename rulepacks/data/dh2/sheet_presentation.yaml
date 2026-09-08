@@ -1,0 +1,124 @@
+version: 1
+
+# Presentation only. Mechanical authority remains in dh2.yaml and the ordinary
+# advancement/equipment sidecars. These strings are intentionally concise so a
+# character sheet can expose them as hover help without reproducing rulebook text.
+attributes:
+  WS:
+    ru: "Навык Рукопашной: точность и мастерство в ближнем бою. Используется для рукопашных атак и парирования."
+    en: "Weapon Skill: accuracy and training in close combat; used for melee attacks and parrying."
+  BS:
+    ru: "Навык Стрельбы: точность при использовании стрелкового и метательного оружия."
+    en: "Ballistic Skill: accuracy with ranged and thrown weapons."
+  S:
+    ru: "Сила: физическая мощь персонажа. Влияет на силовые действия и урон в ближнем бою через бонус Силы."
+    en: "Strength: raw physical power; contributes to feats of strength and melee damage through Strength Bonus."
+  T:
+    ru: "Выносливость: сопротивляемость боли, травмам и физическим нагрузкам. Бонус Выносливости участвует в снижении урона."
+    en: "Toughness: resistance to pain, injury and physical strain; Toughness Bonus contributes to damage reduction."
+  Ag:
+    ru: "Ловкость: скорость, координация и реакция. Используется для уклонения, акробатики, скрытности и многих действий на движение."
+    en: "Agility: speed, coordination and reactions; used for dodge, acrobatics, stealth and many movement actions."
+  Int:
+    ru: "Интеллект: память, анализ и технические знания. Основа для логики, медицины, техпользования и ряда знаний."
+    en: "Intelligence: memory, reasoning and technical knowledge; basis for logic, medicine, tech-use and many lore skills."
+  Per:
+    ru: "Восприятие: наблюдательность и органы чувств. Основа для бдительности, проницательности, выживания и психонауки."
+    en: "Perception: awareness and senses; basis for awareness, scrutiny, survival and psyniscience."
+  WP:
+    ru: "Сила Воли: самообладание и психическая стойкость. Используется для сопротивления страху, давлению и некоторых психических воздействий."
+    en: "Willpower: self-control and mental resilience; used to resist fear, pressure and some psychic effects."
+  Fel:
+    ru: "Общительность: умение общаться и влиять на людей лично. Основа для обаяния, командования, дознания и обмана."
+    en: "Fellowship: personal social ability; basis for charm, command, inquiry and deceive."
+  Inf:
+    ru: "Влияние: доступ к ресурсам, связям и авторитету. Используется прежде всего для приобретений и оценки возможностей персонажа в Империуме."
+    en: "Influence: access to resources, contacts and authority; primarily used for acquisitions and institutional reach."
+
+skills:
+  Acrobatics:
+    ru: "Акробатика (Ловкость): прыжки, баланс, падения и сложные акробатические манёвры."
+    en: "Acrobatics (Agility): balance, jumps, falls and difficult acrobatic manoeuvres."
+  Athletics:
+    ru: "Атлетика (Сила): бег, лазание, плавание и другие продолжительные физические усилия."
+    en: "Athletics (Strength): running, climbing, swimming and sustained physical exertion."
+  Awareness:
+    ru: "Бдительность (Восприятие): заметить опасность, скрытую деталь, звук или движение."
+    en: "Awareness (Perception): notice danger, hidden details, sounds or movement."
+  Security:
+    ru: "Безопасность (Интеллект): замки, системы защиты, сигнализация и обход средств безопасности."
+    en: "Security (Intelligence): locks, security systems, alarms and bypassing protective measures."
+  Survival:
+    ru: "Выживание (Восприятие): ориентирование и жизнь в дикой местности, поиск следов, пищи и безопасного пути."
+    en: "Survival (Perception): wilderness travel, tracking, finding food and safe routes."
+  Inquiry:
+    ru: "Дознание (Общительность): сбор информации через разговоры, слухи, знакомства и расспросы."
+    en: "Inquiry (Fellowship): gather information through conversation, rumours, contacts and questioning."
+  Interrogation:
+    ru: "Допрос (Сила Воли): получение сведений от сопротивляющегося собеседника давлением и методичным допросом."
+    en: "Interrogation (Willpower): extract information from an unwilling subject through pressure and methodical questioning."
+  Intimidate:
+    ru: "Запугивание (Сила): заставить другого уступить угрозой, демонстрацией силы или агрессией."
+    en: "Intimidate (Strength): force compliance through threats, aggression or a show of force."
+  Command:
+    ru: "Командование (Общительность): отдавать приказы, организовывать людей и поддерживать дисциплину."
+    en: "Command (Fellowship): issue orders, organise people and maintain discipline."
+  Commerce:
+    ru: "Коммерция (Интеллект): оценка стоимости, торговля, сделки и понимание хозяйственных вопросов."
+    en: "Commerce (Intelligence): valuation, trade, deals and commercial knowledge."
+  SleightOfHand:
+    ru: "Ловкость рук (Ловкость): незаметные манипуляции, карманные трюки и быстрые действия руками."
+    en: "Sleight of Hand (Agility): concealed manipulation, pickpocketing and quick hand movements."
+  Logic:
+    ru: "Логика (Интеллект): анализ фактов, закономерностей, расчётов и формальных задач."
+    en: "Logic (Intelligence): analyse facts, patterns, calculations and formal problems."
+  Medicae:
+    ru: "Медицина (Интеллект): первая помощь, лечение ран, диагностика и медицинские процедуры."
+    en: "Medicae (Intelligence): first aid, wound treatment, diagnosis and medical procedures."
+  Charm:
+    ru: "Обаяние (Общительность): расположить собеседника, убедить его или добиться сотрудничества дружелюбным способом."
+    en: "Charm (Fellowship): persuade, befriend or gain cooperation through a positive social approach."
+  Deceive:
+    ru: "Обман (Общительность): ложь, притворство, легенда и введение собеседника в заблуждение."
+    en: "Deceive (Fellowship): lies, disguises, cover stories and misleading others."
+  Parry:
+    ru: "Парирование (Навык Рукопашной): защита от атак ближнего боя оружием или подходящим средством защиты."
+    en: "Parry (Weapon Skill): defend against melee attacks using a weapon or suitable defensive implement."
+  Scrutiny:
+    ru: "Проницательность (Восприятие): замечать ложь, странности поведения, скрытые мотивы и мелкие несоответствия."
+    en: "Scrutiny (Perception): notice lies, behavioural anomalies, hidden motives and subtle inconsistencies."
+  Psyniscience:
+    ru: "Психонаука (Восприятие): чувствовать проявления варпа, психические силы и сверхъестественные явления."
+    en: "Psyniscience (Perception): sense Warp phenomena, psychic powers and supernatural disturbances."
+  Stealth:
+    ru: "Скрытность (Ловкость): двигаться и действовать незаметно, прятаться и избегать обнаружения."
+    en: "Stealth (Agility): move and act unnoticed, hide and avoid detection."
+  TechUse:
+    ru: "Техпользование (Интеллект): использовать, диагностировать и обслуживать сложные технологии."
+    en: "Tech-Use (Intelligence): operate, diagnose and maintain complex technology."
+  Dodge:
+    ru: "Уклонение (Ловкость): реактивно уходить от атак и непосредственных опасностей."
+    en: "Dodge (Agility): reactively evade attacks and immediate hazards."
+  CommonLore:
+    ru: "Общие знания (Интеллект): специализированные сведения о распространённых организациях, культурах и явлениях Империума."
+    en: "Common Lore (Intelligence): specialised knowledge of widespread Imperial organisations, cultures and subjects."
+  ForbiddenLore:
+    ru: "Запретные знания (Интеллект): опасные и ограниченные сведения, доступ к которым обычно запрещён."
+    en: "Forbidden Lore (Intelligence): dangerous and restricted knowledge normally kept from the public."
+  Linguistics:
+    ru: "Лингвистика (Интеллект): знание конкретного языка, письменности или системы общения."
+    en: "Linguistics (Intelligence): knowledge of a specific language, script or communication system."
+  Navigation:
+    ru: "Навигация: умение прокладывать путь в выбранной специализации, например на поверхности или в варпе."
+    en: "Navigation: find and maintain a route within the chosen specialisation, such as surface travel or the Warp."
+  Operate:
+    ru: "Управление: управление транспортом или техникой выбранной специализации."
+    en: "Operate: control vehicles or machinery of the chosen specialisation."
+  ScholasticLore:
+    ru: "Учёные знания (Интеллект): формальное академическое знание выбранной области."
+    en: "Scholastic Lore (Intelligence): formal academic knowledge of the chosen subject."
+  Trade:
+    ru: "Ремесло: профессиональные практические знания и навыки выбранной специальности."
+    en: "Trade: practical professional knowledge and techniques of the chosen specialisation."
+
+equipment: {}
