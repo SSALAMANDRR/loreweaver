@@ -23,8 +23,17 @@ async def test_state_advertises_profiled_creation_without_client_rule_knowledge(
     assert creation["staged"] is True
     assert creation["requires_profile"] is True
     assert creation["presentation"]["title"] == "Характеристики и родной мир"
-    profiles = {entry["id"]: entry["label"] for entry in creation["profiles"]}
-    assert profiles["hive_world"] == "Мир-улей"
+    profiles = {entry["id"]: entry for entry in creation["profiles"]}
+    assert profiles["hive_world"]["label"] == "Мир-улей"
+    assert any("Ловкость и Восприятие" in line for line in profiles["hive_world"]["detail"])
+    assert any("Раны: 8+1к5" in line for line in profiles["hive_world"]["detail"])
+    assert profiles["hive_world"]["source"] == "DH2 RU v1.8 p. 42"
+    assert "Восприятие" in profiles["hive_world"]["effect"]["grants"]
+    forge_choices = {entry["id"]: entry for entry in profiles["forge_world"]["choices"]}
+    assert {entry["label"] for entry in forge_choices["home_world_talent"]["options"]} == {
+        "Искусный Стук",
+        "Длань Омниссии",
+    }
 
 
 async def test_state_restores_current_creation_stage_from_the_saved_character():

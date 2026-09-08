@@ -19,6 +19,7 @@ _BUILTIN_DATA_ROOT = _REPO_ROOT / "rulepacks" / "data"
 _ALLOWED_SECTIONS = frozenset(
     {
         "stages",
+        "profiles",
         "choice_groups",
         "choice_options",
         "terms",
@@ -166,7 +167,7 @@ def presentation_label(
     load the sidecar once and pass it here.
     """
 
-    if section not in _ALLOWED_SECTIONS - {"stages"}:
+    if section not in _ALLOWED_SECTIONS - {"stages", "profiles"}:
         raise CreationPresentationError(
             f"unsupported presentation label section {section!r}"  # i18n-exempt: internal validation
         )

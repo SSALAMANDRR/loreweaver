@@ -99,7 +99,79 @@ stages:
       choice: Choose available items until the remaining starting-acquisition count reaches zero.
       effect: Selected items are added to inventory. Mechanical creation finishes after the final selection.
 
+# Player-facing summaries for creation profiles. These explain the consequences of a
+# profile before the character is generated; mechanics still come from dh2.yaml and
+# creation.d/home_world.yaml.
+profiles:
+  feral_world:
+    ru:
+      - "Сильные характеристики: Сила и Выносливость. Слабая характеристика: Влияние."
+      - "Раны: 9+1к5. Судьба: 2. Благословение Императора даёт +1 к Судьбе на результате 3+."
+      - "Склонность родного мира: Выносливость."
+      - "Старые Пути: низкотехнологичное оружие в руках персонажа теряет Примитивное и получает Проверенное (3)."
+    en:
+      - "Favoured characteristics: Strength and Toughness. Penalised characteristic: Influence."
+      - "Wounds: 9+1d5. Fate: 2. Emperor's Blessing grants +1 Fate on 3+."
+      - "Home-world aptitude: Toughness."
+      - "Old Ways: low-technology weapons wielded by the character lose Primitive and gain Proven (3)."
+  forge_world:
+    ru:
+      - "Сильные характеристики: Интеллект и Выносливость. Слабая характеристика: Общительность."
+      - "Раны: 8+1к5. Судьба: 3. Благословение Императора даёт +1 к Судьбе на результате 8+."
+      - "Склонность родного мира: Интеллект."
+      - "Избранный Омниссии: при создании нужно выбрать один из талантов — Искусный Стук или Длань Омниссии."
+    en:
+      - "Favoured characteristics: Intelligence and Toughness. Penalised characteristic: Fellowship."
+      - "Wounds: 8+1d5. Fate: 3. Emperor's Blessing grants +1 Fate on 8+."
+      - "Home-world aptitude: Intelligence."
+      - "Chosen by the Omnissiah: during creation choose either Technical Knock or Hand of the Omnissiah."
+  highborn:
+    ru:
+      - "Сильные характеристики: Общительность и Влияние. Слабая характеристика: Выносливость."
+      - "Раны: 9+1к5. Судьба: 4. Благословение Императора даёт +1 к Судьбе на результате 10."
+      - "Склонность родного мира: Общительность."
+      - "Бессчётное Богатство: когда Влияние уменьшается, оно уменьшается на 1 меньше положенного, минимум на 1."
+    en:
+      - "Favoured characteristics: Fellowship and Influence. Penalised characteristic: Toughness."
+      - "Wounds: 9+1d5. Fate: 4. Emperor's Blessing grants +1 Fate on a roll of 10."
+      - "Home-world aptitude: Fellowship."
+      - "Abundant Resources: when Influence is reduced, reduce it by 1 less than normal, to a minimum reduction of 1."
+  hive_world:
+    ru:
+      - "Сильные характеристики: Ловкость и Восприятие. Слабая характеристика: Сила Воли."
+      - "Раны: 8+1к5. Судьба: 2. Благословение Императора даёт +1 к Судьбе на результате 6+."
+      - "Склонность родного мира: Восприятие."
+      - "Бесчисленные Толпы в Металлических Горах: толпы не затрудняют движение; в закрытом помещении +20 к Навигации (Наземная)."
+    en:
+      - "Favoured characteristics: Agility and Perception. Penalised characteristic: Willpower."
+      - "Wounds: 8+1d5. Fate: 2. Emperor's Blessing grants +1 Fate on 6+."
+      - "Home-world aptitude: Perception."
+      - "Teeming Masses in Metal Mountains: crowds do not impede movement; gain +20 to Navigation (Surface) indoors."
+  shrine_world:
+    ru:
+      - "Сильные характеристики: Общительность и Сила Воли. Слабая характеристика: Восприятие."
+      - "Раны: 7+1к5. Судьба: 3. Благословение Императора даёт +1 к Судьбе на результате 6+."
+      - "Склонность родного мира: Сила Воли."
+      - "Вера в Кредо: после траты очка Судьбы бросается 1к10; на результате 1 очко Судьбы не уменьшается."
+    en:
+      - "Favoured characteristics: Fellowship and Willpower. Penalised characteristic: Perception."
+      - "Wounds: 7+1d5. Fate: 3. Emperor's Blessing grants +1 Fate on 6+."
+      - "Home-world aptitude: Willpower."
+      - "Faith in the Creed: after spending a Fate point, roll 1d10; on 1 the Fate point is not lost."
+  voidborn:
+    ru:
+      - "Сильные характеристики: Интеллект и Сила Воли. Слабая характеристика: Сила."
+      - "Раны: 7+1к5. Судьба: 3. Благословение Императора даёт +1 к Судьбе на результате 5+."
+      - "Склонность родного мира: Интеллект."
+      - "Дитя Темноты: персонаж начинает с талантом Непреклонный и получает +30 к проверкам перемещения в нулевой гравитации."
+    en:
+      - "Favoured characteristics: Intelligence and Willpower. Penalised characteristic: Strength."
+      - "Wounds: 7+1d5. Fate: 3. Emperor's Blessing grants +1 Fate on 5+."
+      - "Home-world aptitude: Intelligence."
+      - "Child of the Dark: begin with the Strong Minded talent and gain +30 to tests for movement in zero gravity."
+
 choice_groups:
+  home_world_talent: {ru: Талант родного мира, en: Home-world talent}
   trained_skill: {ru: Обученное умение, en: Trained skill}
   social_skill: {ru: Социальное умение, en: Social skill}
   psychic_skill: {ru: Психическое умение, en: Psychic skill}

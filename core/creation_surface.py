@@ -76,6 +76,22 @@ def _localized_rule_text(raw: Mapping[str, Any], locale: str) -> list[str]:
     return localized or fallback
 
 
+def _localized_lines(raw: Mapping[str, Any], locale: str) -> list[str]:
+    """Resolve a localized authored string/list used for profile previews."""
+
+    locale_key = str(locale or "en").strip().casefold().replace("_", "-")
+    language = locale_key.split("-", 1)[0]
+    for key in tuple(dict.fromkeys((locale_key, language, "en"))):
+        value = raw.get(key)
+        if isinstance(value, str) and value.strip():
+            return [value.strip()]
+        if isinstance(value, (list, tuple)):
+            rows = [str(item).strip() for item in value if isinstance(item, str) and item.strip()]
+            if rows:
+                return rows
+    return []
+
+
 def _stage(pack: RulePack, status: CreationFlowStatus):  # noqa: ANN202 - internal dataclass
     spec = load_creation_flow_spec(pack)
     if spec is None or status.complete or status.stage_index >= len(spec.stages):
@@ -98,6 +114,20 @@ def _layer_options(pack: RulePack, status: CreationFlowStatus) -> tuple[tuple[st
         for option_id, raw in options.items()
         if isinstance(raw, Mapping)
     )
+
+
+def _profile_bound_option(pack: RulePack, spec: Any, profile_id: str) -> Mapping[str, Any] | None:
+    """Find a later layer explicitly bound to the selected profile, generically."""
+
+    if spec is None:
+        return None
+    for stage in spec.stages:
+        if stage.kind != "layer" or not stage.option_from_profile:
+            continue
+        resolved = resolve_creation_layer_option(pack, stage.layer_id, profile_id)
+        if resolved is not None and resolved[0] == profile_id:
+            return resolved[1]
+    return None
 
 
 def _term_label(
@@ -293,16 +323,40 @@ def _current_list_field(
 def creation_catalog_surface(pack: RulePack, locale: str) -> dict[str, Any]:
     """Describe how this pack can begin deterministic profiled creation."""
 
-    profiles = [
-        {
-            "id": str(profile_id),
-            "label": _localized_label(raw, locale, str(profile_id)),
-        }
-        for profile_id, raw in _profile_map(pack).items()
-        if isinstance(raw, Mapping)
-    ]
     spec = load_creation_flow_spec(pack)
     presentation_data = load_creation_presentation(pack)
+    profile_notes = _mapping(presentation_data.get("profiles"))
+    profiles: list[dict[str, Any]] = []
+    for profile_id, raw in _profile_map(pack).items():
+        if not isinstance(raw, Mapping):
+            continue
+        profile_id_text = str(profile_id)
+        bound = _profile_bound_option(pack, spec, profile_id_text)
+        label_source = bound if bound is not None else raw
+        row: dict[str, Any] = {
+            "id": profile_id_text,
+            "label": _localized_label(label_source, locale, profile_id_text),
+        }
+        detail = _localized_lines(_mapping(profile_notes.get(profile_id_text)), locale)
+        if detail:
+            row["detail"] = detail
+        if bound is not None:
+            source = bound.get("source")
+            if isinstance(source, str) and source.strip():
+                row["source"] = source.strip()
+            effect = _effect_wire(pack, bound, locale, presentation_data)
+            if effect:
+                row["effect"] = effect
+            choices = _mapping(bound.get("choices"))
+            choice_rows = [
+                _choice_wire(pack, str(group_id), group_raw, locale, presentation_data)
+                for group_id, group_raw in choices.items()
+                if isinstance(group_raw, Mapping)
+            ]
+            if choice_rows:
+                row["choices"] = choice_rows
+        profiles.append(row)
+
     payload: dict[str, Any] = {
         "staged": spec is not None,
         "requires_profile": bool(profiles),
