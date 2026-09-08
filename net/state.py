@@ -29,6 +29,7 @@ from agent.context import AgentCtx
 from agent.npc import list_companions
 from agent.services import Services
 from core.character_manager import CharacterSheet, character_resources, has_character, resource_label_map
+from core.character_surface import character_detail_surface
 from core.creation_surface import creation_catalog_surface, creation_state_surface
 from core.documents import KEEPER_VIEWER, MODULE_POOL_ID, MVU_ID, PLAYER_VIEWER, SCENE_ID
 from core.modvars import MODVARS_DOC_ID, MODVARS_DOC_TYPE, wire_entries
@@ -196,6 +197,7 @@ async def _character_payload(
             key: pack.display_name(canonical_by_key.get(key, key), locale or "en")
             for key in attrs
         }
+        payload.update(character_detail_surface(pack, sheet, locale or "en"))
     avatar = getattr(sheet, "avatar", None)
     if isinstance(avatar, dict):
         payload["avatar"] = avatar
