@@ -84,3 +84,27 @@ async def test_state_projects_layer_options_choices_and_authored_rule_detail():
         "inquiry",
         "interrogation",
     }
+
+
+def _choice(stage: dict, option_id: str, group_id: str, choice_id: str) -> dict:
+    option = next(entry for entry in stage["options"] if entry["id"] == option_id)
+    group = next(entry for entry in option["choices"] if entry["id"] == group_id)
+    return next(entry for entry in group["options"] if entry["id"] == choice_id)
+
+
+async def test_state_exposes_open_choice_effects_and_natural_russian_terms():
+    services = _services()
+    router = CommandRouter(services)
+    ctx = AgentCtx(chat_key="cli:dm:state-create-effects", user_id="u1", locale="ru")
+    await router.dispatch(ctx, ".dh2 hive_world | Тест")
+    await router.dispatch(ctx, ".create done")
+
+    stage = (await build_room_state(services, ctx))["creation"]["stage"]
+    medicae = _choice(stage, "adeptus_administratum", "trained_skill", "medicae")
+
+    assert medicae["label"] == "Медицина"
+    assert medicae["effect"]["skills"] == [{"label": "Медицина", "value": 1}]
+
+    administratum = next(entry for entry in stage["options"] if entry["id"] == "adeptus_administratum")
+    assert "Мастер Бумажной Работы" in administratum["effect"]["grants"]
+    assert "медпакет" in administratum["effect"]["equipment"]

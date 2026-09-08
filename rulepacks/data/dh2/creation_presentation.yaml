@@ -115,6 +115,15 @@ choice_groups:
   combat_aptitude: {ru: Боевая склонность, en: Combat aptitude}
   role_talent: {ru: Талант роли, en: Role talent}
 
+# Presentation overrides intentionally do not change canonical ids or command aliases.
+# The old fan-translation surface "Медика" remains parse-compatible, while the player UI
+# uses ordinary Russian.
+choice_options:
+  medicae: {ru: Медицина, en: Medicae}
+
+terms:
+  Medicae: {ru: Медицина, en: Medicae}
+
 advancement_categories:
   characteristic: {ru: Характеристика, en: Characteristic}
   skill: {ru: Умение, en: Skill}

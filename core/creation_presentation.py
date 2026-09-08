@@ -17,7 +17,14 @@ from core.yaml_safety import safe_load_no_aliases
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _BUILTIN_DATA_ROOT = _REPO_ROOT / "rulepacks" / "data"
 _ALLOWED_SECTIONS = frozenset(
-    {"stages", "choice_groups", "advancement_stages", "advancement_categories"}
+    {
+        "stages",
+        "choice_groups",
+        "choice_options",
+        "terms",
+        "advancement_stages",
+        "advancement_categories",
+    }
 )
 _ALLOWED_STAGE_KEYS = frozenset({"title", "description", "choice", "effect"})
 

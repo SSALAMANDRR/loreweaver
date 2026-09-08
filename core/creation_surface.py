@@ -100,6 +100,92 @@ def _layer_options(pack: RulePack, status: CreationFlowStatus) -> tuple[tuple[st
     )
 
 
+def _term_label(
+    pack: RulePack,
+    target: str,
+    locale: str,
+    presentation: Mapping[str, Any],
+) -> str:
+    return presentation_label(
+        pack,
+        "terms",
+        target,
+        locale,
+        pack.display_name(target, locale),
+        presentation=presentation,
+    )
+
+
+def _target_label(
+    pack: RulePack,
+    target: str,
+    locale: str,
+    presentation: Mapping[str, Any],
+) -> str:
+    family, separator, specialization = str(target).partition("::")
+    if separator:
+        return f"{_term_label(pack, family, locale, presentation)} ({specialization})"
+    return _term_label(pack, target, locale, presentation)
+
+
+def _effect_wire(
+    pack: RulePack,
+    raw: Mapping[str, Any],
+    locale: str,
+    presentation: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Project declared creation effects without inventing system semantics.
+
+    The mutation layer already has a fixed generic vocabulary (attributes, skills,
+    append_fields and equipment).  Rich clients need the same open information before
+    the player clicks a choice, so this turns those declarations into a presentation-
+    friendly shape while leaving application of the effects entirely to creation_layers.
+    """
+
+    effects = _mapping(raw.get("effects"))
+    if not effects:
+        return {}
+
+    payload: dict[str, Any] = {}
+
+    grants: list[str] = []
+    for values in _mapping(effects.get("append_fields")).values():
+        if isinstance(values, (list, tuple)):
+            grants.extend(str(value).strip() for value in values if str(value).strip())
+    if grants:
+        payload["grants"] = grants
+
+    equipment = effects.get("equipment") or []
+    if isinstance(equipment, (list, tuple)):
+        rows = [str(value).strip() for value in equipment if str(value).strip()]
+        if rows:
+            payload["equipment"] = rows
+
+    skills: list[dict[str, Any]] = []
+    for target, value in _mapping(effects.get("skills")).items():
+        skills.append(
+            {
+                "label": _target_label(pack, str(target), locale, presentation),
+                "value": value,
+            }
+        )
+    if skills:
+        payload["skills"] = skills
+
+    attributes: list[dict[str, Any]] = []
+    for target, value in _mapping(effects.get("attributes")).items():
+        attributes.append(
+            {
+                "label": _term_label(pack, str(target), locale, presentation),
+                "value": value,
+            }
+        )
+    if attributes:
+        payload["attributes"] = attributes
+
+    return payload
+
+
 def _choice_wire(
     pack: RulePack,
     group_id: str,
@@ -112,15 +198,26 @@ def _choice_wire(
     for option_id, option_raw in options.items():
         if not isinstance(option_raw, Mapping):
             continue
-        option_rows.append(
-            {
-                "id": str(option_id),
-                "label": _localized_label(option_raw, locale, str(option_id)),
-                "specialization": bool(
-                    option_raw.get("skill_family") or option_raw.get("field_template")
-                ),
-            }
-        )
+        option_id_text = str(option_id)
+        authored = _localized_label(option_raw, locale, option_id_text)
+        row: dict[str, Any] = {
+            "id": option_id_text,
+            "label": presentation_label(
+                pack,
+                "choice_options",
+                option_id_text,
+                locale,
+                authored,
+                presentation=presentation,
+            ),
+            "specialization": bool(
+                option_raw.get("skill_family") or option_raw.get("field_template")
+            ),
+        }
+        effect = _effect_wire(pack, option_raw, locale, presentation)
+        if effect:
+            row["effect"] = effect
+        option_rows.append(row)
 
     family = str(raw.get("skill_family") or raw.get("field_template") or "").strip()
     authored = _localized_label(raw, locale, group_id)
@@ -163,17 +260,34 @@ def _layer_option_wire(
     detail = _localized_rule_text(raw, locale)
     if detail:
         payload["detail"] = detail
+    effect = _effect_wire(pack, raw, locale, presentation)
+    if effect:
+        payload["effect"] = effect
     source = raw.get("source")
     if isinstance(source, str) and source.strip():
         payload["source"] = source.strip()
     return payload
 
 
-def _target_label(pack: RulePack, target: str, locale: str) -> str:
-    family, separator, specialization = str(target).partition("::")
-    if separator:
-        return f"{pack.display_name(family, locale)} ({specialization})"
-    return pack.display_name(target, locale)
+def _current_list_field(
+    pack: RulePack,
+    character: Any,
+    canonical_field: str,
+    locale: str,
+    presentation: Mapping[str, Any],
+) -> list[str]:
+    spec = getattr(pack, "sheet_spec", None)
+    field_name = spec.field_keys.get(canonical_field) if spec is not None else None
+    if not field_name:
+        return []
+    raw = getattr(character, field_name, None)
+    if not isinstance(raw, (list, tuple)):
+        return []
+    return [
+        _term_label(pack, str(value), locale, presentation)
+        for value in raw
+        if isinstance(value, str) and value.strip()
+    ]
 
 
 def creation_catalog_surface(pack: RulePack, locale: str) -> dict[str, Any]:
@@ -257,7 +371,7 @@ def creation_state_surface(pack: RulePack, character: Any, locale: str) -> dict[
         stage_wire["targets"] = [
             {
                 "id": target,
-                "label": pack.display_name(target, locale),
+                "label": _term_label(pack, target, locale, presentation_data),
                 "value": attributes.get(target),
             }
             for target in creation_flow_profile_reroll_attributes(pack, character)
@@ -285,8 +399,18 @@ def creation_state_surface(pack: RulePack, character: Any, locale: str) -> dict[
             {
                 "field": requirement.field,
                 "count": requirement.count,
+                "current": _current_list_field(
+                    pack,
+                    character,
+                    requirement.field,
+                    locale,
+                    presentation_data,
+                ),
                 "choices": [
-                    {"id": choice, "label": pack.display_name(choice, locale)}
+                    {
+                        "id": choice,
+                        "label": _term_label(pack, choice, locale, presentation_data),
+                    }
                     for choice in requirement.choices
                 ],
             }
@@ -313,7 +437,7 @@ def creation_state_surface(pack: RulePack, character: Any, locale: str) -> dict[
                         presentation=presentation_data,
                     ),
                     "target": quote.target,
-                    "label": _target_label(pack, quote.target, locale),
+                    "label": _target_label(pack, quote.target, locale, presentation_data),
                     "stage": quote.stage,
                     "stage_label": presentation_label(
                         pack,
@@ -342,6 +466,9 @@ def creation_state_surface(pack: RulePack, character: Any, locale: str) -> dict[
             }
             for item in available_starting_items(pack, character)
         ]
+        equipment = getattr(character, "equipment", None)
+        if isinstance(equipment, list):
+            stage_wire["inventory"] = [str(item) for item in equipment]
         if budget is not None:
             stage_wire["budget"] = {
                 "total": budget.total,
