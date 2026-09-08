@@ -56,6 +56,14 @@ _CONTENT_SIGNALS = frozenset(
         "max_output_tokens",
     }
 )
+_REQUEST_SIGNALS = frozenset(
+    {
+        "bad_request",
+        "invalid_request",
+        "invalid_request_error",
+        "unprocessable_entity",
+    }
+)
 _TRANSIENT_SIGNALS = frozenset(
     {
         "cancelled",
@@ -104,6 +112,8 @@ def _classify_provider_error(payload: dict[str, Any]) -> str:
         return "auth"
     if _matches_signal(signals, _CONTENT_SIGNALS):
         return "content"
+    if _matches_signal(signals, _REQUEST_SIGNALS):
+        return "request"
     if _matches_signal(signals, _TRANSIENT_SIGNALS):
         return "transient"
     # A terminal provider event with no recognized stable code is normally a
@@ -168,7 +178,11 @@ def _http_status_signal(status_code: int) -> str:
         return "rate_limit"
     if status_code >= 500:
         return "server_error"
-    return "invalid_prompt"
+    # Do not invent a content diagnosis for an otherwise-unclassified 4xx.
+    # The provider body may still carry a stable invalid_prompt/input_too_long
+    # code, which _classify_provider_error will recognize above. A bare 400 is
+    # merely a bad request, not evidence that the user's prompt is too long.
+    return "bad_request"
 
 
 def _status_error_payload(status_code: int, body: Any) -> dict[str, Any]:

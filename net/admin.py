@@ -305,6 +305,33 @@ async def _dispatch_admin_frame(
 # -- LLM config -------------------------------------------------------------
 
 
+def _subscription_login_status(services: Services) -> str:
+    """Return display-safe background OAuth state for rich clients.
+
+    `.model login` polls in a background task and historically only kept the
+    outcome on `services._subscription_logins`. That made a stale saved token
+    indistinguishable from a fresh successful re-login. Prefer an in-flight or
+    freshly finished session over the credential-book snapshot so clients can
+    show pending/success/failure accurately. Only stable provider/error codes
+    cross this surface; bearer/device secrets never do.
+    """
+    sessions = getattr(services, "_subscription_logins", None)
+    if not isinstance(sessions, dict):
+        return ""
+    for canonical in ("chatgpt", "supergrok"):
+        session = sessions.get(canonical)
+        if not isinstance(session, dict):
+            continue
+        if not session.get("done"):
+            return f"{canonical}:pending"
+        if session.get("token_ok"):
+            return f"{canonical}:logged_in"
+        error = str(session.get("error") or "").strip()
+        if error:
+            return f"{canonical}:error:{error}"
+    return ""
+
+
 async def _config_frame(services: Services) -> dict[str, Any]:
     info = _describe_llm(services)
     overrides = await services.runtime_config.get()
@@ -318,8 +345,8 @@ async def _config_frame(services: Services) -> dict[str, Any]:
     oauth_path = provider == "supergrok" or (
         is_subscription_provider(provider) and provider != "supergrok" and not base_url
     )
-    subscription_status = ""
-    if oauth_path:
+    subscription_status = _subscription_login_status(services)
+    if not subscription_status and oauth_path:
         sub = await services.llm_credentials.load_subscription(provider)
         if sub is not None:
             subscription_status = "logged_in"
