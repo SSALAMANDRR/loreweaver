@@ -41,11 +41,12 @@ from infra.config import Settings
 from infra.i18n import get_i18n
 from infra.media_store import MediaError
 from net.keystore import Keystore
+from net.localized_session import LocalizedSessionCore
 
 # The transport-neutral session core + frame helpers now live in `net.session`; the WebSocket
 # server just adds the WS accept loop + `WsMember`. The underscore aliases keep the historical
 # `from net.tui_server import ...` imports (`net.iroh_server`, `_authenticate`) working unchanged.
-from net.session import SessionCore, guided_demo_available, resolve_session_fields, welcome_frame
+from net.session import guided_demo_available, resolve_session_fields, welcome_frame
 from net.session import error_frame as _error_frame
 from net.session import parse_frame as _parse_frame
 from net.session import render_frame as _render_frame
@@ -108,7 +109,7 @@ class WsMember:
             await self.send_frame(frame)
 
 
-class TuiServer(SessionCore):
+class TuiServer(LocalizedSessionCore):
     """The WebSocket transport for the networked TUI: a `websockets` accept loop over the shared
     `SessionCore` (one `gateway.hub.RoomHub`), each authenticated socket a `WsMember`. Kept as the
     zero-config LOCAL / loopback / offline-test carrier; `net.iroh_server` is the default p2p
