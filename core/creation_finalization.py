@@ -262,9 +262,17 @@ def _status(character: Any) -> CreationFinalizationStatus | None:
 def creation_finalization_status(
     pack: Any, character: Any, *, data_root: Path | None = None
 ) -> CreationFinalizationStatus | None:
-    if load_creation_finalization_spec(pack, data_root=data_root) is None:
+    spec = load_creation_finalization_spec(pack, data_root=data_root)
+    if spec is None:
         return None
-    return _status(character)
+    status = _status(character)
+    if status is not None:
+        row = finalization_row_for_roll(spec, status.roll)
+        if row.id != status.row_id or row.blocked_reference != status.blocked_reference:
+            raise CreationFinalizationError("finalization state does not match its rolled row")
+        if status.complete and (row.blocked_reference or set(status.selections) != set(row.choices)):
+            raise CreationFinalizationError("completed finalization has unresolved requirements")
+    return status
 
 
 def _require_creation_complete(pack: Any, character: Any, *, data_root: Path | None) -> None:
@@ -410,7 +418,7 @@ def _resolve_option(group_id: str, options: Mapping[str, Any], selection: str) -
 def _apply_choice(pack: Any, character: Any, group_id: str, group: Any, selection: Any) -> None:
     if not isinstance(group, Mapping):
         raise CreationFinalizationError(f"finalization choice group {group_id!r} must be a mapping")
-    unknown = set(group) - {"options", "field_template"}
+    unknown = set(group) - {"options", "field_template", "display"}
     if unknown:
         raise CreationFinalizationError(f"finalization choice group {group_id!r} has unknown keys {sorted(unknown)}")
 

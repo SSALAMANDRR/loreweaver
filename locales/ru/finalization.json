@@ -1,0 +1,16 @@
+{
+  "commands.help.finalize": "Выполнить бросок и разрешить завершающий этап создания активного персонажа по таблице набора правил.",
+  "commands.finalization.no_character": "Создайте или выберите персонажа, прежде чем завершать его создание.",
+  "commands.finalization.unsupported": "Система правил этого персонажа не содержит таблицы завершения создания.",
+  "commands.finalization.creation_incomplete": "Сначала завершите поэтапное создание персонажа.",
+  "commands.finalization.roll_prompt": "Завершающий этап создания доступен. Введите `.finalize roll`, чтобы выполнить обязательный однократный бросок.",
+  "commands.finalization.result": "Завершающий бросок {roll}: {result}",
+  "commands.finalization.rule": "· {rule}",
+  "commands.finalization.choice": "· {id}: {options}",
+  "commands.finalization.choice_free": "· {id}: введите значение текстом",
+  "commands.finalization.choice_usage": "Разрешите обязательные выборы командой `.finalize {assignments}`.",
+  "commands.finalization.blocked": "Для выпавшего результата нужны данные правил, отсутствующие в текущем наборе: {reference}. Бросок сохранён, переброс недоступен; завершение создания ожидает разрешения результата.",
+  "commands.finalization.complete": "Создание персонажа завершено. Персонаж готов к игре.",
+  "commands.finalization.invalid": "Это действие завершения создания нельзя применить. Проверьте выпавший результат и все обязательные выборы.",
+  "commands.finalization.save_failed": "Изменения завершающего этапа не сохранены и не считаются применёнными."
+}

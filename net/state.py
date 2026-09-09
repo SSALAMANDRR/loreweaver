@@ -32,7 +32,9 @@ from core.character_manager import CharacterSheet, character_resources, has_char
 from core.character_surface import character_detail_surface
 from core.creation_surface import creation_catalog_surface, creation_state_surface
 from core.documents import KEEPER_VIEWER, MODULE_POOL_ID, MVU_ID, PLAYER_VIEWER, SCENE_ID
+from core.finalization_surface import finalization_surface
 from core.modvars import MODVARS_DOC_ID, MODVARS_DOC_TYPE, wire_entries
+from infra.i18n import get_i18n
 from infra.usage_stats import USAGE_STATS_KEY
 
 
@@ -63,6 +65,16 @@ async def build_room_state(services: Services, ctx: AgentCtx) -> dict[str, Any]:
             creation = None
         if creation is not None:
             state["creation"] = creation
+        try:
+            lifecycle = finalization_surface(load_rulepack(sheet.system), sheet, ctx.locale)
+        except Exception:
+            lifecycle = {"readiness": {"ready": False, "managed": True, "phase": "invalid", "blocked_reference": ""}}
+        readiness = lifecycle["readiness"]
+        if not readiness["ready"]:
+            readiness["message"] = get_i18n(ctx.locale).t(
+                f"commands.readiness.{readiness['phase']}", reference=readiness["blocked_reference"]
+            )
+        state.update(lifecycle)
 
     scene = await _scene(services, ctx.chat_key)
     if scene is not None:

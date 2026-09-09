@@ -1,3 +1,5 @@
+import type { CreationCatalog, CreationState, CharacterReadinessState, CharacterFinalizationState } from "./creation.js"
+
 // Protocol 2.1 — the MAJOR version is the compatibility contract: refuse (or clearly
 // warn on) a `welcome.protocol` whose major differs; minors within a major stay
 // additive. 2.1 adds the M19 presentation surface: the `image` and performance block
@@ -5,7 +7,7 @@
 // card listing (`list_pack_cards` → `pack_cards`), the structured lane behind every
 // "import from installed pack" picker. 2.3 adds each listed card's `kind`, so a picker
 // can send the right import verb. A 2.0/2.1 client ignores all of it.
-export const PROTOCOL_VERSION = "2.3" as const
+export const PROTOCOL_VERSION = "2.4" as const
 
 export const FrameType = {
   Join: "join",
@@ -776,11 +778,16 @@ export interface PregenEntry {
  * creates a sheet in it (`.coc`, `.dnd`, a pack's own) — absent when the pack
  * declares none, which means the system can be imported into but not created in. */
 export interface RuleSystemEntry {
+  creation?: CreationCatalog
   id: string
   make_char?: string
 }
 
 export interface StateFrame {
+  /** Optional on older servers; absence does not establish readiness. */
+  creation?: CreationState
+  readiness?: CharacterReadinessState
+  finalization?: CharacterFinalizationState
   type: typeof FrameType.State
   character?: CharacterState
   party: PartyMember[]

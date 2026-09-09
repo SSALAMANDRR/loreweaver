@@ -107,6 +107,7 @@ packages = [
     "rulepacks",
     "locales",
     "locales.en",
+    "locales.ru",
     "locales.zh",
     "assets",
     "assets.vendor",
@@ -114,8 +115,11 @@ packages = [
 py-modules = ["app", "_lw_version"]
 
 [tool.setuptools.package-data]
-rulepacks = ["*.yaml"]
+# Sidecars contain staged creation, advancement, and presentation data. Include
+# nested fragments too, so installed packs have the same behavior as a checkout.
+rulepacks = ["*.yaml", "data/**/*.yaml"]
 "locales.en" = ["*.json"]
+"locales.ru" = ["*.json"]
 "locales.zh" = ["*.json"]
 # core/ejs_full.py loads the vendored EJS + lodash sources at engine start.
 "assets.vendor" = ["*.js", "*LICENSE*"]

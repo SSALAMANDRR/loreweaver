@@ -12,7 +12,8 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass, field as dc_field
+from dataclasses import dataclass
+from dataclasses import field as dc_field
 from pathlib import Path
 from typing import Any
 
@@ -37,8 +38,8 @@ class TalentRequirement:
     field: str = ""
     value: str = ""
     families: tuple[str, ...] = ()
-    children: tuple["TalentRequirement", ...] = ()
-    branches: Mapping[str, "TalentRequirement"] = dc_field(default_factory=dict)
+    children: tuple[TalentRequirement, ...] = ()
+    branches: Mapping[str, TalentRequirement] = dc_field(default_factory=dict)
 
 
 @dataclass(frozen=True)

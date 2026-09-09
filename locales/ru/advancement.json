@@ -1,0 +1,17 @@
+{
+  "commands.help.advance": "Посмотреть или купить следующее улучшение активного персонажа за опыт.",
+  "commands.advancement.no_character": "Создайте или выберите персонажа, прежде чем тратить опыт.",
+  "commands.advancement.unsupported": "Система правил этого персонажа не поддерживает покупку улучшений.",
+  "commands.advancement.uninitialized": "Запас опыта этого персонажа не инициализирован. Начальный опыт выдаётся только при создании персонажа.",
+  "commands.advancement.usage": "Использование: .advance [<категория> <цель>] — например, `.advance characteristic Ag`, `.advance skill Acrobatics` или `.advance talent Быстрая Перезарядка`.",
+  "commands.advancement.header": "Опыт: доступно {available} · потрачено {spent} · начальный запас {starting}",
+  "commands.advancement.item": "· {category} · {target} · {stage} · {current}→{next} · {cost} опыта{suffix}",
+  "commands.advancement.talent_item": "· {category} · {target} · {stage} · {cost} опыта{suffix}",
+  "commands.advancement.unaffordable": " · недостаточно опыта",
+  "commands.advancement.none": "Доступных для покупки улучшений больше нет.",
+  "commands.advancement.invalid": "Сейчас это улучшение нельзя купить. Проверьте цель, специализацию, требования, порядок улучшений и оставшийся опыт.",
+  "commands.advancement.save_failed": "Улучшение не сохранено и не считается купленным.",
+  "commands.advancement.purchased": "Куплено улучшение {target} ({stage}): {current}→{next} за {cost} опыта. Осталось опыта: {remaining}.",
+  "commands.advancement.talent_purchased": "Куплено улучшение {target} ({stage}) за {cost} опыта. Осталось опыта: {remaining}.",
+  "commands.advancement.creation_hint": "Начальный запас опыта: {available}. Завершите оставшиеся выборы создания, затем введите `.advance` для просмотра улучшений."
+}

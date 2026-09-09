@@ -12,6 +12,10 @@ The DH2 port is built from the structured Russian rules corpus already stored in
 
 ## Stage 1 source map
 
+The source map below records the initial port. The current implementation has
+also added the creation and advancement stages described under **Current status**;
+the initial slice is not the full feature inventory.
+
 | Loreweaver path | Source | Source meaning |
 |---|---|---|
 | `alias.WS` | Neon `CH01_H004` | Навык Рукопашной (НР) |
@@ -103,7 +107,10 @@ DH2 uses this generic primitive for its six core home worlds:
 | Shrine World | Fel, WP | Per | 3 | 6+ |
 | Voidborn | Int, WP | S | 3 | 5+ |
 
-The book also grants the player one optional reroll of a generated characteristic. That is intentionally **not** auto-consumed by the profile generator because it is a player choice about which result to replace. The later player-owned manual-roll flow should expose that choice explicitly instead of having the engine quietly optimize a PC.
+The book also grants the player one optional reroll of a generated characteristic.
+`creation_flow.yaml` now exposes it as the explicit `profile_reroll` stage. The
+player chooses a characteristic or skips the reroll; the second result is final.
+The profile generator never silently consumes or optimizes this choice.
 
 The rulebook also provides an alternative point-buy method: characteristics start at 25 with 60 points to distribute, no characteristic may exceed 40, and home-world `+/-` characteristics change those starts to 30/20. That method is sourced but not yet wired into the profile generator in this slice.
 
@@ -127,14 +134,46 @@ Starting skills are written at rank 1 (`Знает`), including separate Special
 
 The important agency rule is already executable: `Коммерция или Медика`, `Нападение или Защита`, free `Учёные Знания (выберите одно)`, Mechanicus `Бдительность или Управление (выберите одно)`, equipment alternatives, and background aptitude choices all require explicit player selections. The engine does not optimize a PC behind the player's back.
 
+## Current status
+
+Verified against the source tree on 2026-09-09:
+
+- Percentile checks, difficulty modifiers, signed degrees, initiative, characteristic
+  bonuses, regular skill ranks and independent Special-skill specializations are
+  declared in `dh2.yaml` and exercised by `tests/core/test_dh2_rulepack.py`.
+- `creation_flow.yaml` orders characteristics, the optional reroll, home world,
+  background, role, duplicate aptitude replacement, XP purchases and starting
+  acquisitions. Home-world Wounds and grants live in `creation.d/home_world.yaml`;
+  backgrounds and roles live in `creation.yaml`. These are executable creation
+  payloads, not a claim that every granted ability has executable play mechanics.
+- `advancement.yaml` and `advancement_purchase.yaml` supply the initial 1000 XP,
+  aptitude-based prices and sequential characteristic/skill purchases. Talent
+  purchases, specializations, repeatable talents and prerequisites have separate
+  catalogs and generic handlers. Numeric Psy Rating and structured implants can
+  satisfy prerequisites; they do not implement psychic combat or implant effects.
+- `starting_equipment.yaml` supplies the starting-acquisition catalog. Inventory
+  and presentation data do not yet constitute a complete weapon/combat simulator.
+- `creation_finalization.yaml` covers the mandatory d100 Divination table.
+  Immediate effects and explicit choices are executable. Result 01 is deliberately
+  blocked on missing Table 8-15 data, preserving the roll. Rules written only in
+  `rules` remain annotations; session-triggered effects are not automatically run.
+- Studio renders the generic staged-creation state, choices, purchases, equipment
+  and rich sheet information. Protocol 2.4 now owns the creation types and exposes
+  readiness plus the mandatory finalization's available actions, rolled result
+  and pending choices. Studio renders them without DH2 rules. Result 01 remains
+  blocked on the missing table; no UI action bypasses it.
+
+Relevant coverage includes `test_creation_layers.py`, `test_creation_flow.py`,
+`test_creation_finalization.py`, `test_advancement*.py`, `test_talent*.py`,
+`test_repeatable_talent.py`, `test_dh2_psy_implants.py`, gateway creation/action
+tests and `tests/net/test_state_creation.py`. Passing these tests does not certify
+the unimplemented combat rules or replace verification against the source book.
+
 ## Deliberately not ported yet
 
 Stage 1 does **not** invent values or mechanics for areas whose source slice has not been mapped and tested. In particular:
 
-- point-buy character generation and the player's one characteristic reroll;
-- home-world Wounds, aptitude, talent/bonus and recommended-background payloads;
-- roles and their aptitudes/abilities;
-- XP prices and advancement purchasing;
+- point-buy character generation;
 - executable mechanics for background talents, traits and special abilities beyond their structured creation payloads;
 - normalized Chapter V equipment/item profiles behind the source-labelled starting inventory;
 - Fate spending/burning/recovery semantics beyond the current/threshold sheet representation;
@@ -149,6 +188,21 @@ Stage 1 does **not** invent values or mechanics for areas whose source slice has
 - righteous fury and critical-effect tables;
 - conditions and duration tracking;
 - psychic powers.
+
+The Divination table also requires sourced Table 8-15 data before every possible
+new character can finish creation. Do not bypass that dependency by rerolling.
+
+## Localization and distribution
+
+Russian rulepack labels and rule text are distinct from engine messages.
+`locales/ru/` currently translates five complete message domains: creation,
+advancement, manual rolls, finalization and readiness. Other domains use the
+existing English fallback. Catalog tests pin the translated domains, key parity
+and format parameters; Russian is not yet a complete engine translation.
+
+Wheel package data explicitly includes nested rulepack YAML sidecars and Russian
+catalogs. The frozen server spec already includes the entire rulepacks/locales
+trees. Source tests alone do not prove an installed artifact contains those files.
 
 Those are separate port stages. If a rule cannot be represented by the existing generic rulepack DSL, the port should identify the missing generic primitive instead of adding `if system == "dh2"` logic to the engine.
 

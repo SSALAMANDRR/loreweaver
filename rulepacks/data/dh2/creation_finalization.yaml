@@ -62,6 +62,7 @@ rows:
     source: "DH2 RU v1.8 p. 89, Table 2-9"
     choices:
       hatred:
+        display: {en: "Hatred target", ru: "Объект ненависти"}
         field_template:
           field: Talents
           template: "Ненависть ({value})"
@@ -75,10 +76,12 @@ rows:
     source: "DH2 RU v1.8 p. 89, Table 2-9"
     choices:
       increase:
+        display: {en: "Increase characteristic", ru: "Повысить характеристику"}
         options:
           agility: {names: [Ловкость, Agility], display: {ru: Ловкость, en: Agility}, effects: {add_attributes: {Ag: 3}}}
           intelligence: {names: [Интеллект, Intelligence], display: {ru: Интеллект, en: Intelligence}, effects: {add_attributes: {Int: 3}}}
       decrease:
+        display: {en: "Decrease characteristic", ru: "Понизить характеристику"}
         options:
           weapon_skill: {names: ["Навык Рукопашной", "Weapon Skill"], display: {ru: "Навык Рукопашной", en: "Weapon Skill"}, effects: {add_attributes: {WS: -3}}}
           ballistic_skill: {names: ["Навык Стрельбы", "Ballistic Skill"], display: {ru: "Навык Стрельбы", en: "Ballistic Skill"}, effects: {add_attributes: {BS: -3}}}
@@ -123,10 +126,12 @@ rows:
     source: "DH2 RU v1.8 p. 89, Table 2-9"
     choices:
       increase:
+        display: {en: "Increase characteristic", ru: "Повысить характеристику"}
         options:
           fellowship: {names: [Общительность, Fellowship], display: {ru: Общительность, en: Fellowship}, effects: {add_attributes: {Fel: 3}}}
           strength: {names: [Сила, Strength], display: {ru: Сила, en: Strength}, effects: {add_attributes: {S: 3}}}
       decrease:
+        display: {en: "Decrease characteristic", ru: "Понизить характеристику"}
         options:
           toughness: {names: [Выносливость, Toughness], display: {ru: Выносливость, en: Toughness}, effects: {add_attributes: {T: -3}}}
           willpower: {names: ["Сила Воли", Willpower], display: {ru: "Сила Воли", en: Willpower}, effects: {add_attributes: {WP: -3}}}
@@ -147,10 +152,12 @@ rows:
     source: "DH2 RU v1.8 p. 89, Table 2-9"
     choices:
       increase:
+        display: {en: "Increase characteristic", ru: "Повысить характеристику"}
         options:
           toughness: {names: [Выносливость, Toughness], display: {ru: Выносливость, en: Toughness}, effects: {add_attributes: {T: 3}}}
           willpower: {names: ["Сила Воли", Willpower], display: {ru: "Сила Воли", en: Willpower}, effects: {add_attributes: {WP: 3}}}
       decrease:
+        display: {en: "Decrease characteristic", ru: "Понизить характеристику"}
         options:
           fellowship: {names: [Общительность, Fellowship], display: {ru: Общительность, en: Fellowship}, effects: {add_attributes: {Fel: -3}}}
           strength: {names: [Сила, Strength], display: {ru: Сила, en: Strength}, effects: {add_attributes: {S: -3}}}
@@ -171,10 +178,12 @@ rows:
     source: "DH2 RU v1.8 p. 90, Table 2-9"
     choices:
       increase:
+        display: {en: "Increase characteristic", ru: "Повысить характеристику"}
         options:
           weapon_skill: {names: ["Навык Рукопашной", "Weapon Skill"], display: {ru: "Навык Рукопашной", en: "Weapon Skill"}, effects: {add_attributes: {WS: 3}}}
           ballistic_skill: {names: ["Навык Стрельбы", "Ballistic Skill"], display: {ru: "Навык Стрельбы", en: "Ballistic Skill"}, effects: {add_attributes: {BS: 3}}}
       decrease:
+        display: {en: "Decrease characteristic", ru: "Понизить характеристику"}
         options:
           agility: {names: [Ловкость, Agility], display: {ru: Ловкость, en: Agility}, effects: {add_attributes: {Ag: -3}}}
           intelligence: {names: [Интеллект, Intelligence], display: {ru: Интеллект, en: Intelligence}, effects: {add_attributes: {Int: -3}}}

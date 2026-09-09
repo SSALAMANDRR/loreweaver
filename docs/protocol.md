@@ -1,13 +1,51 @@
 *English · [中文](protocol.zh.md)*
 
-# loreweaver networked TUI — wire protocol 2.3
+# loreweaver networked TUI — wire protocol 2.4
+
+## Character creation and finalization (v2.4)
+
+The shared package exports `CreationState`, `CreationCatalog`,
+`CharacterReadinessState`, `CharacterFinalizationState` and
+`CharacterFinalizationAction`. All are system-neutral; no client needs to know
+which system has a mandatory random finale.
+
+- `state.creation` describes the existing staged flow; its `complete` means only
+  the stages are complete. `stage.options[].choices` are mandatory player choices;
+  `stage.requirements` holds duplicate replacements; starting acquisitions use
+  `stage.budget.{total,used,remaining}` and `stage.items`. These remain server-owned.
+- `state.readiness` accompanies an active character: `ready`, `managed`, `phase`
+  (`creation|finalization|blocked|invalid|ready`), `blocked_reference` and an optional
+  localized `message`. A legacy sheet remains ready and unmanaged. Missing fields
+  on an older server mean unknown, never inferred readiness.
+- `state.finalization` is present only for managed sheets whose pack declares a
+  finale. It contains `can_roll`, `can_resolve`, `complete`, `expression`, `choices`
+  and, after the roll, `result.{roll,id,label,source,rules}`. Choices contain
+  `id`, localized `label`, `free`, and `options[{id,label}]`. Only the rolled row
+  is exposed. The complete random table and executable effects are never sent.
+- `can_roll`/`can_resolve` authorize visible actions. Clients must not derive them
+  from XP, acquisitions, profile ids, row numbers or completion of earlier stages.
+  A missing rule reference preserves the roll and exposes neither action.
+
+The rich-client command is `.__creation_action finalize <URI-encoded JSON>`.
+The payload is either `{character,action:"roll"}` or
+`{character,action:"resolve",roll,row_id,selections:{choiceId:value}}`.
+The server checks the caller's current character, availability and recorded result,
+then delegates to `.finalize` validation and persistence. Encoding preserves free
+text containing `|` or `=`. Success prose is suppressed; failures remain private.
+The normal turn pipeline publishes fresh state after the action. Clients wait for
+that snapshot and do not optimistically mark readiness. Reconnect rebuilds this
+same surface from durable character state; deleting/switching characters replaces
+or omits it. Raw creation action echoes are service traffic, not player narration.
+
+A finalization choice group may declare a localized `display` mapping in its
+rulepack sidecar. This label is presentation only and does not alter its effects.
 
 This is the open, versioned wire protocol between a loreweaver server (started via
 `python -m app --serve`) and the OpenTUI terminal client. The engine itself
 (deterministic core + AI Keeper) is unaffected by transport; the transport-neutral
 session logic is `net.session.SessionCore`, and this document is the language-agnostic seam.
 
-Frames are JSON objects, each shaped `{"type": ...}`. Protocol version: `"2.3"`. The same
+Frames are JSON objects, each shaped `{"type": ...}`. Protocol version: `"2.4"`. The same
 frames + `join` handshake ride the transport; only the carrier + its framing differ:
 
 - **Iroh** (the transport `--serve` starts) — peer-to-peer QUIC. The server
@@ -113,7 +151,7 @@ connections receive `error too_many_connections` before `join` is read.
 ## Server → Client
 
 - `welcome` — sent once, on a successful `join`:
-  `{type:"welcome", protocol:"2.3", features:["media","audio", "imagegen"?, "demo"?, "update"?], room:string, you:{id:string,name:string,role:"player"|"keeper"}, locale:string, server:string, version?:string}`
+  `{type:"welcome", protocol:"2.4", features:["media","audio", "imagegen"?, "demo"?, "update"?], room:string, you:{id:string,name:string,role:"player"|"keeper"}, locale:string, server:string, version?:string}`
   `version` is the server's own release version (compare it to the client's to detect a mismatch). The `"update"` feature appears only for a keeper on a server whose operator configured a self-update command, and gates the `admin_update_server` control.
   `demo` means the server is using its offline sample Keeper, vector support is
   enabled, and this specific Keeper room was empty when the server checked it.

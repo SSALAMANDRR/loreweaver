@@ -167,7 +167,7 @@ class FinalizationCommands:
         )
         return specs
 
-    async def cmd_finalize(self, ctx: CommandCtx) -> str:
+    async def cmd_finalize(self, ctx: CommandCtx, *, selections: Mapping[str, str] | None = None) -> str:
         character = await ctx.services.characters.get_character(ctx.user_id, ctx.chat_key)
         if not has_character(character):
             return ctx.fail(ctx.i18n.t("commands.finalization.no_character"))
@@ -201,7 +201,7 @@ class FinalizationCommands:
         else:
             if not raw:
                 return _render_status(ctx, pack, status)
-            selections = _parse_assignments(raw)
+            selections = selections if selections is not None else _parse_assignments(raw)
             if selections is None:
                 return ctx.fail(ctx.i18n.t("commands.finalization.invalid"))
             try:

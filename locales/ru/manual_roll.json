@@ -1,0 +1,10 @@
+{
+  "commands.manual_roll.mode": "Режим ввода бросков: {mode}.",
+  "commands.manual_roll.mode_usage": "Использование: .rollmode auto|manual",
+  "commands.manual_roll.pending": "Завершите ожидающий ручной бросок, прежде чем начинать новый.",
+  "commands.manual_roll.no_pending": "Нет ожидающего ручного броска для ввода результата.",
+  "commands.manual_roll.bad_request": "Этот запрос ручного броска уже не актуален.",
+  "commands.manual_roll.bad_faces": "Введённые значения костей не соответствуют запрошенному броску {expression}.",
+  "commands.manual_roll.unsupported": "Для этого броска пока нельзя использовать физические кости: {expression}",
+  "commands.manual_roll.stale": "Проверка изменилась во время ожидания костей. Ожидающий бросок отменён; начните проверку заново."
+}

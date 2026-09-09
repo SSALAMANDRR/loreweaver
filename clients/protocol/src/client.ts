@@ -93,6 +93,55 @@ const isStr = (v: unknown): v is string => typeof v === "string"
 const isNum = (v: unknown): v is number => typeof v === "number"
 const isArr = Array.isArray
 
+function isReadiness(value: unknown): boolean {
+  return (
+    isObject(value) &&
+    typeof value.ready === "boolean" &&
+    typeof value.managed === "boolean" &&
+    isStr(value.phase) &&
+    isStr(value.blocked_reference) &&
+    (value.message === undefined || isStr(value.message))
+  )
+}
+
+function isFinalization(value: unknown): boolean {
+  if (
+    !isObject(value) ||
+    typeof value.can_roll !== "boolean" ||
+    typeof value.can_resolve !== "boolean" ||
+    typeof value.complete !== "boolean" ||
+    !isStr(value.expression) ||
+    !isArr(value.choices)
+  )
+    return false
+  if (
+    !value.choices.every(
+      (group: unknown) =>
+        isObject(group) &&
+        isStr(group.id) &&
+        isStr(group.label) &&
+        typeof group.free === "boolean" &&
+        isArr(group.options) &&
+        group.options.every(
+          (option: unknown) =>
+            isObject(option) && isStr(option.id) && isStr(option.label),
+        ),
+    )
+  )
+    return false
+  const result = value.result
+  return (
+    result === undefined ||
+    (isObject(result) &&
+      isNum(result.roll) &&
+      isStr(result.id) &&
+      isStr(result.label) &&
+      isStr(result.source) &&
+      isArr(result.rules) &&
+      result.rules.every(isStr))
+  )
+}
+
 // Per-frame-type validation of the load-bearing required fields. A frame that
 // passes the `type` check but is missing/mistyped these (e.g. `{"type":"state"}`
 // with no party/initiative, or a narrative with no speaker/text) is DROPPED here
@@ -119,7 +168,9 @@ const serverFrameValidators: Record<string, (f: Record<string, unknown>) => bool
   // its target panel (payload is opaque JSON and may legitimately be null/absent).
   [FrameType.UiManifest]: (f) => isArr(f.panels),
   [FrameType.PanelEvent]: (f) => isStr(f.panel) && f.panel.length > 0,
-  [FrameType.State]: (f) => isArr(f.party) && isArr(f.initiative) && isNum(f.online),
+  [FrameType.State]: (f) => isArr(f.party) && isArr(f.initiative) && isNum(f.online) &&
+    (f.readiness === undefined || isReadiness(f.readiness)) &&
+    (f.finalization === undefined || isFinalization(f.finalization)),
   [FrameType.Presence]: (f) => isArr(f.players) && isNum(f.online),
   [FrameType.System]: (f) => isStr(f.level) && isStr(f.text),
   [FrameType.TurnStatus]: (f) =>

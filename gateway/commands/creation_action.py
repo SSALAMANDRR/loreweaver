@@ -17,11 +17,13 @@ from urllib.parse import unquote
 
 from core.character_context import CharacterContextError, set_character_context
 from core.character_manager import has_character
+from core.creation_finalization import creation_finalization_status
+from core.finalization_surface import finalization_surface
 from core.rulepacks import load_rulepack, own_make_char_word
 from gateway.commands.types import CommandCtx, CommandSpec
 
 _CREATION_ACTION_WORD = "__creation_action"
-_ACTIONS = frozenset({"start", "create", "advance", "context"})
+_ACTIONS = frozenset({"start", "create", "advance", "context", "finalize"})
 
 
 def _hidden_spec(handler) -> CommandSpec:  # noqa: ANN001
@@ -125,6 +127,37 @@ class CreationActionCommands:
             else:
                 shadow.args = name
             rendered = await self.cmd_make_char(shadow, pack)
+
+        elif action == "finalize":
+            try:
+                request = json.loads(unquote(payload.strip()))
+                if not isinstance(request, dict) or set(request) - {"character", "action", "roll", "row_id", "selections"}:
+                    raise ValueError("invalid finalization action")
+                character = await ctx.services.characters.get_character(ctx.user_id, ctx.chat_key)
+                if not has_character(character) or request.get("character") != character.name:
+                    raise ValueError("stale character")
+                pack = load_rulepack(character.system)
+                surface = finalization_surface(pack, character, ctx.locale).get("finalization", {})
+                selections = None
+                if request.get("action") == "roll" and surface.get("can_roll"):
+                    shadow.args = "roll"
+                elif request.get("action") == "resolve" and surface.get("can_resolve"):
+                    status = creation_finalization_status(pack, character)
+                    if status is None or request.get("roll") != status.roll or request.get("row_id") != status.row_id:
+                        raise ValueError("stale finalization result")
+                    selections = request.get("selections")
+                    if not isinstance(selections, dict) or not all(
+                        isinstance(key, str) and isinstance(value, str) and value.strip()
+                        for key, value in selections.items()
+                    ):
+                        raise ValueError("invalid selections")
+                    shadow.args = "resolve"
+                else:
+                    raise ValueError("unavailable finalization action")
+            except Exception:
+                return ctx.fail(ctx.i18n.t("commands.finalization.invalid"))
+            shadow.command = "finalize"
+            rendered = await self.cmd_finalize(shadow, selections=selections)
 
         elif action == "create":
             shadow.command = "create"

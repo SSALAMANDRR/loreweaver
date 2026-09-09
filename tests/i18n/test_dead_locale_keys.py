@@ -81,6 +81,15 @@ def test_parity_checker_positive_and_negative_controls():
 
 def test_real_locale_tree_is_key_for_key_symmetric():
     catalogs = catalog_key_sets(LOCALES_DIR)
+    # Russian is being translated by complete domain catalogs. Missing domains
+    # deliberately use the loader's English fallback; translated domains retain
+    # strict parity and cannot silently lose keys or files.
+    ru = catalogs.pop("ru")
+    assert set(ru) == {
+        "advancement.json", "creation.json", "finalization.json",
+        "manual_roll.json", "readiness.json",
+    }
+    assert parity_violations({"en": {name: catalogs["en"][name] for name in ru}, "ru": ru}) == []
     # Guard against the checker passing over nothing at all.
     assert set(catalogs) >= {"en", "zh"}
     assert len(catalogs["en"]) >= 20
