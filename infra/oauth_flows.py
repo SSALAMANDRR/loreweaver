@@ -57,8 +57,8 @@ SUBSCRIPTION_CANONICAL: dict[str, str] = {
     "supergrok": "supergrok",
 }
 SUBSCRIPTION_DEFAULT_MODELS: dict[str, str] = {
-    "chatgpt": "gpt-5.4",
-    "gpt-subscription": "gpt-5.4",
+    "chatgpt": "gpt-5.6-terra",
+    "gpt-subscription": "gpt-5.6-terra",
     "supergrok": "grok-4.6",
 }
 

@@ -398,6 +398,34 @@ async def test_model_set_supergrok_clears_previous_provider_credentials():
     assert services.settings.llm.base_url == ""
 
 
+async def test_model_set_chatgpt_uses_subscription_default_model():
+    import time
+
+    from infra.oauth_flows import SubscriptionToken
+
+    services = _mutable_services()
+    router = CommandRouter(services)
+    ctx = AgentCtx(chat_key="cli:dm:m", user_id="u1", locale="en")
+    await services.llm_credentials.save_subscription(
+        "chatgpt",
+        SubscriptionToken(
+            "access-secret",
+            "refresh-secret",
+            time.time() + 3600,
+            account_id="acc-1",
+        ),
+    )
+
+    reply = await router.dispatch(ctx, ".model set chatgpt")
+
+    assert reply is not None and "chatgpt" in reply
+    assert await services.runtime_config.get() == {
+        "provider": "chatgpt",
+        "chat_model": "gpt-5.6-terra",
+        "api_key": "",
+        "base_url": "",
+    }
+
 async def test_model_set_chatgpt_uses_only_its_saved_proxy_credentials():
     services = _mutable_services()
     router = CommandRouter(services)
