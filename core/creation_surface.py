@@ -22,6 +22,7 @@ from core.creation_flow import (
 )
 from core.creation_layers import load_creation_layers, resolve_creation_layer_option
 from core.creation_presentation import (
+    input_presentation,
     load_creation_presentation,
     presentation_label,
     stage_presentation,
@@ -245,13 +246,19 @@ def _choice_wire(
             ),
         }
         effect = _effect_wire(pack, option_raw, locale, presentation)
+        if row["specialization"]:
+            guidance = input_presentation(
+                pack, "choice_option_inputs", option_id_text, locale, presentation=presentation,
+            )
+            if guidance:
+                row["input"] = guidance
         if effect:
             row["effect"] = effect
         option_rows.append(row)
 
     family = str(raw.get("skill_family") or raw.get("field_template") or "").strip()
     authored = _localized_label(raw, locale, group_id)
-    return {
+    payload = {
         "id": group_id,
         "label": presentation_label(
             pack,
@@ -265,6 +272,13 @@ def _choice_wire(
         "family": family,
         "options": option_rows,
     }
+    if payload["free"]:
+        guidance = input_presentation(
+            pack, "choice_group_inputs", group_id, locale, presentation=presentation,
+        )
+        if guidance:
+            payload["input"] = guidance
+    return payload
 
 
 def _layer_option_wire(

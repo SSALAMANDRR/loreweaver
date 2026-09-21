@@ -1,6 +1,23 @@
 *English · [中文](protocol.zh.md)*
 
-# loreweaver networked TUI — wire protocol 2.4
+# loreweaver networked TUI — wire protocol 2.5
+
+## Creation text-input presentation (v2.5)
+
+`CreationChoiceGroup` (when `free: true`) and `CreationChoiceOption` (when
+`specialization: true`) may include `input: { label?, placeholder?, description? }`.
+All fields are localized strings authored by the rulepack and resolved by the server.
+They describe the text field only: choice encoding, validation, ranks and normalization
+are unchanged. Clients should provide localized generic guidance when fields are absent,
+and associate the visible description with the input for accessibility.
+Older packs omit `input`; older clients may ignore this additive metadata.
+
+Pack authors put these strings in `creation_presentation.yaml`, under
+`choice_group_inputs.<group_id>.<locale>` or `choice_option_inputs.<option_id>.<locale>`.
+Each locale entry accepts only `label`, `placeholder` and `description` strings.
+Resolution tries the full locale, its language, then English, per field. Empty strings
+fall through; absent guidance is omitted from the wire. Like existing choice labels,
+these IDs are scoped to the pack, so repeated IDs share their presentation.
 
 ## Character creation and finalization (v2.4)
 
@@ -45,7 +62,7 @@ This is the open, versioned wire protocol between a loreweaver server (started v
 (deterministic core + AI Keeper) is unaffected by transport; the transport-neutral
 session logic is `net.session.SessionCore`, and this document is the language-agnostic seam.
 
-Frames are JSON objects, each shaped `{"type": ...}`. Protocol version: `"2.4"`. The same
+Frames are JSON objects, each shaped `{"type": ...}`. Protocol version: `"2.5"`. The same
 frames + `join` handshake ride the transport; only the carrier + its framing differ:
 
 - **Iroh** (the transport `--serve` starts) — peer-to-peer QUIC. The server
@@ -151,7 +168,7 @@ connections receive `error too_many_connections` before `join` is read.
 ## Server → Client
 
 - `welcome` — sent once, on a successful `join`:
-  `{type:"welcome", protocol:"2.4", features:["media","audio", "imagegen"?, "demo"?, "update"?], room:string, you:{id:string,name:string,role:"player"|"keeper"}, locale:string, server:string, version?:string}`
+  `{type:"welcome", protocol:"2.5", features:["media","audio", "imagegen"?, "demo"?, "update"?], room:string, you:{id:string,name:string,role:"player"|"keeper"}, locale:string, server:string, version?:string}`
   `version` is the server's own release version (compare it to the client's to detect a mismatch). The `"update"` feature appears only for a keeper on a server whose operator configured a self-update command, and gates the `admin_update_server` control.
   `demo` means the server is using its offline sample Keeper, vector support is
   enabled, and this specific Keeper room was empty when the server checked it.

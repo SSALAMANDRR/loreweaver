@@ -213,3 +213,14 @@ advancement_stages:
   tier_1: {ru: Уровень 1, en: Tier 1}
   tier_2: {ru: Уровень 2, en: Tier 2}
   tier_3: {ru: Уровень 3, en: Tier 3}
+
+choice_group_inputs:
+  scholastic_lore:
+    ru:
+      label: "Специализация: Учёные знания"
+      placeholder: "Например, Бюрократия"
+      description: "Введите название области знаний. Укажите только специализацию, без названия навыка."
+    en:
+      label: "Specialization: Scholastic Lore"
+      placeholder: "For example, Bureaucracy"
+      description: "Enter the name of a field of knowledge. Enter only the specialization, without the skill name."

@@ -209,3 +209,10 @@ Those are separate port stages. If a rule cannot be represented by the existing 
 ## Neon content that is not rulepack data
 
 The `GM_RUNTIME_DIRECTIVES_RU` source and `combat_protocols` describe how our AI GM should run a table, not the Dark Heresy rules themselves. They belong in Loreweaver KP skills / `expertise` / `turn_checks` / hooks, not in `dh2.yaml`.
+
+### Creation input guidance (protocol 2.5)
+
+The Administratum's Scholastic Lore choice now declares RU/EN text-input guidance
+in `creation_presentation.yaml`. Generic clients receive a label, placeholder and
+description; the example is not a closed specialization list. Choice encoding,
+free specialization validation and starting ranks are unchanged.

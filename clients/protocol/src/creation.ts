@@ -1,4 +1,10 @@
-/** Generic, server-authored character creation state (protocol 2.4). */
+/** Generic, server-authored character creation state (protocol 2.5). */
+export interface CreationInputPresentation {
+  label?: string
+  placeholder?: string
+  description?: string
+}
+
 export interface CreationPresentation {
   title?: string
   description?: string
@@ -38,6 +44,7 @@ export interface CreationChoiceOption {
   id: string
   label: string
   specialization?: boolean
+  input?: CreationInputPresentation
   effect?: CreationEffect
 }
 
@@ -45,6 +52,7 @@ export interface CreationChoiceGroup {
   id: string
   label: string
   free: boolean
+  input?: CreationInputPresentation
   family?: string
   options: CreationChoiceOption[]
 }

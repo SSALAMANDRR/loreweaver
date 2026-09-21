@@ -25,9 +25,13 @@ _ALLOWED_SECTIONS = frozenset(
         "terms",
         "advancement_stages",
         "advancement_categories",
+        "choice_group_inputs",
+        "choice_option_inputs",
     }
 )
 _ALLOWED_STAGE_KEYS = frozenset({"title", "description", "choice", "effect"})
+_INPUT_SECTIONS = frozenset({"choice_group_inputs", "choice_option_inputs"})
+_INPUT_KEYS = frozenset({"label", "placeholder", "description"})
 
 
 class CreationPresentationError(ValueError):
@@ -118,6 +122,18 @@ def load_creation_presentation(
                 raise CreationPresentationError(
                     f"creation presentation stage {stage_id!r} values must be text"  # i18n-exempt: internal validation
                 )
+    for section in _INPUT_SECTIONS:
+        entries = raw.get(section, {})
+        if not isinstance(entries, Mapping):
+            raise CreationPresentationError("invalid creation input section")  # i18n-exempt: internal validation
+        for key, localized in entries.items():
+            if not isinstance(key, str) or not key.strip() or not isinstance(localized, Mapping):
+                raise CreationPresentationError("invalid creation input entry")  # i18n-exempt: internal validation
+            for locale, payload in localized.items():
+                if not isinstance(locale, str) or not locale.strip() or not isinstance(payload, Mapping):
+                    raise CreationPresentationError("invalid creation input locale")  # i18n-exempt: internal validation
+                if set(payload) - _INPUT_KEYS or not all(isinstance(value, str) for value in payload.values()):
+                    raise CreationPresentationError("invalid creation input fields")  # i18n-exempt: internal validation
     return raw
 
 
@@ -167,7 +183,7 @@ def presentation_label(
     load the sidecar once and pass it here.
     """
 
-    if section not in _ALLOWED_SECTIONS - {"stages", "profiles"}:
+    if section not in _ALLOWED_SECTIONS - {"stages", "profiles"} - _INPUT_SECTIONS:
         raise CreationPresentationError(
             f"unsupported presentation label section {section!r}"  # i18n-exempt: internal validation
         )
@@ -179,3 +195,24 @@ def presentation_label(
         if isinstance(value, str) and value.strip():
             return value.strip()
     return fallback
+
+
+def input_presentation(
+    pack: Any,
+    section: str,
+    key: str,
+    locale: str,
+    *,
+    presentation: Mapping[str, Any] | None = None,
+) -> dict[str, str]:
+    """Resolve text-input guidance, falling back to English per missing field."""
+    if section not in _INPUT_SECTIONS:
+        raise CreationPresentationError("unsupported creation input section")  # i18n-exempt: internal validation
+    data = presentation if presentation is not None else load_creation_presentation(pack)
+    localized = _mapping(_mapping(data.get(section)).get(key))
+    result: dict[str, str] = {}
+    for candidate in _locale_candidates(locale):
+        for field, value in _mapping(localized.get(candidate)).items():
+            if field in _INPUT_KEYS and isinstance(value, str) and value.strip():
+                result.setdefault(field, value.strip())
+    return result

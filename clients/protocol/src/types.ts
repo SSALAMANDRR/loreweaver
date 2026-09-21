@@ -7,7 +7,7 @@ import type { CreationCatalog, CreationState, CharacterReadinessState, Character
 // card listing (`list_pack_cards` → `pack_cards`), the structured lane behind every
 // "import from installed pack" picker. 2.3 adds each listed card's `kind`, so a picker
 // can send the right import verb. A 2.0/2.1 client ignores all of it.
-export const PROTOCOL_VERSION = "2.4" as const
+export const PROTOCOL_VERSION = "2.5" as const
 
 export const FrameType = {
   Join: "join",

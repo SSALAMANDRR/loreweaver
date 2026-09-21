@@ -117,3 +117,48 @@ async def test_state_exposes_open_choice_effects_and_natural_russian_terms():
     administratum = next(entry for entry in stage["options"] if entry["id"] == "adeptus_administratum")
     assert "Мастер Бумажной Работы" in administratum["effect"]["grants"]
     assert "медпакет" in administratum["effect"]["equipment"]
+
+
+async def test_state_projects_free_input_guidance():
+    services = _services()
+    router = CommandRouter(services)
+    ctx = AgentCtx(chat_key="cli:dm:state-free-input", user_id="u1", locale="ru")
+    await router.dispatch(ctx, ".dh2 hive_world | Test")
+    await router.dispatch(ctx, ".create done")
+    stage = (await build_room_state(services, ctx))["creation"]["stage"]
+    option = next(row for row in stage["options"] if row["id"] == "adeptus_administratum")
+    group = next(row for row in option["choices"] if row["id"] == "scholastic_lore")
+    assert group == {
+        "id": "scholastic_lore", "label": "Учёные знания", "free": True,
+        "family": "ScholasticLore", "options": [],
+        "input": {
+            "label": "Специализация: Учёные знания",
+            "placeholder": "Например, Бюрократия",
+            "description": "Введите название области знаний. Укажите только специализацию, без названия навыка.",
+        },
+    }
+
+
+async def test_state_projects_option_input_and_preserves_legacy_shape(monkeypatch):
+    import core.creation_surface as surface
+
+    services = _services()
+    router = CommandRouter(services)
+    ctx = AgentCtx(chat_key="cli:dm:state-option-input", user_id="u1", locale="en")
+    await router.dispatch(ctx, ".dh2 hive_world | Test")
+    await router.dispatch(ctx, ".create done")
+    monkeypatch.setattr(surface, "load_creation_presentation", lambda pack: {})
+    legacy = (await build_room_state(services, ctx))["creation"]["stage"]
+    guidance = {"label": "Subject", "placeholder": "Name a subject", "description": "Enter a subject"}
+    monkeypatch.setattr(surface, "load_creation_presentation", lambda pack: {
+        "choice_option_inputs": {"operate": {"en": guidance}},
+    })
+    enriched = (await build_room_state(services, ctx))["creation"]["stage"]
+    choice = _choice(enriched, "adeptus_mechanicus", "trained_skill", "operate")
+    assert choice["specialization"] is True
+    assert choice.pop("input") == guidance
+    assert enriched == legacy
+    for option in legacy["options"]:
+        for group in option["choices"]:
+            assert "input" not in group
+            assert all("input" not in choice for choice in group["options"])
