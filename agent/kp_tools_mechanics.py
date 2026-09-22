@@ -53,6 +53,7 @@ from core.character_rules import render_validation_notice, validate_sheet
 from core.check_outcome import CheckOutcome, outcome_wire
 from core.check_roll import favor_modifiers, graded_roll
 from core.dice_engine import DiceResult
+from core.item_model import equipment_entry_label, load_item_catalog
 from core.rulepacks import RulePack, load_rulepack
 from core.sheets import check_value, has_check_value, set_sheet_value, sheet_value
 from infra.i18n import I18n
@@ -246,8 +247,15 @@ class CharacterTools:
 
         if character.equipment:
             lines.append("")
+            try:
+                item_catalog = load_item_catalog(pack) if pack is not None else None
+            except Exception:
+                item_catalog = None
             lines.append(
-                i18n.t("kp_tools.character.sheet.equipment_line", equipment=", ".join(character.equipment))
+                i18n.t(
+                    "kp_tools.character.sheet.equipment_line",
+                    equipment=", ".join(equipment_entry_label(item, item_catalog) for item in character.equipment),
+                )
             )
         if character.background:
             lines.append("")

@@ -1,6 +1,7 @@
 from agent.context import AgentCtx
 from agent.services import build_services
 from core.character_manager import CharacterSheet
+from core.item_model import ItemInstance
 from infra.config import Settings
 from infra.embeddings import FakeEmbeddings
 from infra.llm import FakeLLM
@@ -18,7 +19,10 @@ async def test_state_projects_skills_talents_equipment_and_hover_help_for_rich_c
     sheet.skills["Medicae"] = 2
     sheet.skills["Navigation::Варп"] = 1
     sheet.talents = ["Вскочить", "Выучка с Оружием (Лазерное)"]
-    sheet.equipment = ["Лазган", "Стандартные боеприпасы: Лазган (2 магазина)"]
+    sheet.equipment = [
+        ItemInstance("lasgun-001", "lasgun", {"current_ammo": 60}),
+        "Стандартные боеприпасы: Лазган (2 магазина)",
+    ]
     await services.characters.save_character(ctx.user_id, ctx.chat_key, sheet)
 
     state = await build_room_state(services, ctx)

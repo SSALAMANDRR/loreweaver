@@ -32,6 +32,10 @@ promo/
 *.sqlite3
 data/
 shared/
+# Public rulepack data is tracked even though runtime data directories are ignored.
+!rulepacks/data/
+!rulepacks/data/dh2/
+!rulepacks/data/dh2/items.yaml
 # issued keys / host keys (only the *.example.* files are committed)
 **/keys.toml
 **/tui_keys.toml

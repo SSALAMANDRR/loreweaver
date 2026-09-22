@@ -1,6 +1,7 @@
 import pytest
 
 from core.character_manager import CharacterSheet
+from core.item_model import ItemInstance
 from core.rulepacks import load_rulepack
 from core.starting_equipment import (
     StartingEquipmentError,
@@ -62,11 +63,11 @@ def test_ranged_weapon_acquisition_consumes_one_slot_and_grants_two_standard_mag
 
     assert result.item.name == "Лазган"
     assert result.item.uses_standard_magazines
+    assert result.item_instance is not None
+    assert result.item_instance.profile_id == "lasgun"
     assert result.budget.remaining == 3
-    assert result.equipment_added == (
-        "Лазган",
-        "Стандартные боеприпасы: Лазган (2 магазина)",
-    )
+    assert isinstance(result.equipment_added[0], ItemInstance)
+    assert result.equipment_added[1] == "Стандартные боеприпасы: Лазган (2 магазина)"
     assert character.equipment[-2:] == list(result.equipment_added)
 
 
@@ -77,8 +78,10 @@ def test_melee_weapon_does_not_receive_nonsense_magazines():
     result = choose_starting_item(pack, character, "Меч")
 
     assert not result.item.uses_standard_magazines
-    assert result.equipment_added == ("Меч",)
-    assert character.equipment == ["Меч"]
+    assert result.item_instance is not None
+    assert result.item_instance.profile_id == "sword"
+    assert result.equipment_added == (result.item_instance,)
+    assert character.equipment == [result.item_instance]
 
 
 def test_too_rare_item_is_rejected_without_spending_a_slot_or_mutating_equipment():

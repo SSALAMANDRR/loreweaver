@@ -1,0 +1,113 @@
+version: 1
+source: "DH2_RU_OKP_V1_8; representative Chapter V profiles only"
+
+# This is deliberately a small typed slice for Equipment Foundation.  The two
+# source sections below are descriptive in the current Neon corpus and do not
+# expose a complete table row, so their mechanical values stay null instead of
+# being inferred from another edition or an external source.
+profiles:
+  lasgun:
+    name: Лазган
+    aliases: [Lasgun]
+    kind: weapon
+    source_reference: CH05_H076
+    availability: 10
+    damage_expression: "1к10+3"
+    damage_type: E
+    penetration: 0
+    range: 100
+    rate_of_fire: {single: 1, semi: 3, full: null}
+    clip_size: 60
+    reload: full
+    qualities: [Надёжное]
+    ammo_requirements: [standard_las_battery]
+
+  autogun:
+    name: Автоган
+    aliases: [Autogun]
+    kind: weapon
+    source_reference: CH05_H078
+    availability: 0
+    damage_expression: "1к10+3"
+    damage_type: U
+    penetration: 0
+    range: 100
+    rate_of_fire: {single: 1, semi: 3, full: 10}
+    clip_size: 30
+    reload: full
+    qualities: []
+    ammo_requirements: [standard_autogun_rounds]
+
+  laspistol:
+    name: Лазпистолет
+    aliases: [Laspistol]
+    kind: weapon
+    source_reference: CH05_H071
+    completeness: source_incomplete
+    availability: null
+    damage_expression: null
+    damage_type: null
+    penetration: null
+    range: null
+    rate_of_fire: {}
+    clip_size: null
+    reload: null
+    qualities: []
+    ammo_requirements: []
+
+  sword:
+    name: Меч
+    aliases: [Sword]
+    kind: weapon
+    source_reference: CH05_H132
+    availability: 10
+    damage_expression: "1к10"
+    damage_type: R
+    penetration: 0
+    range: null
+    rate_of_fire: {}
+    clip_size: null
+    reload: null
+    qualities: [Сбалансированное]
+    ammo_requirements: []
+
+  knife:
+    name: Нож
+    aliases: [Knife]
+    kind: weapon
+    source_reference: CH05_H132
+    availability: 20
+    damage_expression: "1к5"
+    damage_type: R
+    penetration: 0
+    range: 5
+    rate_of_fire: {}
+    clip_size: null
+    reload: null
+    qualities: []
+    ammo_requirements: []
+
+  frag_grenade:
+    name: Фраг-граната
+    aliases: [Фраг, Frag Grenade]
+    kind: weapon
+    source_reference: CH05_H104
+    completeness: source_incomplete
+    availability: null
+    damage_expression: null
+    damage_type: null
+    penetration: null
+    range: null
+    rate_of_fire: {}
+    clip_size: null
+    reload: null
+    qualities: []
+    ammo_requirements: []
+
+  basic_flak_armor:
+    name: Флак-жилет
+    aliases: [Flak Vest, Basic Flak Armour, Basic Flak Armor, flak_vest]
+    kind: armour
+    source_reference: CH05_H187
+    availability: 0
+    armor_by_location: {body: 3}

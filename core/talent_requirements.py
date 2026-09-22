@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from core.advancement_purchase import AdvancementPurchaseError
+from core.item_model import equipment_entry_label, load_item_catalog
 from core.sheets import resolve_skill_family, sheet_value
 from core.yaml_safety import safe_load_no_aliases
 
@@ -463,9 +464,13 @@ def requirement_met(
         equipment = getattr(character, "equipment", None)
         if not isinstance(equipment, list):
             return False
+        try:
+            profiles = load_item_catalog(pack)
+        except Exception:
+            profiles = None
         wanted = _normalize(requirement.value)
         return any(
-            isinstance(item, str) and _normalize(item) == wanted
+            _normalize(equipment_entry_label(item, profiles)) == wanted
             for item in equipment
         )
     if requirement.kind == "any_skill_family":

@@ -19,6 +19,7 @@ import time
 from datetime import datetime
 from typing import Any
 
+from core.item_model import deserialize_equipment_entry, serialize_equipment_entry
 from infra.i18n import t
 from infra.room_facets import STORAGE_DOCUMENTS, STORAGE_ROOM_STATE, RoomStateFacet
 from infra.store import Store
@@ -260,7 +261,10 @@ class CharacterSheet:
             "hp_current": getattr(self, "hp_current", None),
             "hp_max": getattr(self, "hp_max", None),
             "skills": self.skills,
-            "equipment": getattr(self, "equipment", []),
+            "equipment": [
+                serialize_equipment_entry(item)
+                for item in getattr(self, "equipment", [])
+            ],
             "background": getattr(self, "background", ""),
             "notes": getattr(self, "notes", ""),
             "avatar": getattr(self, "avatar", None),
@@ -275,7 +279,11 @@ class CharacterSheet:
         character.attributes = data.get("attributes", {})
         character.secondary_attributes = data.get("secondary_attributes", {})
         character.skills = data.get("skills", {})
-        character.equipment = data.get("equipment", [])
+        stored_equipment = data.get("equipment", [])
+        if isinstance(stored_equipment, list):
+            character.equipment = [deserialize_equipment_entry(item) for item in stored_equipment]
+        else:
+            character.equipment = []
         character.background = data.get("background", "")
         character.notes = data.get("notes", "")
         avatar = data.get("avatar")

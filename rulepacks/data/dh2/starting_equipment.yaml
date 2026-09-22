@@ -180,6 +180,7 @@ items:
     aliases: [Flak Vest]
     availability: 0
     kind: armour
+    profile_id: basic_flak_armor
     source: CH05_H187
 
   flak_coat:

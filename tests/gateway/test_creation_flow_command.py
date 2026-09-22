@@ -2,6 +2,7 @@ from agent.context import AgentCtx
 from agent.services import build_services
 from core.advancement_surface import initialized_advancement_budget
 from core.creation_flow import creation_flow_status
+from core.item_model import ItemInstance
 from core.rulepacks import load_rulepack
 from core.starting_equipment import starting_equipment_budget
 from gateway.commands import CommandRouter
@@ -180,5 +181,5 @@ async def test_create_done_enters_starting_equipment_and_item_purchase_persists(
     saved = await services.characters.get_character(ctx.user_id, ctx.chat_key)
     after = starting_equipment_budget(pack, saved)
     assert after is not None and after.remaining == before.remaining - 1
-    assert "Лазган" in saved.equipment
-    assert any("2 магазина" in item for item in saved.equipment)
+    assert any(isinstance(item, ItemInstance) and item.profile_id == "lasgun" for item in saved.equipment)
+    assert any(isinstance(item, str) and "2 магазина" in item for item in saved.equipment)

@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from core.item_model import ItemInstance, ItemModelError, load_item_catalog
 from core.sheets import sheet_value
 from core.yaml_safety import safe_load_no_aliases
 
@@ -36,6 +37,7 @@ class StartingItem:
     kind: str
     uses_standard_magazines: bool = False
     source: str = ""
+    profile_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -57,8 +59,9 @@ class StartingEquipmentBudget:
 @dataclass(frozen=True)
 class StartingEquipmentGrant:
     item: StartingItem
-    equipment_added: tuple[str, ...]
+    equipment_added: tuple[Any, ...]
     budget: StartingEquipmentBudget
+    item_instance: ItemInstance | None = None
 
 
 def _normalize(value: str) -> str:
@@ -144,6 +147,7 @@ def load_starting_equipment_spec(
             "kind",
             "uses_standard_magazines",
             "source",
+            "profile_id",
         }
         if unknown_item:
             raise StartingEquipmentError(
@@ -191,6 +195,7 @@ def load_starting_equipment_spec(
             kind=kind,
             uses_standard_magazines=uses_standard_magazines,
             source=str(entry.get("source") or "").strip(),
+            profile_id=(str(entry["profile_id"]).strip() if entry.get("profile_id") is not None else None),
         )
 
     return StartingEquipmentSpec(
@@ -324,8 +329,30 @@ def choose_starting_item(
 
     snapshot = copy.deepcopy(vars(character))
     try:
-        added = [item.name]
-        equipment.append(item.name)
+        item_instance: ItemInstance | None = None
+        item_entry: Any = item.name
+        try:
+            profiles = load_item_catalog(pack, data_root=data_root)
+            if profiles is not None:
+                if item.profile_id is not None:
+                    profile = profiles.resolve(item.profile_id)
+                    item_instance = ItemInstance.create(profile)
+                    item_entry = item_instance
+                else:
+                    try:
+                        profile = profiles.resolve(item.id)
+                    except ItemModelError:
+                        profile = None
+                    if profile is not None:
+                        item_instance = ItemInstance.create(profile)
+                        item_entry = item_instance
+        except ItemModelError as exc:
+            raise StartingEquipmentError(
+                f"starting-equipment item {item.id!r} has an invalid typed profile: {exc}"
+            ) from exc
+
+        added: list[Any] = [item_entry]
+        equipment.append(item_entry)
         if item.uses_standard_magazines and spec.weapon_magazines:
             ammo = f"Стандартные боеприпасы: {item.name} ({spec.weapon_magazines} магазина)"
             equipment.append(ammo)
@@ -340,11 +367,19 @@ def choose_starting_item(
                 "name": item.name,
                 "availability": item.availability,
                 "kind": item.kind,
-                "grants": list(added),
+                "grants": [
+                    item.name if isinstance(grant, ItemInstance) else grant
+                    for grant in added
+                ],
             }
         )
         new_budget = _budget_from_state(state)
-        return StartingEquipmentGrant(item=item, equipment_added=tuple(added), budget=new_budget)
+        return StartingEquipmentGrant(
+            item=item,
+            equipment_added=tuple(added),
+            budget=new_budget,
+            item_instance=item_instance,
+        )
     except Exception:
         vars(character).clear()
         vars(character).update(snapshot)

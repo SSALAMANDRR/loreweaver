@@ -1,0 +1,47 @@
+version: 1
+# Minimal vertical-slice contract. The numeric unit intentionally models only
+# the currently supported First Shot; full DH2 half/full-action semantics remain
+# out of scope until the local authoritative source is available.
+turn_state:
+  action_budget_per_turn: 1
+  reactions_per_round: 1
+  reaction_reset: round
+actions:
+  ranged_attack:
+    modes:
+      single:
+        action_cost: 1
+        attack_value: BS
+        damage_value: DAMAGE
+        toughness_value: TB
+        weapon_profiles: [lasgun, autogun, laspistol]
+        consumes_ammo: true
+        reaction:
+          type: basic
+          cost: 1
+          spend_on: attempt
+  melee_attack:
+    modes:
+      single:
+        action_cost: 1
+        attack_value: WS
+        damage_value: DAMAGE
+        toughness_value: TB
+        damage_bonus_value: SB
+        weapon_profiles: [sword, knife]
+        consumes_ammo: false
+        reaction:
+          type: parry
+          target_value: ParryTarget
+          cost: 1
+          spend_on: attempt
+provenance:
+  action_economy: null
+  reaction_economy: null
+hit_locations:
+  - {max: 10, id: head}
+  - {max: 20, id: right_arm}
+  - {max: 30, id: left_arm}
+  - {max: 70, id: body}
+  - {max: 85, id: right_leg}
+  - {max: 100, id: left_leg}

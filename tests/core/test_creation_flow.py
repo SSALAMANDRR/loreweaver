@@ -18,6 +18,7 @@ from core.creation_flow import (
     start_creation_flow,
 )
 from core.creation_layers import CreationLayerError
+from core.item_model import ItemInstance
 from core.rulepacks import load_rulepack
 from core.starting_equipment import starting_equipment_budget
 
@@ -186,12 +187,14 @@ def test_dh2_full_creation_flow_reaches_ready_character_without_system_specific_
     first = choose_creation_flow_starting_item(pack, sheet, "Лазган")
     assert first.status.complete is False
     assert first.grant.budget.remaining == 2
-    assert "Лазган" in first.grant.equipment_added
-    assert any("2 магазина" in item for item in first.grant.equipment_added)
+    assert isinstance(first.grant.equipment_added[0], ItemInstance)
+    assert first.grant.equipment_added[0].profile_id == "lasgun"
+    assert any("2 магазина" in str(item) for item in first.grant.equipment_added)
 
     second = choose_creation_flow_starting_item(pack, sheet, "Нож")
     assert second.grant.budget.remaining == 1
-    assert second.grant.equipment_added == ("Нож",)
+    assert isinstance(second.grant.equipment_added[0], ItemInstance)
+    assert second.grant.equipment_added[0].profile_id == "knife"
 
     third = choose_creation_flow_starting_item(pack, sheet, "Респиратор")
     assert third.grant.budget.remaining == 0

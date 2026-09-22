@@ -27,6 +27,7 @@ from core.creation_presentation import (
     presentation_label,
     stage_presentation,
 )
+from core.item_model import equipment_entry_label, load_item_catalog
 from core.rulepacks import RulePack
 from core.starting_equipment import available_starting_items, starting_equipment_budget
 
@@ -536,7 +537,11 @@ def creation_state_surface(pack: RulePack, character: Any, locale: str) -> dict[
         ]
         equipment = getattr(character, "equipment", None)
         if isinstance(equipment, list):
-            stage_wire["inventory"] = [str(item) for item in equipment]
+            try:
+                profiles = load_item_catalog(pack)
+            except Exception:
+                profiles = None
+            stage_wire["inventory"] = [equipment_entry_label(item, profiles) for item in equipment]
         if budget is not None:
             stage_wire["budget"] = {
                 "total": budget.total,
