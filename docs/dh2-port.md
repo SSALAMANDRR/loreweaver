@@ -152,9 +152,10 @@ Verified against the source tree on 2026-09-09:
   catalogs and generic handlers. Numeric Psy Rating and structured implants can
   satisfy prerequisites; they do not implement psychic combat or implant effects.
 - `starting_equipment.yaml` supplies the starting-acquisition catalog. Inventory
-  and presentation data now feed the typed item catalog used by the minimal
-  First Shot and sword/knife melee slices. They do not constitute a complete
-  weapon/combat simulator.
+  and presentation data feed the typed item catalog used by the deterministic
+  Combat MVP backend: single/semi/full ranged fire, sword/knife melee, Dodge,
+  Parry, Aim and Reload. The backend applies all hits, ammo and Damage through
+  one checked `StateDelta`. This is not a complete weapon/combat simulator.
 - `creation_finalization.yaml` covers the mandatory d100 Divination table.
   Immediate effects and explicit choices are executable. Result 01 is deliberately
   blocked on missing Table 8-15 data, preserving the roll. Rules written only in
@@ -181,11 +182,10 @@ Stage 1 does **not** invent values or mechanics for areas whose source slice has
 - Fate spending/burning/recovery semantics beyond the current/threshold sheet representation;
 - Insanity and Corruption tracks;
 - situational alternative-characteristic selection for skill checks;
-- full half/full action economy beyond the minimal per-turn attack budget;
-- attack modes and rate of fire beyond one ranged shot and one melee attack;
-- hit-location digit reversal beyond the currently explicit location roll;
-- dodge and advanced parry modifiers beyond the basic reaction state;
-- weapon qualities and reload actions;
+- action types beyond the Combat MVP half/full attack, Aim and Reload contract;
+- burst hit-location sequencing beyond automatic first-hit digit reversal;
+- advanced Dodge/Parry modifiers and weapon-quality effects;
+- reserve ammunition inventory and reload logistics beyond clip refill;
 - righteous fury and critical-effect tables;
 - conditions and duration tracking;
 - psychic powers.

@@ -70,12 +70,12 @@ def test_successful_melee_hit_uses_ws_weapon_damage_armour_tb_and_action_budget(
     assert result.ammo_before is None and result.ammo_after is None
     assert result.state_delta.action_cost == 1
     assert target.attributes["DAMAGE"] == 0
-    assert combat_state.combatants[attacker.name].action_budget == 1
+    assert combat_state.combatants[attacker.name].action_budget == 2
 
     apply_state_delta(request, result, combat_state=combat_state, pack=pack)
 
     assert target.attributes["DAMAGE"] == expected_damage
-    assert combat_state.combatants[attacker.name].action_budget == 0
+    assert combat_state.combatants[attacker.name].action_budget == 1
     assert weapon.state == {}
 
 
@@ -89,7 +89,7 @@ def test_failed_ws_check_consumes_action_without_damage():
     assert result.final_damage == 0
     apply_state_delta(request, result, combat_state=combat_state, pack=pack)
     assert target.attributes["DAMAGE"] == 0
-    assert combat_state.combatants[attacker.name].action_budget == 0
+    assert combat_state.combatants[attacker.name].action_budget == 1
 
 
 def test_successful_parry_uses_existing_resolver_and_prevents_damage():

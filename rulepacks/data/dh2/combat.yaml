@@ -1,43 +1,71 @@
 version: 1
-# Minimal vertical-slice contract. The numeric unit intentionally models only
-# the currently supported First Shot; full DH2 half/full-action semantics remain
-# out of scope until the local authoritative source is available.
+# Combat MVP contract. One half action costs 1, one full action costs 2.
 turn_state:
-  action_budget_per_turn: 1
+  action_budget_per_turn: 2
   reactions_per_round: 1
   reaction_reset: round
+margin_unit: degrees
 actions:
   ranged_attack:
     modes:
       single:
         action_cost: 1
         attack_value: BS
-        damage_value: DAMAGE
+        damage_value: Damage
         toughness_value: TB
         weapon_profiles: [lasgun, autogun, laspistol]
         consumes_ammo: true
-        reaction:
-          type: basic
-          cost: 1
-          spend_on: attempt
+        reactions:
+          basic: {cost: 1, spend_on: attempt}
+          dodge: {cost: 1, spend_on: attempt, target_value: DodgeTarget, hits_avoided_per_degree: 1}
+      semi:
+        action_cost: 2
+        attack_value: BS
+        damage_value: Damage
+        toughness_value: TB
+        weapon_profiles: [lasgun, autogun]
+        consumes_ammo: true
+        extra_hit_degrees: 2
+        reactions:
+          dodge: {cost: 1, spend_on: attempt, target_value: DodgeTarget, hits_avoided_per_degree: 1}
+      full:
+        action_cost: 2
+        attack_value: BS
+        damage_value: Damage
+        toughness_value: TB
+        attack_modifier: -10
+        weapon_profiles: [autogun]
+        consumes_ammo: true
+        extra_hit_degrees: 1
+        reactions:
+          dodge: {cost: 1, spend_on: attempt, target_value: DodgeTarget, hits_avoided_per_degree: 1}
   melee_attack:
     modes:
       single:
         action_cost: 1
         attack_value: WS
-        damage_value: DAMAGE
+        damage_value: Damage
         toughness_value: TB
         damage_bonus_value: SB
         weapon_profiles: [sword, knife]
         consumes_ammo: false
-        reaction:
-          type: parry
-          target_value: ParryTarget
-          cost: 1
-          spend_on: attempt
+        reactions:
+          parry: {cost: 1, spend_on: attempt, target_value: ParryTarget}
+          dodge: {cost: 1, spend_on: attempt, target_value: DodgeTarget, hits_avoided_per_degree: 1}
+  aim:
+    modes:
+      half: {action_cost: 1, attack_modifier: 10}
+      full: {action_cost: 2, attack_modifier: 20}
+  reload:
+    modes:
+      full: {action_cost: 2}
 provenance:
   action_economy: null
   reaction_economy: null
+  aim_modifiers: null
+  range_modifiers: null
+  fire_mode_modifiers: null
+  extra_hit_locations: null
 hit_locations:
   - {max: 10, id: head}
   - {max: 20, id: right_arm}
@@ -45,3 +73,10 @@ hit_locations:
   - {max: 70, id: body}
   - {max: 85, id: right_leg}
   - {max: 100, id: left_leg}
+hit_location_roll: reverse_digits
+range_bands:
+  - {max_distance: 2, modifier: 30}
+  - {max_multiple: 0.5, modifier: 10}
+  - {max_multiple: 2, modifier: 0}
+  - {max_multiple: 3, modifier: -10}
+  - {max_multiple: 4, modifier: -30}

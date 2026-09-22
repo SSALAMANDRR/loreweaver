@@ -13,6 +13,19 @@ consume an item resource; melee attacks use the same path with no resource
 mutation. Both attacks and reactions are graded by the rulepack's existing
 `CheckResolver`.
 
-This note covers only First Shot and the sword/knife basic-melee vertical slice.
-It deliberately does not establish contracts for multi-hit attacks, weapon
-qualities, special actions, criticals, cover, suppression or reload/aim.
+The Combat MVP extension uses the same pipeline for pack-declared half/full
+action costs, automatic hit location, Dodge, Aim, Reload, single/semi/full fire,
+and a tuple of independently mitigated hits. One aggregate `StateDelta` applies
+all hits and ammunition together; individual `HitResult` records expose every
+impact without allowing a partial commit.
+
+The local checkout has representative equipment profiles and the DH2 check
+resolver, but no authoritative local combat-rule text for the added Aim,
+range, fire-mode, and burst-location numbers. Those values in `combat.yaml`
+are therefore a local MVP contract requiring source verification before they
+are called canonically complete. In particular, additional burst hits currently
+reuse the first hit location unless deterministic test inputs provide individual
+locations. The laspistol profile remains incomplete and is rejected by the
+attack validator. Reload refills a clip without tracking reserve ammunition;
+inventory logistics are a separate dependency. Sword's Balanced quality is
+represented in item data but has no runtime Parry bonus in this slice.

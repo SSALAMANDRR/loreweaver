@@ -49,7 +49,7 @@ def test_initial_combat_state_has_pack_declared_action_and_reaction_budget():
 
     assert combat_state.round_number == 1
     assert combat_state.current_actor == "attacker"
-    assert combat_state.combatants["attacker"].action_budget == 1
+    assert combat_state.combatants["attacker"].action_budget == 2
     assert combat_state.combatants["target"].reactions_remaining == 1
 
 
@@ -71,12 +71,12 @@ def test_first_shot_hit_resolves_location_armour_tb_damage_and_state_atomically(
     assert result.tb_reduction == 4 and result.final_damage == 3
     assert result.state_delta.action_cost == 1
     assert target.attributes["DAMAGE"] == 0 and weapon.current_ammo == 3
-    assert combat_state.combatants["attacker"].action_budget == 1
+    assert combat_state.combatants["attacker"].action_budget == 2
 
     apply_state_delta(request, result, combat_state=combat_state, pack=pack)
 
     assert target.attributes["DAMAGE"] == 3 and weapon.current_ammo == 2
-    assert combat_state.combatants["attacker"].action_budget == 0
+    assert combat_state.combatants["attacker"].action_budget == 1
 
 
 def test_apply_rolls_back_ammo_and_combat_state_if_entity_mutation_fails():
@@ -116,7 +116,7 @@ def test_first_shot_miss_still_consumes_action_and_ammo_but_not_damage():
     apply_state_delta(request, result, combat_state=combat_state, pack=pack)
 
     assert target.attributes["DAMAGE"] == 0 and weapon.current_ammo == 2
-    assert combat_state.combatants["attacker"].action_budget == 0
+    assert combat_state.combatants["attacker"].action_budget == 1
 
 
 def test_insufficient_action_budget_rejects_without_partial_mutation():
@@ -288,5 +288,5 @@ def test_new_round_restores_reaction_and_current_actor_action_budget():
 
     assert combat_state.round_number == 2
     assert combat_state.current_actor == attacker.name
-    assert combat_state.combatants[attacker.name].action_budget == 1
+    assert combat_state.combatants[attacker.name].action_budget == 2
     assert combat_state.combatants[target.name].reactions_remaining == 1

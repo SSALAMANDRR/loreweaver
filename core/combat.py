@@ -31,6 +31,8 @@ class CombatantState:
     action_budget_max: int
     reactions_remaining: int
     reactions_max: int
+    aim_bonus: int = 0
+    aimed_weapon_instance_id: str | None = None
 
 
 @dataclass
@@ -55,6 +57,7 @@ class _ReactionContract:
     cost: int
     spend_on: str
     target_value: str | None
+    hits_avoided_per_degree: int | None = None
 
 
 @dataclass(frozen=True)
@@ -66,7 +69,9 @@ class _ActionContract:
     damage_bonus_value: str | None
     weapon_profiles: tuple[str, ...]
     consumes_ammo: bool
-    reaction: _ReactionContract | None
+    reactions: Mapping[str, _ReactionContract]
+    attack_modifier: int = 0
+    extra_hit_degrees: int | None = None
 
 
 @dataclass(frozen=True)
@@ -87,6 +92,10 @@ class ActionRequest:
     damage_roll: int | None = None
     reaction_roll: int | None = None
     reaction_target: int | None = None
+    reaction_type: str | None = None
+    distance: int | None = None
+    damage_rolls: tuple[int, ...] = ()
+    location_rolls: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -128,10 +137,25 @@ class CombatResult:
     ammo_after: int | None = None
     state_delta: StateDelta | None = None
     validation_failure: str | None = None
+    hits: tuple[HitResult, ...] = ()
+    shots_fired: int = 0
 
     @property
     def ok(self) -> bool:
         return self.validation_failure is None
+
+
+@dataclass(frozen=True)
+class HitResult:
+    """One resolved impact; mitigation is calculated independently per hit."""
+
+    location: str
+    raw_damage: int
+    penetration: int
+    armour_before: int
+    armour_after_penetration: int
+    tb_reduction: int
+    final_damage: int
 
 
 def _data_path(pack: Any) -> Path:
@@ -193,12 +217,12 @@ def _action_contract(pack: Any, action: str, mode: str) -> _ActionContract:
         field_name: str(mode_raw.get(field_name) or "").strip()
         for field_name in ("attack_value", "damage_value", "toughness_value")
     }
-    if not all(value_names.values()):
+    if action in {"ranged_attack", "melee_attack"} and not all(value_names.values()):
         raise CombatValidationError("action sheet-value contract is incomplete")  # i18n-exempt: internal validation diagnostic
     profiles_raw = mode_raw.get("weapon_profiles")
-    if not isinstance(profiles_raw, list) or not profiles_raw or not all(
+    if action in {"ranged_attack", "melee_attack"} and (not isinstance(profiles_raw, list) or not profiles_raw or not all(
         isinstance(profile, str) and profile.strip() for profile in profiles_raw
-    ):
+    )):
         raise CombatValidationError("action weapon-profile contract is incomplete")  # i18n-exempt: internal validation diagnostic
     extra_values = {
         "damage_bonus_value": (
@@ -206,35 +230,39 @@ def _action_contract(pack: Any, action: str, mode: str) -> _ActionContract:
             if mode_raw.get("damage_bonus_value") is not None
             else None
         ),
-        "weapon_profiles": tuple(profile.strip() for profile in profiles_raw),
+        "weapon_profiles": tuple(profile.strip() for profile in (profiles_raw or [])),
         "consumes_ammo": bool(mode_raw.get("consumes_ammo", False)),
-    }
-    reaction_raw = mode_raw.get("reaction")
-    if reaction_raw is None:
-        return _ActionContract(cost=cost, reaction=None, **value_names, **extra_values)
-    if not isinstance(reaction_raw, Mapping):
-        raise CombatValidationError("reaction contract must be a mapping")  # i18n-exempt: internal validation diagnostic
-    spend_on = str(reaction_raw.get("spend_on") or "").strip()
-    if spend_on != "attempt":
-        raise CombatValidationError("unsupported reaction spend semantics")
-    kind = str(reaction_raw.get("type") or "").strip()
-    if not kind:
-        raise CombatValidationError("reaction type is required")
-    return _ActionContract(
-        cost=cost,
-        reaction=_ReactionContract(
-            kind=kind,
-            cost=_required_int(reaction_raw.get("cost", 1), where="reaction.cost", minimum=1),
-            spend_on=spend_on,
-            target_value=(
-                str(reaction_raw["target_value"]).strip()
-                if reaction_raw.get("target_value") is not None
-                else None
-            ),
+        "attack_modifier": _required_int(mode_raw.get("attack_modifier", 0), where="attack_modifier", minimum=-100),
+        "extra_hit_degrees": (
+            _required_int(mode_raw["extra_hit_degrees"], where="extra_hit_degrees", minimum=1)
+            if mode_raw.get("extra_hit_degrees") is not None else None
         ),
-        **value_names,
-        **extra_values,
-    )
+    }
+    if extra_values["extra_hit_degrees"] is not None and _combat_data(pack).get("margin_unit") != "degrees":
+        raise CombatValidationError("multi-hit action requires degree margin")  # i18n-exempt: internal validation diagnostic
+    reactions_raw = mode_raw.get("reactions")
+    if reactions_raw is None and mode_raw.get("reaction") is not None:
+        legacy = mode_raw["reaction"]
+        reactions_raw = {legacy.get("type"): legacy} if isinstance(legacy, Mapping) else legacy
+    if reactions_raw is None:
+        reactions_raw = {}
+    if not isinstance(reactions_raw, Mapping):
+        raise CombatValidationError("reaction contract must be a mapping")  # i18n-exempt: internal validation diagnostic
+    reactions = {}
+    for kind, raw in reactions_raw.items():
+        if not isinstance(raw, Mapping) or raw.get("spend_on") != "attempt":
+            raise CombatValidationError("unsupported reaction spend semantics")
+        reactions[str(kind)] = _ReactionContract(
+            kind=str(kind),
+            cost=_required_int(raw.get("cost", 1), where="reaction.cost", minimum=1),
+            spend_on="attempt",
+            target_value=str(raw["target_value"]).strip() if raw.get("target_value") else None,
+            hits_avoided_per_degree=(
+                _required_int(raw["hits_avoided_per_degree"], where="reaction hits avoided", minimum=1)
+                if raw.get("hits_avoided_per_degree") is not None else None
+            ),
+        )
+    return _ActionContract(cost=cost, reactions=reactions, **value_names, **extra_values)
 
 
 def create_combat_state(
@@ -305,14 +333,26 @@ def apply_combat_state_delta(state: CombatState, delta: StateDelta) -> None:
 
 
 def _location(pack: Any, roll: int) -> str:
-    value = max(1, min(100, int(roll)))
+    value = _roll_detail(roll).total
     for row in _combat_data(pack).get("hit_locations", []):
         if value <= int(row["max"]):
             return str(row["id"])
     raise CombatValidationError("hit location table has no matching row")  # i18n-exempt: internal validation diagnostic
 
 
+def _location_roll(pack: Any, attack_roll: int) -> int:
+    transform = _combat_data(pack).get("hit_location_roll")
+    if transform == "reverse_digits":
+        reversed_roll = int(f"{attack_roll % 100:02d}"[::-1])
+        return reversed_roll or 100
+    if transform == "attack_roll":
+        return attack_roll
+    raise CombatValidationError("unsupported hit location roll transform")
+
+
 def _roll_detail(value: int) -> RollDetail:
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 100:
+        raise CombatValidationError("percentile roll must be between 1 and 100")  # i18n-exempt: internal validation diagnostic
     return RollDetail(expression="1d100", dice=(int(value),), total=int(value))
 
 
@@ -348,6 +388,41 @@ def _combatant(state: CombatState, name: str) -> CombatantState:
     return combatant
 
 
+def _reaction_contract(contract: _ActionContract, request: ActionRequest) -> _ReactionContract | None:
+    requested = request.reaction_type
+    if requested is None and (request.reaction_roll is not None or request.reaction_target is not None):
+        if request.reaction_target is not None and "basic" in contract.reactions:
+            requested = "basic"
+        elif request.reaction_target is None and "dodge" in contract.reactions and "parry" not in contract.reactions:
+            requested = "dodge"
+        else:
+            requested = next(iter(contract.reactions), None)
+    if requested is None:
+        return None
+    reaction = contract.reactions.get(requested)
+    if reaction is None:
+        raise CombatValidationError("action does not allow a reaction")  # i18n-exempt: internal validation diagnostic
+    if reaction.target_value is None and request.reaction_target is None:
+        raise CombatValidationError("reaction roll requires a reaction target")  # i18n-exempt: internal validation diagnostic
+    return reaction
+
+
+def _range_modifier(pack: Any, distance: int | None, profile: Any) -> int:
+    if distance is None:
+        return 0
+    if isinstance(distance, bool) or not isinstance(distance, int) or distance < 0:
+        raise CombatValidationError("distance must be a non-negative integer")  # i18n-exempt: internal validation diagnostic
+    if not isinstance(profile.range, int) or profile.range < 1:
+        raise CombatValidationError("weapon range is unavailable")
+    ratio = distance / profile.range
+    for band in _combat_data(pack).get("range_bands", []):
+        if "max_distance" in band and distance <= int(band["max_distance"]):
+            return _required_int(band["modifier"], where="range modifier", minimum=-100)
+        if "max_multiple" in band and ratio <= float(band["max_multiple"]):
+            return _required_int(band["modifier"], where="range modifier", minimum=-100)
+    raise CombatValidationError("target is out of weapon range")  # i18n-exempt: internal validation diagnostic
+
+
 def _resolve_attack(
     request: ActionRequest,
     *,
@@ -374,17 +449,10 @@ def _resolve_attack(
         actor_state = _combatant(combat_state, actor_name)
         if actor_state.action_budget < action_contract.cost.amount:
             raise CombatValidationError("insufficient action budget")
-        reaction_requested = request.reaction_roll is not None or request.reaction_target is not None
-        if reaction_requested:
-            if action_contract.reaction is None:
-                raise CombatValidationError("action does not allow a reaction")  # i18n-exempt: internal validation diagnostic
-            if (
-                request.reaction_target is None
-                and action_contract.reaction.target_value is None
-            ):
-                raise CombatValidationError("reaction roll requires a reaction target")  # i18n-exempt: internal validation diagnostic
+        reaction_contract = _reaction_contract(action_contract, request)
+        if reaction_contract is not None:
             target_state = _combatant(combat_state, target_name)
-            if target_state.reactions_remaining < action_contract.reaction.cost:
+            if target_state.reactions_remaining < reaction_contract.cost:
                 raise CombatValidationError("reaction is unavailable")
 
         weapon = _find_weapon(request.actor, request)
@@ -399,8 +467,17 @@ def _resolve_attack(
                 raise CombatValidationError("weapon does not support the declared fire mode")  # i18n-exempt: internal validation diagnostic
             if weapon.current_ammo is None:
                 raise CombatValidationError("weapon ammo state is missing")
-            if weapon.current_ammo < 1:
+            shots_fired = int(profile.rate_of_fire[request.mode])
+            if weapon.current_ammo < shots_fired:
                 raise CombatValidationError("out of ammunition")
+        else:
+            shots_fired = 0
+        if action == "ranged_attack":
+            range_modifier = _range_modifier(pack, request.distance, profile)
+        elif request.distance is not None:
+            raise CombatValidationError("distance is unavailable for this action")  # i18n-exempt: internal validation diagnostic
+        else:
+            range_modifier = 0
         if pack.resolver is None:
             raise CombatValidationError("rulepack has no check resolver")
 
@@ -409,7 +486,13 @@ def _resolve_attack(
         state_after.combatants[actor_name].action_budget -= action_contract.cost.amount
         reaction_cost = 0
         ammo_before = weapon.current_ammo if action_contract.consumes_ammo else None
-        target_value = sheet_value(request.actor, pack, action_contract.attack_value)
+        aim_bonus = actor_state.aim_bonus if actor_state.aimed_weapon_instance_id == weapon.instance_id else 0
+        target_value = (
+            sheet_value(request.actor, pack, action_contract.attack_value)
+            + action_contract.attack_modifier + range_modifier + aim_bonus
+        )
+        state_after.combatants[actor_name].aim_bonus = 0
+        state_after.combatants[actor_name].aimed_weapon_instance_id = None
         roller = dice or DiceRoller()
         attack = (
             _roll_detail(request.attack_roll)
@@ -423,10 +506,17 @@ def _resolve_attack(
         raw_damage = penetration = armour = armour_after = tb = final = None
         damage_before = sheet_value(request.target, pack, action_contract.damage_value)
         damage_after = damage_before
+        hits: list[HitResult] = []
+        # The compiled resolver's margin is pack-defined; DH2 declares it in
+        # degrees already, so the combat contract consumes that value directly.
+        degrees = abs(outcome.margin) if outcome.margin is not None else 1
         if success:
-            location_roll = request.location_roll if request.location_roll is not None else attack.total
+            location_roll = request.location_roll if request.location_roll is not None else _location_roll(pack, attack.total)
             location = _location(pack, location_roll)
-            if reaction_requested:
+            hit_count = 1
+            if action_contract.extra_hit_degrees is not None:
+                hit_count = min(shots_fired, 1 + max(0, degrees - 1) // action_contract.extra_hit_degrees)
+            if reaction_contract is not None:
                 target_state = _combatant(state_after, target_name)
                 rr = (
                     request.reaction_roll
@@ -434,48 +524,66 @@ def _resolve_attack(
                     else roller.roll_detail("1d100").total
                 )
                 reaction_target = (
-                    sheet_value(request.target, pack, action_contract.reaction.target_value)
-                    if action_contract.reaction.target_value is not None
+                    sheet_value(request.target, pack, reaction_contract.target_value)
+                    if reaction_contract.target_value is not None
                     else request.reaction_target
                 )
-                reaction_outcome = pack.resolver.interpret(
-                    _roll_detail(rr), reaction_target
-                )
+                reaction_outcome = pack.resolver.interpret(_roll_detail(rr), reaction_target)
                 reaction_success = bool(reaction_outcome.rank.success)
-                reaction_cost = action_contract.reaction.cost
+                reaction_cost = reaction_contract.cost
                 target_state.reactions_remaining -= reaction_cost
                 reaction = {
-                    "type": action_contract.reaction.kind,
+                    "type": reaction_contract.kind,
                     "roll": rr,
                     "target": reaction_target,
                     "success": reaction_success,
-                    "prevents_hit": reaction_success,
+                    "prevents_hit": False,
                     "spent": True,
                 }
                 if reaction_success:
-                    success = False
-            if success:
+                    avoided = hit_count
+                    if reaction_contract.hits_avoided_per_degree is not None:
+                        reaction_degrees = abs(reaction_outcome.margin) if reaction_outcome.margin is not None else 1
+                        avoided = min(hit_count, reaction_degrees * reaction_contract.hits_avoided_per_degree)
+                        reaction["hits_avoided"] = avoided
+                    hit_count -= avoided
+                    success = hit_count > 0
+                    reaction["prevents_hit"] = hit_count == 0
+            if hit_count:
                 if profile.damage_expression is None or profile.penetration is None:
                     raise CombatValidationError("weapon damage profile is incomplete")
-                raw_damage = (
-                    request.damage_roll
-                    if request.damage_roll is not None
-                    else roller.roll_expression(_dice_expression(profile.damage_expression)).total
-                )
-                if action_contract.damage_bonus_value is not None:
-                    raw_damage += sheet_value(
-                        request.actor, pack, action_contract.damage_bonus_value
+                if request.damage_rolls and len(request.damage_rolls) != hit_count:
+                    raise CombatValidationError("damage rolls do not match hit count")  # i18n-exempt: internal validation diagnostic
+                if request.location_rolls and len(request.location_rolls) != hit_count:
+                    raise CombatValidationError("location rolls do not match hit count")  # i18n-exempt: internal validation diagnostic
+                for index in range(hit_count):
+                    hit_location = _location(pack, request.location_rolls[index]) if request.location_rolls else location
+                    hit_damage = (
+                        request.damage_rolls[index] if request.damage_rolls else
+                        request.damage_roll if index == 0 and request.damage_roll is not None else
+                        roller.roll_expression(_dice_expression(profile.damage_expression)).total
                     )
-                penetration = int(profile.penetration)
-                armour = 0
-                for item in getattr(request.target, "equipment", []) or []:
-                    if isinstance(item, ItemInstance):
-                        armour_profile = catalog.get(item.profile_id)
-                        if armour_profile is not None and armour_profile.kind == "armour":
-                            armour = max(armour, armour_profile.armor_at(location))
-                armour_after = max(0, armour - penetration)
-                tb = sheet_value(request.target, pack, action_contract.toughness_value)
-                final = max(0, int(raw_damage) - armour_after - tb)
+                    if isinstance(hit_damage, bool) or not isinstance(hit_damage, int) or hit_damage < 0:
+                        raise CombatValidationError("damage roll must be non-negative")  # i18n-exempt: internal validation diagnostic
+                    if action_contract.damage_bonus_value is not None:
+                        hit_damage += sheet_value(request.actor, pack, action_contract.damage_bonus_value)
+                    hit_armour = 0
+                    for item in getattr(request.target, "equipment", []) or []:
+                        if isinstance(item, ItemInstance):
+                            armour_profile = catalog.get(item.profile_id)
+                            if armour_profile is not None and armour_profile.kind == "armour":
+                                hit_armour = max(hit_armour, armour_profile.armor_at(hit_location))
+                    hit_penetration = int(profile.penetration)
+                    reduced_armour = max(0, hit_armour - hit_penetration)
+                    hit_tb = sheet_value(request.target, pack, action_contract.toughness_value)
+                    hit_final = max(0, int(hit_damage) - reduced_armour - hit_tb)
+                    hits.append(HitResult(hit_location, hit_damage, hit_penetration, hit_armour, reduced_armour, hit_tb, hit_final))
+                first = hits[0]
+                raw_damage, penetration, armour, armour_after, tb = (
+                    first.raw_damage, first.penetration, first.armour_before,
+                    first.armour_after_penetration, first.tb_reduction,
+                )
+                final = sum(hit.final_damage for hit in hits)
                 damage_after = damage_before + final
         delta = StateDelta(
             combat_state_before=state_before,
@@ -483,12 +591,11 @@ def _resolve_attack(
             action_cost=action_contract.cost.amount,
             reaction_cost=reaction_cost,
             ammo_before=ammo_before,
-            ammo_after=(ammo_before - 1 if ammo_before is not None else None),
+            ammo_after=(ammo_before - shots_fired if ammo_before is not None else None),
             target_damage_before=damage_before,
             target_damage_after=damage_after,
             weapon_instance_id=weapon.instance_id,
         )
-        degrees = (abs(outcome.margin) // 10 + 1) if outcome.margin is not None else None
         return CombatResult(
             actor_name,
             target_name,
@@ -509,8 +616,10 @@ def _resolve_attack(
             tb,
             final or 0,
             ammo_before,
-            ammo_before - 1 if ammo_before is not None else None,
+            ammo_before - shots_fired if ammo_before is not None else None,
             delta,
+            hits=tuple(hits),
+            shots_fired=shots_fired,
         )
     except CombatValidationError as exc:
         return CombatResult(
@@ -557,6 +666,78 @@ def resolve_melee_attack(
     )
 
 
+def _resolve_utility_action(
+    request: ActionRequest, *, action: str, combat_state: CombatState, pack: Any | None
+) -> CombatResult:
+    """Build the same delta used by attacks for Aim and Reload."""
+    try:
+        if request.actor is None:
+            raise CombatValidationError("actor is required")
+        if pack is None:
+            from core.rulepacks import load_rulepack
+
+            pack = load_rulepack(request.actor.system)
+        actor_name = _name(request.actor)
+        if combat_state.current_actor != actor_name:
+            raise CombatValidationError("actor does not have the current turn")  # i18n-exempt: internal validation diagnostic
+        contract = _action_contract(pack, action, request.mode)
+        actor_state = _combatant(combat_state, actor_name)
+        if actor_state.action_budget < contract.cost.amount:
+            raise CombatValidationError("insufficient action budget")
+        weapon = _find_weapon(request.actor, request)
+        catalog = _profiles(request.actor, pack)
+        profile = catalog.get(weapon.profile_id)
+        if profile is None or profile.kind != "weapon":
+            raise CombatValidationError("item is not a weapon profile")  # i18n-exempt: internal validation diagnostic
+        ammo_before = ammo_after = None
+        if action == "reload":
+            if profile.reload != request.mode or profile.clip_size is None:
+                raise CombatValidationError("weapon has no supported reload action")  # i18n-exempt: internal validation diagnostic
+            if weapon.current_ammo is None:
+                raise CombatValidationError("weapon ammo state is missing")
+            if weapon.current_ammo >= profile.clip_size:
+                raise CombatValidationError("weapon clip is already full")  # i18n-exempt: internal validation diagnostic
+            ammo_before, ammo_after = weapon.current_ammo, profile.clip_size
+        elif action == "aim" and not profile.is_usable_for_resolution:
+            raise CombatValidationError("weapon profile is incomplete")
+        before = copy.deepcopy(combat_state)
+        after = copy.deepcopy(combat_state)
+        after_actor = after.combatants[actor_name]
+        after_actor.action_budget -= contract.cost.amount
+        if action == "aim":
+            after_actor.aim_bonus = contract.attack_modifier
+            after_actor.aimed_weapon_instance_id = weapon.instance_id
+        else:
+            after_actor.aim_bonus = 0
+            after_actor.aimed_weapon_instance_id = None
+        delta = StateDelta(
+            before, after, action_cost=contract.cost.amount,
+            ammo_before=ammo_before, ammo_after=ammo_after,
+            weapon_instance_id=weapon.instance_id,
+        )
+        return CombatResult(
+            actor_name, _name(request.target), action, weapon.instance_id, profile.id,
+            ammo_before=ammo_before, ammo_after=ammo_after, state_delta=delta,
+        )
+    except CombatValidationError as exc:
+        return CombatResult(
+            _name(request.actor), _name(request.target), action,
+            request.weapon_instance_id, "", validation_failure=str(exc),
+        )
+
+
+def resolve_aim(
+    request: ActionRequest, *, combat_state: CombatState, pack: Any | None = None
+) -> CombatResult:
+    return _resolve_utility_action(request, action="aim", combat_state=combat_state, pack=pack)
+
+
+def resolve_reload(
+    request: ActionRequest, *, combat_state: CombatState, pack: Any | None = None
+) -> CombatResult:
+    return _resolve_utility_action(request, action="reload", combat_state=combat_state, pack=pack)
+
+
 def _replace_combat_state(target: CombatState, source: CombatState) -> None:
     target.round_number = source.round_number
     target.current_actor = source.current_actor
@@ -573,6 +754,12 @@ def apply_state_delta(
     """Apply entity and combat-state changes together, rolling all back on failure."""
     if not result.ok or result.state_delta is None:
         raise CombatValidationError("cannot apply invalid combat result")
+    if (
+        result.actor != _name(request.actor)
+        or result.target != _name(request.target)
+        or result.weapon_instance_id != request.weapon_instance_id
+    ):
+        raise CombatValidationError("combat result does not match request")  # i18n-exempt: internal validation diagnostic
     delta = result.state_delta
     weapon = _find_weapon(request.actor, request)
     if delta.weapon_instance_id != weapon.instance_id:
@@ -584,21 +771,52 @@ def apply_state_delta(
     if pack is None:
         from core.rulepacks import load_rulepack
 
-        pack = load_rulepack(request.target.system)
+        pack = load_rulepack(request.actor.system)
     action_contract = _action_contract(pack, result.action, request.mode)
-    if sheet_value(request.target, pack, action_contract.damage_value) != delta.target_damage_before:
+    if delta.action_cost != action_contract.cost.amount:
+        raise CombatValidationError("combat action cost delta is invalid")  # i18n-exempt: internal validation diagnostic
+    profile = _profiles(request.actor, pack).get(weapon.profile_id)
+    if profile is None:
+        raise CombatValidationError("weapon profile is missing")
+    if result.action == "ranged_attack":
+        expected_ammo = delta.ammo_before - result.shots_fired if delta.ammo_before is not None else None
+        if result.shots_fired != profile.rate_of_fire.get(request.mode) or delta.ammo_after != expected_ammo:
+            raise CombatValidationError("combat ammunition delta is invalid")  # i18n-exempt: internal validation diagnostic
+    elif result.action == "reload":
+        if delta.ammo_after != profile.clip_size or delta.ammo_before is None:
+            raise CombatValidationError("combat reload delta is invalid")  # i18n-exempt: internal validation diagnostic
+    elif delta.ammo_before is not None or delta.ammo_after is not None:
+        raise CombatValidationError("action has an unexpected ammunition delta")  # i18n-exempt: internal validation diagnostic
+    changes_damage = result.action in {"ranged_attack", "melee_attack"}
+    if changes_damage and sheet_value(request.target, pack, action_contract.damage_value) != delta.target_damage_before:
         raise CombatValidationError("stale target damage state")
-    attributes_before = copy.deepcopy(request.target.attributes)
+    if changes_damage and delta.target_damage_after is None:
+        raise CombatValidationError("combat damage delta is incomplete")  # i18n-exempt: internal validation diagnostic
+    if changes_damage and (
+        result.final_damage != sum(hit.final_damage for hit in result.hits)
+        or delta.target_damage_after != delta.target_damage_before + result.final_damage
+    ):
+        raise CombatValidationError("combat damage delta is invalid")  # i18n-exempt: internal validation diagnostic
+    if not changes_damage and (delta.target_damage_before is not None or delta.target_damage_after is not None):
+        raise CombatValidationError("utility action has an unexpected damage delta")  # i18n-exempt: internal validation diagnostic
+    damage_key = None
+    if changes_damage:
+        damage_key = pack.sheet_spec.attr_keys.get(action_contract.damage_value) if pack.sheet_spec else None
+        if not damage_key:
+            raise CombatValidationError("combat damage value has no writable attribute")  # i18n-exempt: internal validation diagnostic
+    attributes_before = copy.deepcopy(request.target.attributes) if changes_damage else None
     weapon_state_before = copy.deepcopy(weapon.state)
     combat_before = copy.deepcopy(combat_state)
     try:
         if delta.ammo_before is not None:
             weapon.state["current_ammo"] = delta.ammo_after
-        request.target.attributes[action_contract.damage_value] = delta.target_damage_after
+        if changes_damage:
+            request.target.attributes[damage_key] = delta.target_damage_after
         _replace_combat_state(combat_state, delta.combat_state_after)
     except Exception:
-        request.target.attributes.clear()
-        request.target.attributes.update(attributes_before)
+        if changes_damage:
+            request.target.attributes.clear()
+            request.target.attributes.update(attributes_before)
         weapon.state.clear()
         weapon.state.update(weapon_state_before)
         _replace_combat_state(combat_state, combat_before)
