@@ -10,9 +10,9 @@ from core.creation_layers import (
     load_creation_policy,
     resolve_creation_layer_option,
 )
+from core.item_model import ItemInstance
 from core.rulepacks import load_rulepack
 from core.sheets import sheet_value
-
 
 HOME_WORLD_ALIASES = {
     "Дикий мир": "feral_world",
@@ -198,7 +198,9 @@ def test_administratum_background_applies_fixed_and_selected_effects():
     assert sheet.aptitudes == ["Познание"]
     assert sheet.talents == ["Выучка с Оружием (Лазерное)"]
     assert sheet.background_abilities == ["Мастер Бумажной Работы"]
-    assert "лазпистолет" in sheet.equipment
+    # A catalog weapon is issued as a typed item, not stored as its label.
+    assert any(isinstance(item, ItemInstance) and item.profile_id == "laspistol" for item in sheet.equipment)
+    assert "лазпистолет" not in sheet.equipment
     assert "медпакет" in sheet.equipment
 
 
@@ -248,7 +250,9 @@ def test_astra_militarum_background_uses_separate_navigation_and_operate_special
     assert sheet.skills["Operate::наземная"] == 1
     assert sheet.skills["Athletics"] == 1
     assert sheet.aptitudes == ["Полевое"]
-    assert "лазган" in sheet.equipment
+    lasguns = [item for item in sheet.equipment if isinstance(item, ItemInstance) and item.profile_id == "lasgun"]
+    assert len(lasguns) == 1 and lasguns[0].current_ammo == 60
+    assert "лазган" not in sheet.equipment
 
 
 def test_assassin_role_applies_fixed_aptitudes_and_keeps_both_player_choices_explicit():

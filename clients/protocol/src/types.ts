@@ -7,7 +7,7 @@ import type { CreationCatalog, CreationState, CharacterReadinessState, Character
 // card listing (`list_pack_cards` → `pack_cards`), the structured lane behind every
 // "import from installed pack" picker. 2.3 adds each listed card's `kind`, so a picker
 // can send the right import verb. A 2.0/2.1 client ignores all of it.
-export const PROTOCOL_VERSION = "2.7" as const
+export const PROTOCOL_VERSION = "2.8" as const
 
 export const FrameType = {
   Join: "join",
@@ -158,6 +158,29 @@ export interface ActionRequestFrame {
   weapon_instance_id?: string
   pending_id?: string
   distance?: number
+  /** v2.8: "manual" submits physical dice for exactly the step's declared `manual_rolls`. */
+  roll_source?: RollSource
+  /** v2.8: natural die faces keyed by the declared manual roll `id`. */
+  manual_rolls?: Record<string, number[]>
+}
+
+/** v2.8: who produced a roll. "provided" = supplied by a non-player caller (tests, tools). */
+export type RollSource = "server" | "manual" | "provided"
+
+/**
+ * v2.8: one physical-dice input a step accepts when the player rolls manually — the
+ * same dice shape as a `roll_request` panel frame. The server validates the faces
+ * and does all the math; the client only collects them.
+ */
+export interface ManualRollSpec {
+  id: string
+  label: string
+  expression: string
+  count: number
+  sides: number
+  keep?: "kh" | "kl"
+  keep_count?: number
+  modifier?: number
 }
 
 export interface ActionModeOption {
@@ -166,6 +189,10 @@ export interface ActionModeOption {
   weapons: Array<{ id: string; label: string }>
   /** Reactions a defender may use against this mode (informational; the defender chooses). */
   reactions: Array<{ id: string; label: string }>
+  /** v2.8: dice this mode takes in manual mode ([] = none to enter). */
+  manual_rolls?: ManualRollSpec[]
+  /** v2.8: whether a request for this mode may carry `distance`; offer the field only then. */
+  accepts_distance?: boolean
 }
 
 export interface ActionOption {
@@ -221,7 +248,7 @@ export interface CombatReactionOffer {
   attacker: string
   action: string
   hit_count: number | null
-  choices: Array<{ id: string; label: string }>
+  choices: Array<{ id: string; label: string; manual_rolls?: ManualRollSpec[] }>
 }
 
 export interface CombatSurface {
@@ -268,6 +295,8 @@ export interface ActionResultFrame {
     pending_reaction?: PendingReactionView | null
     /** The committed damage took the target out of the fight (server defeat rule). */
     target_defeated?: boolean
+    /** v2.8: roll id ("attack", "reaction", "damage") -> who produced it. */
+    roll_sources?: Record<string, RollSource>
   } | null
   validation_failure: string | null
   labels?: {
@@ -937,6 +966,8 @@ export interface StateFrame {
   type: typeof FrameType.State
   character?: CharacterState
   combat?: CombatSurface
+  /** v2.8: this player's dice preference for checks and combat (`.rollmode auto|manual`). */
+  roll_mode?: "auto" | "manual"
   party: PartyMember[]
   scene?: SceneState
   clock?: ClockState

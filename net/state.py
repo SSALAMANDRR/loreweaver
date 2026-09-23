@@ -59,6 +59,13 @@ async def build_room_state(services: Services, ctx: AgentCtx) -> dict[str, Any]:
     combat = await combat_surface(services, ctx, sheet)
     if combat is not None:
         state["combat"] = combat
+    # This player's dice preference for checks and combat alike (`.rollmode auto|manual`).
+    try:
+        from core.manual_roll import get_roll_mode
+
+        state["roll_mode"] = await get_roll_mode(services.store, ctx.uid(), ctx.chat_key)
+    except Exception:
+        pass
 
     if sheet is not None:
         state["character"] = await _character_payload(services, ctx.chat_key, sheet, ctx.locale)

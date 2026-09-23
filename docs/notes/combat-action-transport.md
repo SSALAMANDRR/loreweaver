@@ -53,3 +53,17 @@ The Keeper's own prompt (`core.prompt_sections` game state) lists the engine
 encounter at keeper grade, including hidden combatants and the pending reaction.
 The older free-form `initiative_tracker` tool remains separate and does not
 drive the engine encounter.
+
+## Physical dice (protocol 2.8)
+
+Combat reuses the manual-dice primitive that checks already had (`core.manual_roll`),
+with one per-player preference for both (`.rollmode auto|manual`, reported as
+`state.roll_mode`). Each combat step declares which dice it accepts (`manual_rolls`,
+the same shape as a `roll_request` frame). The client sends natural faces for exactly
+those dice. The server validates them against the declared expression (JSON
+integers only) and passes the total into the unchanged resolver. Every roll in a
+result is labelled `server` or `manual` in `roll_sources`, and the label survives
+into replay and narration. Damage stays server-rolled: it is resolved together with
+the defender's reaction, before the attacker could be asked for dice, so a manual
+damage step would need its own pending phase. The result labels it `server`
+rather than pretending the whole attack was manual.

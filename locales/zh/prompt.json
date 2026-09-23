@@ -50,6 +50,7 @@
   "prompt.game_state.encounter_hidden": " [对玩家隐藏]",
   "prompt.game_state.encounter_defeated": " [已退出战斗]",
   "prompt.game_state.encounter_pending": "   等待 {defender} 对 {attacker} 的攻击作出反应。",
+  "prompt.game_state.manual_dice": "{name} 的掷骰方式：手动 —— 该玩家掷实体骰子，由客户端提交点数。不要说系统总是替玩家掷骰；请通过正常的检定/战斗流程要求掷骰。",
   "prompt.game_state.npc_header": "👥 活跃NPC:",
   "prompt.game_state.roster_header": "👤 调查员状态:",
   "prompt.game_state.roster_line": "{name}：{meters}｜状态：{effects}",

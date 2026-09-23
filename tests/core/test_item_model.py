@@ -135,3 +135,50 @@ profiles:
 
     with pytest.raises(ItemModelError, match="clip_size"):
         load_item_catalog(Pack(), data_root=tmp_path)
+
+
+# --- legacy label upgrade (sheets saved before creation issued typed items) --------------
+
+
+def _legacy_sheet():
+    return {
+        "name": "Кардел",
+        "system": "dh2",
+        "attributes": {},
+        "equipment": ["флак-броня Астра Милитарум", "лазган", "Цепной клинок", "Флак-жилет"],
+    }
+
+
+def test_a_legacy_sheet_upgrades_only_catalog_labels_and_keeps_the_rest():
+    sheet = CharacterSheet.from_dict(_legacy_sheet())
+    kinds = [(type(entry).__name__, getattr(entry, "profile_id", entry)) for entry in sheet.equipment]
+    assert kinds == [
+        ("str", "флак-броня Астра Милитарум"),
+        ("ItemInstance", "lasgun"),
+        ("str", "Цепной клинок"),
+        ("ItemInstance", "basic_flak_armor"),
+    ]
+    lasgun = sheet.equipment[1]
+    assert lasgun.current_ammo == 60  # one issued clip in the weapon
+    assert sheet.equipment[3].current_ammo is None  # armour carries no ammunition state
+
+
+def test_the_upgrade_is_deterministic_until_a_save_persists_it():
+    first = CharacterSheet.from_dict(_legacy_sheet())
+    second = CharacterSheet.from_dict(_legacy_sheet())
+    assert first.equipment[1].instance_id == second.equipment[1].instance_id
+    other = CharacterSheet.from_dict({**_legacy_sheet(), "name": "Someone Else"})
+    assert other.equipment[1].instance_id != first.equipment[1].instance_id
+    round_trip = CharacterSheet.from_dict(first.to_dict())
+    assert round_trip.equipment[1].instance_id == first.equipment[1].instance_id
+
+
+def test_a_legacy_pc_now_gets_combat_actions():
+    from core.combat import create_combat_state
+    from gateway.combat_actions import available_actions
+
+    pack = load_rulepack("dh2")
+    sheet = CharacterSheet.from_dict(_legacy_sheet())
+    state = create_combat_state([sheet.name, "Культист"], current_actor=sheet.name, pack=pack)
+    actions = {action["id"] for action in available_actions(pack, sheet, ["Культист"], "ru", state)}
+    assert {"ranged_attack", "aim"} <= actions

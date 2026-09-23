@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Any
 
 from core.dice_engine import DiceRoller
+from core.item_model import ItemInstance, ItemModelError, issued_item, load_item_catalog
 from core.sheets import refresh_sheet, resolve_skill_family, set_sheet_value
 from core.yaml_safety import safe_load_no_aliases
 
@@ -532,10 +533,23 @@ def _apply_effects(
     current_equipment = getattr(character, "equipment", None)
     if not isinstance(current_equipment, list):
         raise CreationLayerError("character equipment storage is not a list")
+    catalog = load_item_catalog(pack)
     for item in equipment:
-        if item not in current_equipment:
-            current_equipment.append(item)
-            added_equipment.append(item)
+        # A label the item catalog recognizes becomes a typed, combat-ready item; any
+        # other label is kept verbatim as source-labelled inventory.
+        try:
+            profile = catalog.resolve(item) if catalog is not None else None
+        except ItemModelError:
+            profile = None
+        if profile is None:
+            if item not in current_equipment:
+                current_equipment.append(item)
+                added_equipment.append(item)
+            continue
+        if any(isinstance(entry, ItemInstance) and entry.profile_id == profile.id for entry in current_equipment):
+            continue
+        current_equipment.append(issued_item(profile))
+        added_equipment.append(item)
 
     return added_equipment, applied_skills
 

@@ -58,3 +58,21 @@ test("encounter state with a reaction offer validates; a malformed offer is reje
   expect(isServerFrame(encounterState({ ...combat, state: { round_number: "2" } }))).toBe(false)
   expect(isServerFrame(encounterState({ ...combat, end_turn: { id: "end_turn", label: "End turn" } }))).toBe(true)
 })
+
+test("v2.8 manual-dice payload round-trips and surfaces carrying dice specs validate", () => {
+  const request: ActionRequestFrame = {
+    type: "action_request", id: "m1", actor: "A", target: "B", action: "custom_action", mode: "variant",
+    weapon_instance_id: "instance-1", roll_source: "manual", manual_rolls: { attack: [57] },
+  }
+  expect(JSON.parse(JSON.stringify(request))).toEqual(request)
+  const spec = { id: "attack", label: "Attack roll", expression: "1d100", count: 1, sides: 100 }
+  const combat = {
+    actor: "A", state: null,
+    actions: [{
+      id: "custom_action", label: "Server attack", targets: ["B"],
+      modes: [{ id: "variant", label: "V", weapons: [{ id: "w", label: "W" }], reactions: [], manual_rolls: [spec] }],
+    }],
+  }
+  expect(isServerFrame(encounterState(combat))).toBe(true)
+  expect(isServerFrame({ ...encounterState(combat), roll_mode: "manual" })).toBe(true)
+})

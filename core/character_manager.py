@@ -50,6 +50,21 @@ class CharacterDataError(Exception):
 UNSET_CHARACTER_NAME = "default"
 
 
+def _upgrade_equipment_labels(character: CharacterSheet) -> list[Any]:
+    """Sheets saved before creation issued typed items hold plain labels; turn the
+    ones the pack's item catalog recognizes into typed items (unknown labels stay)."""
+    if not any(isinstance(entry, str) for entry in character.equipment):
+        return character.equipment
+    from core.item_model import ItemModelError, load_item_catalog, upgrade_legacy_equipment
+
+    pack = _pack_for(character)
+    try:
+        catalog = load_item_catalog(pack) if pack is not None else None
+    except ItemModelError:
+        return character.equipment
+    return upgrade_legacy_equipment(character.equipment, catalog, owner=character.name)
+
+
 def has_character(sheet: CharacterSheet | None) -> bool:
     """Whether `sheet` is a real (saved) character rather than `get_character`'s
     not-found placeholder. The ONE predicate every "is there a sheet?" check uses.
@@ -282,6 +297,7 @@ class CharacterSheet:
         stored_equipment = data.get("equipment", [])
         if isinstance(stored_equipment, list):
             character.equipment = [deserialize_equipment_entry(item) for item in stored_equipment]
+            character.equipment = _upgrade_equipment_labels(character)
         else:
             character.equipment = []
         character.background = data.get("background", "")

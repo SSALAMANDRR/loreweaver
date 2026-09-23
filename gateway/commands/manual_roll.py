@@ -222,6 +222,12 @@ class ManualRollCommands:
             if pending is not None:
                 await clear_pending_roll(ctx.services.store, ctx.chat_key, ctx.user_id)
                 ctx.events.append(_cancel_event(pending.request_id))
+        # The mode is part of this player's state frame (`state.combat.roll_mode`).
+        hub = getattr(ctx.router, "hub", None)
+        if hub is not None:
+            from gateway.turn import publish_state
+
+            await publish_state(hub, ctx.services, ctx.raw_ctx)
         return ctx.i18n.t("commands.manual_roll.mode", mode=mode)
 
     async def cmd_check(self, ctx: CommandCtx) -> str:

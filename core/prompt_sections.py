@@ -322,6 +322,17 @@ async def inject_game_state_prompt(ctx: Any, character_manager: Any, store: Stor
         except Exception:
             pass
 
+        # -- the acting player's dice-input mode ----------------------------
+        try:
+            from core.manual_roll import ROLL_MODE_MANUAL, get_roll_mode
+
+            if await get_roll_mode(store, user_id, chat_key) == ROLL_MODE_MANUAL:
+                acting = await character_manager.get_character(user_id, chat_key)
+                lines.append("")
+                lines.append(i18n.t("prompt.game_state.manual_dice", name=getattr(acting, "name", "") or user_id))
+        except Exception:
+            pass
+
         # -- engine encounter (keeper view: hidden combatants included) -----
         try:
             from core.combat import COMBAT_STATE_KEY, KEEPER_CONTROLLER, combat_state_from_json

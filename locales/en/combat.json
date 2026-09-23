@@ -4,6 +4,7 @@
   "combat.invalid.target": "The selected target is unavailable.",
   "combat.invalid.weapon": "The selected weapon cannot perform that action.",
   "combat.invalid.ammo": "The weapon has insufficient ammunition.",
+  "combat.invalid.distance": "This action takes no distance; clear the distance field.",
   "combat.invalid.budget": "No action budget remains for that action.",
   "combat.invalid.reaction": "The reaction is unavailable.",
   "combat.invalid.stale": "Combat state changed; choose the action again.",
@@ -12,8 +13,11 @@
   "combat.invalid.pending": "A defender's reaction must be resolved first.",
   "combat.invalid.turn": "It is not that combatant's turn.",
   "combat.invalid.repeat": "That action cannot be repeated this turn.",
+  "combat.invalid.manual_roll": "The entered dice do not match the requested roll.",
   "combat.reaction.decline": "No reaction",
   "combat.control.end_turn": "End turn",
+  "combat.manual.attack": "Attack roll",
+  "combat.manual.reaction": "Reaction roll",
   "combat.command.usage": "Usage: .combat [status | start <npc>[, ?<hidden npc>...] | end | hide <name> | reveal <name>]",
   "combat.command.none": "No encounter is active.",
   "combat.command.status": "Encounter — round {round}, current: {current}",
@@ -28,5 +32,5 @@
   "combat.command.start.system": "Every combatant must use the same rule system.",
   "combat.command.ended": "The encounter has ended.",
   "combat.command.not_found": "No keeper-controlled combatant named {name}.",
-  "combat.narration.prompt": "Narrate one already resolved tabletop combat action in English. The deterministic engine already committed the result. Describe only its fictional consequences. Treat the supplied rolls, hits, reactions, damage, ammunition and state delta as final. Do not invent or recalculate mechanics. Do not claim an effect absent from the result. The optional context (scene, encounter order, public descriptions of the combatants) is what the players can see; do not reveal anything beyond it. An empty actor or target name means the players cannot see that combatant: do not name or describe it. When `target_defeated` is true the engine has taken the target out of the fight: describe it falling, but do not decide whether it is dead or merely incapacitated."
+  "combat.narration.prompt": "Narrate one already resolved tabletop combat action in English. The deterministic engine already committed the result. Describe only its fictional consequences. Treat the supplied rolls, hits, reactions, damage, ammunition and state delta as final. Do not invent or recalculate mechanics. Do not claim an effect absent from the result. The optional context (scene, encounter order, public descriptions of the combatants) is what the players can see; do not reveal anything beyond it. An empty actor or target name means the players cannot see that combatant: do not name or describe it. When `target_defeated` is true the engine has taken the target out of the fight: describe it falling, but do not decide whether it is dead or merely incapacitated. `roll_sources` says who produced each roll: \"manual\" means the player rolled physical dice and entered the value, \"server\" means the engine rolled. Never claim the system made a roll that is marked manual, and do not question entered values."
 }

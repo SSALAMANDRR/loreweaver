@@ -4,6 +4,7 @@
   "combat.invalid.target": "所选目标不可用。",
   "combat.invalid.weapon": "所选武器不能执行该行动。",
   "combat.invalid.ammo": "弹药不足。",
+  "combat.invalid.distance": "该行动不需要距离；请清空距离栏。",
   "combat.invalid.budget": "行动额度不足。",
   "combat.invalid.reaction": "反应不可用。",
   "combat.invalid.stale": "战斗状态已变化，请重新选择行动。",
@@ -12,8 +13,11 @@
   "combat.invalid.pending": "须先结算防御者的反应。",
   "combat.invalid.turn": "现在不是该战斗者的回合。",
   "combat.invalid.repeat": "本回合不能重复该行动。",
+  "combat.invalid.manual_roll": "输入的骰子与所需的掷骰不符。",
   "combat.reaction.decline": "不作反应",
   "combat.control.end_turn": "结束回合",
+  "combat.manual.attack": "攻击掷骰",
+  "combat.manual.reaction": "反应掷骰",
   "combat.command.usage": "用法：.combat [status | start <NPC>[, ?<隐藏NPC>...] | end | hide <名字> | reveal <名字>]",
   "combat.command.none": "当前没有进行中的战斗。",
   "combat.command.status": "战斗 — 第 {round} 轮，当前行动：{current}",
@@ -28,5 +32,5 @@
   "combat.command.start.system": "所有战斗者必须使用同一规则系统。",
   "combat.command.ended": "战斗已结束。",
   "combat.command.not_found": "没有名为 {name} 的守秘人控制战斗者。",
-  "combat.narration.prompt": "请用中文叙述一项已经结算并提交的桌面战斗行动。只描述故事中的后果。给出的掷骰、命中、反应、伤害、弹药和状态变化都是最终结果。不要发明或重新计算规则，也不要声称结果中没有的效果。可选的上下文（场景、行动顺序、战斗者的公开描述）是玩家能看到的内容；不要透露超出其范围的信息。攻击者或目标名字为空表示玩家看不到该战斗者：不要称呼或描述它。 当 `target_defeated` 为真时，引擎已让目标退出战斗：描写其倒下，但不要判定它是死亡还是仅失去战斗能力。"
+  "combat.narration.prompt": "请用中文叙述一项已经结算并提交的桌面战斗行动。只描述故事中的后果。给出的掷骰、命中、反应、伤害、弹药和状态变化都是最终结果。不要发明或重新计算规则，也不要声称结果中没有的效果。可选的上下文（场景、行动顺序、战斗者的公开描述）是玩家能看到的内容；不要透露超出其范围的信息。攻击者或目标名字为空表示玩家看不到该战斗者：不要称呼或描述它。 当 `target_defeated` 为真时，引擎已让目标退出战斗：描写其倒下，但不要判定它是死亡还是仅失去战斗能力。 `roll_sources` 标明每次掷骰的来源：\"manual\" 表示玩家掷了实体骰子并输入了数值，\"server\" 表示由引擎掷骰。切勿声称标记为 manual 的掷骰由系统完成，也不要质疑输入的数值。"
 }

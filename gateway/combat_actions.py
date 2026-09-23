@@ -8,6 +8,7 @@ combat state onto the wire.
 from __future__ import annotations
 
 import json
+import logging
 import time
 import uuid
 from dataclasses import asdict
@@ -31,6 +32,7 @@ from core.combat import (
     _action_contract,
     _check_turn_constraints,
     _combat_data,
+    accepts_distance,
     apply_combat_state_delta,
     apply_reaction_delta,
     apply_state_delta,
@@ -48,9 +50,12 @@ from core.combat import (
 )
 from core.documents import Viewer
 from core.item_model import ItemInstance, load_item_catalog
+from core.manual_roll import ManualRollError, manual_roll_detail, parse_manual_dice_expression
 from core.rulepacks import load_rulepack
 from infra.i18n import get_i18n
 from infra.room_facets import STORAGE_ROOM_STATE, RoomStateFacet
+
+logger = logging.getLogger(__name__)
 
 _RECENT_REQUEST_LIMIT = 64
 _PACK_ACTIONS = {"ranged_attack", "melee_attack", "aim", "reload"}
@@ -112,6 +117,49 @@ def _presentation(pack: Any) -> dict[str, Any]:
         return dict(_combat_data(pack).get("presentation") or {})
     except CombatValidationError:
         return {}
+
+
+def _manual_roll_spec(pack: Any, roll_id: str, locale: str) -> dict[str, Any] | None:
+    """The physical dice one combat roll needs, in the shared manual-roll wire shape;
+    None when the pack's check roll has no manual-safe form."""
+    resolver = getattr(pack, "resolver", None)
+    if resolver is None:
+        return None
+    try:
+        spec = parse_manual_dice_expression(resolver.roll)
+    except ManualRollError:
+        return None
+    return {"id": roll_id, "label": get_i18n(locale).t(f"combat.manual.{roll_id}"), **spec.wire()}
+
+
+def _manual_rolls(pack: Any, roll_ids: list[str], locale: str) -> list[dict[str, Any]]:
+    specs = [_manual_roll_spec(pack, roll_id, locale) for roll_id in roll_ids]
+    return [spec for spec in specs if spec is not None]
+
+
+def _manual_totals(frame: dict[str, Any], pack: Any, required: list[str]) -> dict[str, int] | None:
+    """Validate a request's roll source; for a manual request, turn the submitted natural
+    faces for exactly the ``required`` rolls into totals. None means the server rolls."""
+    source = frame.get("roll_source", "server")
+    submitted = frame.get("manual_rolls")
+    if source == "server":
+        if submitted not in (None, {}):
+            raise CombatValidationError("manual rolls need roll_source manual")  # i18n-exempt: internal validation diagnostic
+        return None
+    if source != "manual" or not isinstance(submitted, dict) or set(submitted) != set(required):
+        raise CombatValidationError("manual roll does not match the requested dice")  # i18n-exempt: internal validation diagnostic
+    totals: dict[str, int] = {}
+    for roll_id in required:
+        spec = _manual_roll_spec(pack, roll_id, "en")
+        faces = submitted[roll_id]
+        # JSON integers only: the shared validator would also coerce "57" or true.
+        if spec is None or not isinstance(faces, list) or not all(type(face) is int for face in faces):
+            raise CombatValidationError("manual roll does not match the requested dice")  # i18n-exempt: internal validation diagnostic
+        try:
+            totals[roll_id] = manual_roll_detail(spec["expression"], faces).total
+        except ManualRollError as exc:
+            raise CombatValidationError("manual roll does not match the requested dice") from exc  # i18n-exempt: internal validation diagnostic
+    return totals
 
 
 async def _sheet(services: Services, chat_key: str, name: str) -> tuple[dict[str, Any], CharacterSheet]:
@@ -183,6 +231,8 @@ def available_actions(
                     "label": _label(mode_labels, locale, mode),
                     "weapons": weapons,
                     "reactions": reactions,
+                    "manual_rolls": _manual_rolls(pack, ["attack"] if action in _ATTACK_ACTIONS else [], locale),
+                    "accepts_distance": accepts_distance(action),
                 })
         if modes:
             entries.append({
@@ -207,9 +257,16 @@ def _reaction_offer(
     presentation = _presentation(pack)
     reactions = presentation.get("reactions") or {}
     choices = [
-        {"id": kind, "label": _label(reactions.get(kind), locale, kind)} for kind in pending.get("choices") or []
+        {
+            "id": kind,
+            "label": _label(reactions.get(kind), locale, kind),
+            "manual_rolls": _manual_rolls(pack, ["reaction"], locale),
+        }
+        for kind in pending.get("choices") or []
     ]
-    choices.append({"id": DECLINE_REACTION, "label": get_i18n(locale).t("combat.reaction.decline")})
+    choices.append(
+        {"id": DECLINE_REACTION, "label": get_i18n(locale).t("combat.reaction.decline"), "manual_rolls": []}
+    )
     action = str(pending.get("action") or "")
     return {
         "id": pending["id"],
@@ -268,6 +325,7 @@ async def combat_surface(
 
 
 _FAILURE_KEYS = (
+    ("manual roll", "manual_roll"),
     ("duplicate", "duplicate"),
     ("no matching reaction", "reaction"),
     ("no active encounter", "encounter"),
@@ -282,6 +340,7 @@ _FAILURE_KEYS = (
     ("target", "target"),
     ("weapon", "weapon"),
     ("ammunition", "ammo"),
+    ("distance", "distance"),
     ("action budget", "budget"),
     ("reaction", "reaction"),
     ("stale", "stale"),
@@ -401,6 +460,7 @@ async def resolve_action(services: Services, ctx: AgentCtx, frame: dict[str, Any
         if action == END_TURN_ACTION:
             if state.current_actor != actor_name:
                 raise CombatValidationError("actor does not have the current turn")  # i18n-exempt: internal validation diagnostic
+            _manual_totals(frame, pack, [])
             delta = resolve_end_turn(state, pack=pack)
             apply_combat_state_delta(state, delta)
             result = CombatResult(actor_name, "", END_TURN_ACTION, "", "", state_delta=delta)
@@ -411,10 +471,13 @@ async def resolve_action(services: Services, ctx: AgentCtx, frame: dict[str, Any
                 raise CombatValidationError("no matching reaction is pending")  # i18n-exempt: internal validation diagnostic
             if pending.get("defender") != actor_name:
                 raise CombatValidationError("actor is not controlled by the caller")  # i18n-exempt: internal validation diagnostic
+            manual = _manual_totals(frame, pack, [] if choice == DECLINE_REACTION else ["reaction"])
             _attacker_row, attacker = await _sheet(services, ctx.chat_key, str(pending["attacker"]))
             result = resolve_reaction(
                 pending_id=str(pending["id"]), choice=choice, attacker=attacker, defender=actor,
                 combat_state=state, pack=pack,
+                reaction_roll=(manual or {}).get("reaction"),
+                reaction_source="manual" if manual else None,
             )
             if not result.ok:
                 raise CombatValidationError(result.validation_failure or "invalid reaction")
@@ -428,6 +491,7 @@ async def resolve_action(services: Services, ctx: AgentCtx, frame: dict[str, Any
             distance = frame.get("distance")
             if distance is not None and (type(distance) is not int or distance < 0):
                 raise CombatValidationError("invalid distance")
+            manual = _manual_totals(frame, pack, ["attack"] if action in _ATTACK_ACTIONS else [])
             target_name = _short_str(frame, "target", required=action in _ATTACK_ACTIONS)
             target_row = target = None
             if target_name:
@@ -437,6 +501,8 @@ async def resolve_action(services: Services, ctx: AgentCtx, frame: dict[str, Any
                 target_row, target = await _sheet(services, ctx.chat_key, target_name)
             request = ActionRequest(
                 actor=actor, target=target, weapon_instance_id=weapon_id, mode=mode, distance=distance,
+                attack_roll=(manual or {}).get("attack"),
+                roll_sources={"attack": "manual"} if manual and "attack" in manual else {},
             )
             if action in _ATTACK_ACTIONS:
                 resolver = resolve_first_shot if action == "ranged_attack" else resolve_melee_attack
@@ -464,7 +530,58 @@ async def resolve_action(services: Services, ctx: AgentCtx, frame: dict[str, Any
             "validation_failure": None,
         }
     except (CombatValidationError, ValueError, KeyError, TypeError) as exc:
+        await _trace_rejection(services, ctx, frame, exc)
         return _failure(frame, str(exc), ctx.locale)
+
+
+_TRACED_FIELDS = (
+    "id", "actor", "action", "mode", "weapon_instance_id", "target", "distance",
+    "pending_id", "roll_source", "manual_rolls",
+)
+
+
+async def _trace_rejection(services: Services, ctx: AgentCtx, frame: dict[str, Any], exc: Exception) -> None:
+    """Record why a request was refused, next to what the server offers this viewer from
+    the same (unchanged) state, so an offered-but-refused action is diagnosable."""
+    try:
+        state, _recent = _load(await services.store.state_get(ctx.chat_key, COMBAT_STATE_KEY))
+        actor = state.combatants.get(str(frame.get("actor"))) if state is not None else None
+        surface = await combat_surface(services, ctx)
+        offered = [
+            {
+                "action": action["id"],
+                "modes": [
+                    {"mode": mode["id"], "weapons": [w["id"] for w in mode["weapons"]],
+                     "accepts_distance": mode.get("accepts_distance")}
+                    for mode in action["modes"]
+                ],
+                "targets": action["targets"],
+            }
+            for action in (surface or {}).get("actions", [])
+        ]
+        logger.info(
+            "combat action rejected: %s",
+            json.dumps(
+                {
+                    "room": ctx.chat_key,
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "request": {key: frame.get(key) for key in _TRACED_FIELDS if key in frame},
+                    "current_actor": state.current_actor if state is not None else None,
+                    "round": state.round_number if state is not None else None,
+                    "pending_reaction": (
+                        {key: state.pending_reaction.get(key) for key in ("id", "attacker", "defender", "choices")}
+                        if state is not None and state.pending_reaction else None
+                    ),
+                    "actor_budget": actor.action_budget if actor is not None else None,
+                    "actor_turn_actions": list(actor.turn_actions) if actor is not None else None,
+                    "surface_actor": (surface or {}).get("actor"),
+                    "surface_actions": offered,
+                },
+                ensure_ascii=False,
+            ),
+        )
+    except Exception:  # noqa: BLE001 - a diagnostic must never change the refusal
+        logger.exception("combat action rejected (trace failed): %s", exc)
 
 
 async def project_action_frame(

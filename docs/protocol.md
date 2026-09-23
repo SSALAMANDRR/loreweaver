@@ -1,6 +1,27 @@
 *English · [中文](protocol.zh.md)*
 
-# loreweaver networked TUI — wire protocol 2.7
+# loreweaver networked TUI — wire protocol 2.8
+
+## Physical dice in combat (v2.8)
+
+A player may roll real dice for combat checks. The per-player `state.roll_mode`
+(`"auto" | "manual"`) is that player's preference for ordinary checks and combat
+alike; the client changes it with the `.rollmode auto|manual` command. Every step that takes a
+roll declares it: action modes carry `manual_rolls`, and so does each choice of a
+`reaction` offer. Each entry has `{id, label, expression, count, sides, keep?,
+keep_count?, modifier?}`, the same dice shape as a `roll_request` panel frame.
+`[]` means the step takes no dice.
+
+To submit dice, the client sends `roll_source:"manual"` with `manual_rolls:
+{<id>: [natural die faces]}` covering exactly the declared ids. The server
+validates count and range against the declared expression, then applies every
+modifier, grades the check and commits. Anything malformed, missing, extra or out
+of range is refused, and nothing changes. `roll_source:"server"` (the default)
+must not carry `manual_rolls`. Results report `roll_sources`: roll id → `"server"`
+(engine-rolled) or `"manual"` (player-entered). Each action mode also states `accepts_distance`; a client offers a distance field, and sends `distance`, only for modes that accept it. Hit location is read from the
+attack roll, so it follows that roll's source. Damage is always rolled by the
+server in this version: it is resolved in the same step as the defender's
+reaction, before the attacker could be asked for dice.
 
 ## Encounters and defender reactions (v2.7)
 
@@ -118,7 +139,7 @@ This is the open, versioned wire protocol between a loreweaver server (started v
 (deterministic core + AI Keeper) is unaffected by transport; the transport-neutral
 session logic is `net.session.SessionCore`, and this document is the language-agnostic seam.
 
-Frames are JSON objects, each shaped `{"type": ...}`. Protocol version: `"2.7"`. The same
+Frames are JSON objects, each shaped `{"type": ...}`. Protocol version: `"2.8"`. The same
 frames + `join` handshake ride the transport; only the carrier + its framing differ:
 
 - **Iroh** (the transport `--serve` starts) — peer-to-peer QUIC. The server
@@ -224,7 +245,7 @@ connections receive `error too_many_connections` before `join` is read.
 ## Server → Client
 
 - `welcome` — sent once, on a successful `join`:
-  `{type:"welcome", protocol:"2.7", features:["media","audio", "imagegen"?, "demo"?, "update"?], room:string, you:{id:string,name:string,role:"player"|"keeper"}, locale:string, server:string, version?:string}`
+  `{type:"welcome", protocol:"2.8", features:["media","audio", "imagegen"?, "demo"?, "update"?], room:string, you:{id:string,name:string,role:"player"|"keeper"}, locale:string, server:string, version?:string}`
   `version` is the server's own release version (compare it to the client's to detect a mismatch). The `"update"` feature appears only for a keeper on a server whose operator configured a self-update command, and gates the `admin_update_server` control.
   `demo` means the server is using its offline sample Keeper, vector support is
   enabled, and this specific Keeper room was empty when the server checked it.

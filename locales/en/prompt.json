@@ -50,6 +50,7 @@
   "prompt.game_state.encounter_hidden": " [hidden from players]",
   "prompt.game_state.encounter_defeated": " [out of the fight]",
   "prompt.game_state.encounter_pending": "   Awaiting {defender}'s reaction to {attacker}'s attack.",
+  "prompt.game_state.manual_dice": "Dice input for {name}: manual — this player rolls physical dice and the client submits the faces. Do not say the system always rolls; ask for a roll through the normal check/combat flow.",
   "prompt.game_state.npc_header": "👥 Active NPCs:",
   "prompt.game_state.roster_header": "👤 Investigator Status:",
   "prompt.game_state.roster_line": "{name}: {meters} | Status: {effects}",

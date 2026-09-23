@@ -267,13 +267,13 @@ async def test_players_cannot_start_an_encounter():
         await server.close()
 
 
-async def test_protocol_version_advertised_is_2_7():
+async def test_protocol_version_advertised_is_2_8():
     services, server, url, keys, chat_key, ada, seen = await _room()
     try:
         async with websockets.connect(url) as ws:
             await ws.send(json.dumps({"type": "join", "key": keys["p1"]}))
             welcome = await _recv(ws)
-            assert welcome["protocol"] == "2.7"
+            assert welcome["protocol"] == "2.8"
     finally:
         await server.close()
 
@@ -331,5 +331,28 @@ async def test_profile_npc_defeat_survives_failed_narration_and_reconnect():
         entry = next(item for item in state["combat"]["state"]["order"] if item["name"] == "Scum")
         assert entry["defeated"] is True and "Scum" not in state["combat"]["state"]["combatants"]
         assert state["combat"]["state"]["current_actor"] != "Scum"
+    finally:
+        await _close(sockets, server)
+
+
+async def test_manual_dice_travel_the_wire_and_replay_keeps_their_source():
+    from gateway.turn import TURN_EVENT_HISTORY_KEY
+
+    services, server, url, keys, chat_key, ada, seen = await _room()
+    sockets, states = await _start_encounter(url, keys)
+    try:
+        mode = next(m for a in states["p1"]["combat"]["actions"] if a["id"] == "melee_attack" for m in a["modes"])
+        assert mode["manual_rolls"][0]["id"] == "attack" and mode["manual_rolls"][0]["sides"] == 100
+        await sockets["p1"].send(json.dumps({
+            "type": "action_request", "id": "physical", "actor": "Ada", "target": "Cultist",
+            "action": "melee_attack", "mode": "single", "weapon_instance_id": _sword(ada),
+            "roll_source": "manual", "manual_rolls": {"attack": [42]},
+        }))
+        seen_by_p2 = await _result_for(sockets["p2"], "physical")
+        assert seen_by_p2["result"]["attack_roll"] == 42
+        assert seen_by_p2["result"]["roll_sources"] == {"attack": "manual"}
+        history = json.loads(await services.store.state_get(chat_key, TURN_EVENT_HISTORY_KEY))
+        recorded = [record for record in history if "physical" in json.dumps(record, ensure_ascii=False)]
+        assert recorded and '"roll_sources": {"attack": "manual"}' in json.dumps(recorded, ensure_ascii=False)
     finally:
         await _close(sockets, server)

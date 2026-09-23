@@ -124,6 +124,9 @@ class ActionRequest:
     distance: int | None = None
     damage_rolls: tuple[int, ...] = ()
     location_rolls: tuple[int, ...] = ()
+    # Who produced each supplied roll (e.g. {"attack": "manual"}); unlabelled supplied
+    # rolls report as "provided", rolls the engine makes itself as "server".
+    roll_sources: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -172,6 +175,8 @@ class CombatResult:
     pending_reaction: Mapping[str, Any] | None = None
     # The committed damage took the target out of the fight (pack defeat rule).
     target_defeated: bool = False
+    # Roll id -> "server" | "manual" | "provided" for every roll this result used.
+    roll_sources: Mapping[str, str] = field(default_factory=dict)
 
     @property
     def ok(self) -> bool:
@@ -768,6 +773,16 @@ def _damage_hits(
     return hits
 
 
+def accepts_distance(action: str) -> bool:
+    """Whether a request for ``action`` may carry a target distance (range bands)."""
+    return action == "ranged_attack"
+
+
+def _roll_source(supplied: bool, labels: Mapping[str, str], roll_id: str) -> str:
+    """Where one roll came from: the engine, or a caller-supplied value and its label."""
+    return str(labels.get(roll_id) or "provided") if supplied else "server"
+
+
 def _lose_aim(combatant: CombatantState) -> None:
     combatant.aim_bonus = 0
     combatant.aimed_weapon_instance_id = None
@@ -837,7 +852,7 @@ def _resolve_attack(
                 raise CombatValidationError("out of ammunition")
         else:
             shots_fired = 0
-        if action == "ranged_attack":
+        if accepts_distance(action):
             range_modifier = _range_modifier(pack, request.distance, profile)
         elif request.distance is not None:
             raise CombatValidationError("distance is unavailable for this action")  # i18n-exempt: internal validation diagnostic
@@ -906,6 +921,7 @@ def _resolve_attack(
                     "ammo_before": ammo_before,
                     "ammo_after": ammo_before - shots_fired if ammo_before is not None else None,
                     "choices": choices,
+                    "roll_sources": {"attack": _roll_source(request.attack_roll is not None, request.roll_sources, "attack")},
                 }
                 state_after.pending_reaction = pending
                 delta = StateDelta(
@@ -923,6 +939,7 @@ def _resolve_attack(
                     target_value, attack.total, True, outcome.margin, degrees, location,
                     ammo_before=ammo_before, ammo_after=pending["ammo_after"], state_delta=delta,
                     shots_fired=shots_fired, mode=request.mode, pending_reaction=pending,
+                    roll_sources=dict(pending["roll_sources"]),
                 )
             if reaction_contract is not None:
                 target_state = _combatant(state_after, target_name)
@@ -976,6 +993,12 @@ def _resolve_attack(
         target_defeated = _defeated_by(pack, request.target, damage_before, damage_after)
         if target_defeated:
             state_after.combatants[target_name].defeated = True
+        roll_sources = {"attack": _roll_source(request.attack_roll is not None, request.roll_sources, "attack")}
+        if reaction is not None:
+            roll_sources["reaction"] = _roll_source(request.reaction_roll is not None, request.roll_sources, "reaction")
+        if hits:
+            supplied_damage = bool(request.damage_rolls) or request.damage_roll is not None
+            roll_sources["damage"] = _roll_source(supplied_damage, request.roll_sources, "damage")
         delta = StateDelta(
             combat_state_before=state_before,
             combat_state_after=state_after,
@@ -1013,6 +1036,7 @@ def _resolve_attack(
             shots_fired=shots_fired,
             mode=request.mode,
             target_defeated=target_defeated,
+            roll_sources=roll_sources,
         )
     except CombatValidationError as exc:
         return CombatResult(
@@ -1241,8 +1265,12 @@ def resolve_reaction(
     reaction_roll: int | None = None,
     damage_rolls: tuple[int, ...] = (),
     location_rolls: tuple[int, ...] = (),
+    reaction_source: str | None = None,
 ) -> CombatResult:
-    """Finish a pending attack with the defender's choice (a declared reaction or decline)."""
+    """Finish a pending attack with the defender's choice (a declared reaction or decline).
+
+    ``reaction_source`` labels a supplied ``reaction_roll`` (e.g. ``"manual"``).
+    """
     pending = combat_state.pending_reaction
     try:
         if pending is None or pending.get("id") != pending_id:
@@ -1311,6 +1339,12 @@ def resolve_reaction(
         target_defeated = _defeated_by(pack, defender, damage_before, damage_before + final)
         if target_defeated:
             defender_state.defeated = True
+        roll_sources = dict(pending.get("roll_sources") or {})
+        if choice != DECLINE_REACTION:
+            labels = {"reaction": reaction_source} if reaction_source else {}
+            roll_sources["reaction"] = _roll_source(reaction_roll is not None, labels, "reaction")
+        if hits:
+            roll_sources["damage"] = _roll_source(bool(damage_rolls), {}, "damage")
         delta = StateDelta(
             combat_state_before=state_before,
             combat_state_after=state_after,
@@ -1331,7 +1365,7 @@ def resolve_reaction(
             final,
             pending.get("ammo_before"), pending.get("ammo_after"), delta,
             hits=tuple(hits), shots_fired=int(pending.get("shots_fired") or 0), mode=mode,
-            target_defeated=target_defeated,
+            target_defeated=target_defeated, roll_sources=roll_sources,
         )
     except CombatValidationError as exc:
         pending = pending or {}

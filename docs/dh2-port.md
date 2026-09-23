@@ -156,6 +156,13 @@ Verified against the source tree on 2026-09-09:
   Combat MVP backend: single/semi/full ranged fire, sword/knife melee, Dodge,
   Parry, Aim and Reload. The backend applies all hits, ammo and Damage through
   one checked `StateDelta`. This is not a complete weapon/combat simulator.
+  Equipment granted by creation layers and starting acquisitions is issued as a
+  typed `ItemInstance` whenever the item catalog recognizes the label; other labels
+  stay source-labelled inventory. Every starting ranged weapon comes with two clips
+  (PDF book pp. 49, 86); the engine keeps one clip loaded and does not track the
+  reserve — an implementation choice, the source does not say which clip is in the gun.
+  Sheets saved before this stored background weapons as labels; `CharacterSheet.from_dict`
+  upgrades recognized labels deterministically and the next save persists them.
 - `creation_finalization.yaml` covers the mandatory d100 Divination table.
   Immediate effects and explicit choices are executable. Result 01 is deliberately
   blocked on missing Table 8-15 data, preserving the roll. Rules written only in
@@ -227,6 +234,9 @@ Stage 1 does **not** invent values or mechanics for areas whose source slice has
 - Critical Effects (Tables 7-7…): PCs, Elite and Master NPCs past their Wounds
   keep acting until those tables exist; the engine never declares them dead;
 - automatic encounter end: combatants have controllers but no sides/factions.
+- semi-auto fire (`ranged_attack.semi`) is declared as a full action (`action_cost: 2`);
+  live play flagged this as wrong. It is an open action-economy item to verify against
+  the Short Burst section (`CH07_H048`) and fix on its own, not with transport changes.
 
 The Divination table also requires sourced Table 8-15 data before every possible
 new character can finish creation. Do not bypass that dependency by rerolling.

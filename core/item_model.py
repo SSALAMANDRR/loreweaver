@@ -9,6 +9,7 @@ attacks, reactions, damage, or weapon qualities.
 from __future__ import annotations
 
 import copy
+import hashlib
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -224,6 +225,45 @@ class ItemInstance:
             profile_id=profile.id,
             state=dict(state or {}),
         )
+
+
+def issued_item(profile: ItemProfile, *, instance_id: str | None = None) -> ItemInstance:
+    """A newly issued character item. A clip-fed weapon carries one full clip.
+
+    The DH2 source grants every starting ranged weapon two clips of standard ammunition
+    but does not say whether one is in the weapon; the engine keeps one clip loaded
+    and does not track the reserve (Reload refills without consuming it).
+    """
+    state = {"current_ammo": profile.clip_size} if profile.kind == "weapon" and profile.clip_size else {}
+    if instance_id is None:
+        return ItemInstance.create(profile, state=state)
+    return ItemInstance(instance_id=instance_id, profile_id=profile.id, state=state)
+
+
+def upgrade_legacy_equipment(
+    equipment: list[Any], catalog: ItemProfileCatalog | None, *, owner: str
+) -> list[Any]:
+    """Replace plain equipment labels the catalog recognizes with typed items.
+
+    Labels the catalog does not know stay labels: nothing is guessed. The instance id
+    is derived from the owner, position and label, so reading the same stored sheet
+    twice yields the same item until the next save persists it.
+    """
+    if catalog is None:
+        return list(equipment)
+    upgraded: list[Any] = []
+    for index, entry in enumerate(equipment):
+        if not isinstance(entry, str):
+            upgraded.append(entry)
+            continue
+        try:
+            profile = catalog.resolve(entry)
+        except ItemModelError:
+            upgraded.append(entry)
+            continue
+        digest = hashlib.sha256(f"{owner}\x00{index}\x00{entry}".encode()).hexdigest()[:32]
+        upgraded.append(issued_item(profile, instance_id=f"{profile.id}-{digest}"))
+    return upgraded
 
 
 class ItemProfileCatalog:

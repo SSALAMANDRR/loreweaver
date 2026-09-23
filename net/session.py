@@ -54,6 +54,9 @@ from net.room_backup import room_rows, room_vector_points
 
 logger = logging.getLogger(__name__)
 
+# v2.8 lets a player submit physical dice for combat: surfaces declare `manual_rolls`
+# per step and `state.roll_mode` carries the player's preference; `action_request` carries `roll_source` + `manual_rolls`, and
+# results report each roll's source in `roll_sources`.
 # v2.7 makes `state.combat` a per-viewer encounter projection (initiative order, current
 # actor, round, pending defender reaction) and adds the `end_turn` / `reaction`
 # `action_request` actions; an attacker may no longer choose the defender's reaction.
@@ -66,7 +69,7 @@ logger = logging.getLogger(__name__)
 # `panel_intent` client frame, and pack-asset resolution on the media byte channel.
 # v1.7 added declarative hook-emitted `ui` frames (core.hooks emitUI); v1.6 added
 # player-visible module variables on the state frame.
-_PROTOCOL_VERSION = "2.7"
+_PROTOCOL_VERSION = "2.8"
 # Public alias for out-of-band consumers (the `.lwpack` engine-minimum check in app.py).
 PROTOCOL_VERSION = _PROTOCOL_VERSION
 _SERVER_BANNER = "loreweaver/1"

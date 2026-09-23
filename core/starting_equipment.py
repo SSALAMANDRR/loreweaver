@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from core.item_model import ItemInstance, ItemModelError, load_item_catalog
+from core.item_model import ItemInstance, ItemModelError, issued_item, load_item_catalog
 from core.sheets import sheet_value
 from core.yaml_safety import safe_load_no_aliases
 
@@ -336,7 +336,7 @@ def choose_starting_item(
             if profiles is not None:
                 if item.profile_id is not None:
                     profile = profiles.resolve(item.profile_id)
-                    item_instance = ItemInstance.create(profile)
+                    item_instance = issued_item(profile)
                     item_entry = item_instance
                 else:
                     try:
@@ -344,7 +344,7 @@ def choose_starting_item(
                     except ItemModelError:
                         profile = None
                     if profile is not None:
-                        item_instance = ItemInstance.create(profile)
+                        item_instance = issued_item(profile)
                         item_entry = item_instance
         except ItemModelError as exc:
             raise StartingEquipmentError(
