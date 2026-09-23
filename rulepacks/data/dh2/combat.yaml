@@ -40,6 +40,17 @@ initiative:
     # The source does not say what happens when the 1d10 roll-off ties again;
     # repeating it is our policy (see provenance.implementation_choices).
     - {roll: 1d10, repeat_on_tie: true}
+# Damage above Wounds is Critical Damage. Only a rule that decides the outcome
+# of Critical Damage on its own is declared; PCs, Elite and Master NPCs resolve
+# it through the Critical Effect tables, which the engine does not implement yet,
+# so they are never marked defeated here.
+defeat:
+  damage_value: Damage
+  wounds_value: Wounds
+  rules:
+    # Troop «Эффектная Гибель»: any Critical Damage kills or takes the troop out
+    # of action (which of the two is left to the GM's narration).
+    - {when: critical_damage, field: NpcType, equals: troop, status: defeated}
 margin_unit: degrees
 actions:
   ranged_attack:
@@ -118,6 +129,9 @@ provenance:
   initiative_roll: CH07_H011
   initiative_tie_breakers: CH07_H011
   turn_order: [CH07_H002, CH07_H003, CH07_H008, CH07_H009, CH07_H011]
+  critical_damage: [CH07_H098, CH07_H099, CH07_H101]
+  # Chapter XII is not in the Neon corpus; cited from the source PDF page.
+  troop_defeat: "Глава XII, с. 469, «Типы НИП — Рядовой: Эффектная Гибель»"
   range_modifiers: null
   fire_mode_modifiers: null
   extra_hit_locations: null

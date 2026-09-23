@@ -501,6 +501,8 @@ sheet:
     BackgroundAbilities: background_abilities
     RoleAbilities: role_abilities
     EliteAdvances: elite_advances
+    # NPC tier from the Chapter XII profile header (Рядовой/Элита/Мастер); empty for PCs.
+    NpcType: npc_type
   attributes:
     WS: 1
     BS: 1
@@ -529,6 +531,7 @@ sheet:
     background_abilities: []
     role_abilities: []
     elite_advances: []
+    npc_type: ""
   skills:
     Acrobatics: 0
     Athletics: 0

@@ -35,6 +35,9 @@ _SLUG_RE = re.compile(r"[^a-z0-9]+")
 # One definition: it is how a sheet's `owner` tells a companion (an NPC record with a
 # sheet) apart from a PLAYER — see `player_character_names`.
 COMPANION_UID_PREFIX = "companion:"
+# The owner of a keeper-controlled NPC's stat sheet (`npc.stat_char`): never a player,
+# never in the party roster.
+NPC_UID_PREFIX = "npc:"
 
 
 def companion_uid(companion_id: str) -> str:
@@ -257,7 +260,7 @@ async def player_character_names(documents: Any, chat_key: str) -> set[str]:
     roster refuses rather than waves the write through."""
     names: set[str] = set()
     for doc in await documents.list(chat_key, "sheet"):
-        if str(doc.data.get("owner") or "").startswith(COMPANION_UID_PREFIX):
+        if str(doc.data.get("owner") or "").startswith((COMPANION_UID_PREFIX, NPC_UID_PREFIX)):
             continue
         name = str(doc.data.get("name") or doc.id).strip()
         if name:
@@ -435,6 +438,32 @@ async def add_knowledge(
 async def npc_learns(documents: Any, chat_key: str, name_or_id: str, fact: str) -> NpcRecord | None:
     """Append a single newly-learned fact -- a thin convenience over `add_knowledge`."""
     return await add_knowledge(documents, chat_key, name_or_id, [fact], mode="add")
+
+
+class NpcSheetNameTakenError(ValueError):
+    """A sheet or cast record already uses this name; nothing was written."""
+
+
+async def create_npc_from_profile(documents: Any, chat_key: str, name: str, profile: Any, pack: Any) -> NpcRecord:
+    """Create a keeper NPC record plus its stat sheet from a pack opponent profile.
+
+    Record and sheet land together or not at all. The sheet is owned by
+    `npc:<record id>` and is never added to the party roster; `stat_char` links the
+    two, which is how an encounter finds the NPC's combat stats.
+    """
+    from core.npc_profiles import materialize_npc_sheet
+
+    clean = name.strip()
+    sheet = materialize_npc_sheet(profile, clean, pack)
+    if await find_npc_by_name(documents, chat_key, clean) is not None or await documents.get(chat_key, "sheet", clean):
+        raise NpcSheetNameTakenError(clean)
+    record = await create_npc(documents, chat_key, clean, stat_char=clean)
+    try:
+        await documents.put(chat_key, "sheet", clean, dict(sheet.to_dict(), owner=f"{NPC_UID_PREFIX}{record.id}"))
+    except BaseException:
+        await delete_npc(documents, chat_key, record.id)
+        raise
+    return record
 
 
 # --- Room lifecycle (M23 WS1) -----------------------------------------------

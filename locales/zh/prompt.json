@@ -48,6 +48,7 @@
   "prompt.game_state.encounter_line": "   {index}. {name} ({initiative}){kind}{marker}",
   "prompt.game_state.encounter_npc": " [NPC]",
   "prompt.game_state.encounter_hidden": " [对玩家隐藏]",
+  "prompt.game_state.encounter_defeated": " [已退出战斗]",
   "prompt.game_state.encounter_pending": "   等待 {defender} 对 {attacker} 的攻击作出反应。",
   "prompt.game_state.npc_header": "👥 活跃NPC:",
   "prompt.game_state.roster_header": "👤 调查员状态:",

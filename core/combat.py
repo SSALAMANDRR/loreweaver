@@ -52,6 +52,8 @@ class CombatantState:
     initiative: int | None = None
     controller: str = ""
     hidden: bool = False
+    # Out of the fight by a pack-declared defeat rule: no further turns, not a target.
+    defeated: bool = False
 
 
 @dataclass
@@ -168,6 +170,8 @@ class CombatResult:
     mode: str = ""
     # Set when the attack hit and now waits for the defender's reaction choice.
     pending_reaction: Mapping[str, Any] | None = None
+    # The committed damage took the target out of the fight (pack defeat rule).
+    target_defeated: bool = False
 
     @property
     def ok(self) -> bool:
@@ -257,6 +261,56 @@ def _contract(pack: Any) -> _CombatContract:
         reaction_window=window,
         aim_lost_on_reaction=raw.get("aim_lost_on_reaction") is True,
     )
+
+
+@dataclass(frozen=True)
+class _DefeatRule:
+    field: str
+    equals: str
+
+
+@dataclass(frozen=True)
+class _DefeatContract:
+    damage_value: str
+    wounds_value: str
+    rules: tuple[_DefeatRule, ...]
+
+
+def _defeat_contract(pack: Any) -> _DefeatContract | None:
+    """Pack-declared defeat rules; a pack that declares none never defeats anyone."""
+    raw = _combat_data(pack).get("defeat")
+    if raw is None:
+        return None
+    if not isinstance(raw, Mapping) or not raw.get("damage_value") or not raw.get("wounds_value"):
+        raise CombatValidationError("combat defeat contract is incomplete")  # i18n-exempt: internal validation diagnostic
+    rules: list[_DefeatRule] = []
+    for rule in raw.get("rules") or []:
+        if (
+            not isinstance(rule, Mapping)
+            or rule.get("when") != "critical_damage"
+            or rule.get("status") != "defeated"
+            or not isinstance(rule.get("field"), str)
+            or not isinstance(rule.get("equals"), str)
+        ):
+            raise CombatValidationError("unsupported combat defeat rule")  # i18n-exempt: internal validation diagnostic
+        rules.append(_DefeatRule(rule["field"], rule["equals"]))
+    return _DefeatContract(str(raw["damage_value"]), str(raw["wounds_value"]), tuple(rules))
+
+
+def _sheet_field(sheet: Any, pack: Any, name: str) -> Any:
+    keys = getattr(pack.sheet_spec, "field_keys", {}) if pack.sheet_spec is not None else {}
+    return getattr(sheet, str(keys.get(name, name)), None)
+
+
+def _defeated_by(pack: Any, target: Any, damage_before: int, damage_after: int) -> bool:
+    """Whether this action dealt Critical Damage (damage received while above Wounds)
+    to a target that a declared rule takes out of the fight at that point."""
+    contract = _defeat_contract(pack)
+    if contract is None or damage_after <= damage_before:
+        return False
+    if damage_after <= sheet_value(target, pack, contract.wounds_value):
+        return False
+    return any(_sheet_field(target, pack, rule.field) == rule.equals for rule in contract.rules)
 
 
 def _action_contract(pack: Any, action: str, mode: str) -> _ActionContract:
@@ -512,20 +566,29 @@ def start_encounter(
 
 
 def resolve_end_turn(state: CombatState, *, pack: Any) -> StateDelta:
-    """Advance to the next combatant in initiative order, opening a new round on wrap."""
+    """Advance to the next combatant still in the fight, opening a new round on wrap.
+
+    Defeated combatants are skipped. When only the current combatant remains, its
+    next turn is the next round's.
+    """
     if state.pending_reaction is not None:
         raise CombatValidationError("a reaction is pending")
     if not state.order or state.current_actor not in state.order:
         raise CombatValidationError("encounter has no initiative order")  # i18n-exempt: internal validation diagnostic
     index = state.order.index(state.current_actor)
-    wrapped = index + 1 >= len(state.order)
-    next_actor = state.order[0 if wrapped else index + 1]
-    return resolve_turn_transition(
-        state,
-        next_actor=next_actor,
-        pack=pack,
-        round_number=state.round_number + 1 if wrapped else state.round_number,
-    )
+    size = len(state.order)
+    for step in range(1, size + 1):
+        position = index + step
+        candidate = state.order[position % size]
+        if state.combatants[candidate].defeated:
+            continue
+        return resolve_turn_transition(
+            state,
+            next_actor=candidate,
+            pack=pack,
+            round_number=state.round_number + 1 if position >= size else state.round_number,
+        )
+    raise CombatValidationError("no combatant remains in the fight")  # i18n-exempt: internal validation diagnostic
 
 
 def _location(pack: Any, roll: int) -> str:
@@ -742,7 +805,8 @@ def _resolve_attack(
             raise CombatValidationError("actor does not have the current turn")  # i18n-exempt: internal validation diagnostic
         action_contract = _action_contract(pack, action, request.mode)
         actor_state = _combatant(combat_state, actor_name)
-        _combatant(combat_state, target_name)
+        if _combatant(combat_state, target_name).defeated:
+            raise CombatValidationError("target is out of the fight")  # i18n-exempt: internal validation diagnostic
         if actor_state.action_budget < action_contract.cost.amount:
             raise CombatValidationError("insufficient action budget")
         _check_turn_constraints(pack, action, action_contract, combat_state, actor_state)
@@ -909,6 +973,9 @@ def _resolve_attack(
                 )
                 final = sum(hit.final_damage for hit in hits)
                 damage_after = damage_before + final
+        target_defeated = _defeated_by(pack, request.target, damage_before, damage_after)
+        if target_defeated:
+            state_after.combatants[target_name].defeated = True
         delta = StateDelta(
             combat_state_before=state_before,
             combat_state_after=state_after,
@@ -945,6 +1012,7 @@ def _resolve_attack(
             hits=tuple(hits),
             shots_fired=shots_fired,
             mode=request.mode,
+            target_defeated=target_defeated,
         )
     except CombatValidationError as exc:
         return CombatResult(
@@ -1240,6 +1308,9 @@ def resolve_reaction(
             roller=roller, damage_rolls=damage_rolls, location_rolls=location_rolls,
         ) if hit_count else []
         final = sum(hit.final_damage for hit in hits)
+        target_defeated = _defeated_by(pack, defender, damage_before, damage_before + final)
+        if target_defeated:
+            defender_state.defeated = True
         delta = StateDelta(
             combat_state_before=state_before,
             combat_state_after=state_after,
@@ -1260,6 +1331,7 @@ def resolve_reaction(
             final,
             pending.get("ammo_before"), pending.get("ammo_after"), delta,
             hits=tuple(hits), shots_fired=int(pending.get("shots_fired") or 0), mode=mode,
+            target_defeated=target_defeated,
         )
     except CombatValidationError as exc:
         pending = pending or {}
@@ -1367,6 +1439,7 @@ def project_combat_state(state: CombatState, viewer: Viewer) -> dict[str, Any]:
             "current": name == state.current_actor,
             "controlled": viewer_controls(combatant, viewer),
             "keeper_controlled": combatant.controller == KEEPER_CONTROLLER,
+            "defeated": combatant.defeated,
         }
         if viewer.is_keeper:
             entry["hidden"] = combatant.hidden

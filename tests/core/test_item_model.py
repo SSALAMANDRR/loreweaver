@@ -19,14 +19,19 @@ REPRESENTATIVE_PROFILES = {
     "frag_grenade",
     "basic_flak_armor",
 }
+NPC_PROFILE_ITEMS = {"npc_profile_flak_armour"}
 
 
 def test_dh2_representative_profiles_parse_and_retain_canonical_source_references():
     catalog = load_item_catalog(load_rulepack("dh2"))
 
     assert catalog is not None
-    assert set(catalog.profiles) == REPRESENTATIVE_PROFILES
-    assert all(profile.source_reference.startswith("CH05_") for profile in catalog.profiles.values())
+    assert set(catalog.profiles) == REPRESENTATIVE_PROFILES | NPC_PROFILE_ITEMS
+    assert all(catalog.get(profile_id).source_reference.startswith("CH05_") for profile_id in REPRESENTATIVE_PROFILES)
+    # Rows sourced from NPC profile stat blocks cite those pages, not Chapter V.
+    npc_armour = catalog.get("npc_profile_flak_armour")
+    assert "Глава XII с. 486" in npc_armour.source_reference
+    assert all(npc_armour.armor_at(location) == 4 for location in ("head", "body", "left_arm", "right_leg"))
 
     lasgun = catalog.resolve("Lasgun")
     assert lasgun.damage_expression == "1к10+3"

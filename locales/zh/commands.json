@@ -67,7 +67,7 @@
   "commands.cast.show.persona": "人设：{persona}",
   "commands.cast.show.sheet": "关联角色卡：{name}",
   "commands.cast.show.title": "🎭 {name} [{id}]",
-  "commands.cast.usage": "用法：`.npc [list | show <名字> | delete <名字>]`（`.companion [list | delete <名字>]`）。",
+  "commands.cast.usage": "用法：`.npc [list | show <名字> | delete <名字> | profiles | create <模板> | <名字>]`（`.companion [list | delete <名字>]`）。",
   "commands.character.created": "已创建 {system} 角色：{name}",
   "commands.character.default_name": "冒险者",
   "commands.character.name_taken": "「{name}」已经是其他玩家角色的名字。请给你的角色取个名字：`.{command} <名字>`",
@@ -267,5 +267,13 @@
   "commands.undo.done": "已回退 {turns} 个回合，房间回到第 {turn} 回合结束时的样子。所有人的记录也已清空对齐。",
   "commands.undo.too_deep": "最多只能往回退 {depth} 个回合——这是战役摘要还没折叠掉的那一段；再往前退，故事和摘要说的就不是一回事了。",
   "commands.undo.unavailable": "没有可回退到的回合存档点。可用：{turns}",
-  "commands.undo.usage": "用法：.undo [回合数]"
+  "commands.undo.usage": "用法：.undo [回合数]",
+  "commands.cast.create.usage": "用法：`.npc create <模板> | <名字>` —— 见 `.npc profiles`。",
+  "commands.cast.create.done": "✅ 已按模板「{profile}」（{source}）创建 NPC {name} [{id}]。其属性卡由守秘人控制，可用于 `.combat start`。",
+  "commands.cast.create.unknown_profile": "❌ 没有名为 {profile} 的敌人模板。见 `.npc profiles`。",
+  "commands.cast.create.name_taken": "❌ 名字 {name} 已被角色、属性卡或 NPC 记录占用。",
+  "commands.cast.create.failed": "❌ 无法创建 NPC：{reason}",
+  "commands.cast.profiles.header": "📜 敌人模板（{count}）：",
+  "commands.cast.profiles.item": "· {id} — {name}（{kind}；{source}）",
+  "commands.cast.profiles.empty": "该规则系统未声明任何敌人模板。"
 }

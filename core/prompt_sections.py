@@ -346,6 +346,7 @@ async def inject_game_state_prompt(ctx: Any, character_manager: Any, store: Stor
                             ),
                             marker=(
                                 (i18n.t("prompt.game_state.encounter_hidden") if combatant.hidden else "")
+                                + (i18n.t("prompt.game_state.encounter_defeated") if combatant.defeated else "")
                                 + (" \U0001F448" if name == encounter.current_actor else "")
                             ),
                         )

@@ -104,6 +104,17 @@ profiles:
     qualities: []
     ammo_requirements: []
 
+  # Table 5-11 (CH05_H187) has no row matching the uniform flak armour worn in
+  # these NPC profiles; the profiles' own hit-location boxes give 4 armour points
+  # on every location, so this row carries exactly those stated values.
+  npc_profile_flak_armour:
+    name: Флак-броня (профиль НИП)
+    aliases: [Форменная флак-броня]
+    kind: armour
+    source_reference: "Глава XII с. 486 и Глава XIII с. 543: зоны попадания профилей НИП"
+    availability: null
+    armor_by_location: {head: 4, right_arm: 4, left_arm: 4, body: 4, right_leg: 4, left_leg: 4}
+
   basic_flak_armor:
     name: Флак-жилет
     aliases: [Flak Vest, Basic Flak Armour, Basic Flak Armor, flak_vest]

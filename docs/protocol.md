@@ -14,8 +14,10 @@ refused.
 documents): `{actor, actions, state, end_turn?, reaction?}`.
 
 - `state` — `{round_number, current_actor, order, combatants, pending_reaction}`.
-  `order` lists `{name, initiative, current, controlled, keeper_controlled}`
-  for combatants the viewer may see; players never see hidden combatants
+  `order` lists `{name, initiative, current, controlled, keeper_controlled, defeated}`
+  for combatants the viewer may see (`defeated`: a rulepack defeat rule took the
+  combatant out of the fight; it gets no further turns and is no longer a
+  target); players never see hidden combatants
   (`current_actor` is `null` while a hidden one acts). `combatants` holds
   counters only for combatants that are not keeper-controlled (keepers see all).
   `pending_reaction` is `{id, attacker, defender, action, mode, hit_count,
@@ -50,7 +52,9 @@ transaction.
 per connection: keeper connections get the full `CombatResult`; players get a
 projection without `state_delta.combat_state_*`, with keeper-side values of
 keeper-controlled combatants (skill targets, armour/TB mitigation, damage
-counters, ammunition) set to `null`, and hidden combatant names blanked. Only a
+counters, ammunition) set to `null`, and hidden combatant names blanked. A result's
+`target_defeated` is `true` when that committed damage took the target out of the
+fight. Only a
 fully resolved attack/utility action is narrated, from that player-grade
 projection. An invalid request's result goes to the caller alone.
 

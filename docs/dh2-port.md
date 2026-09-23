@@ -178,8 +178,14 @@ Verified against the source tree on 2026-09-09:
   (`CH07_H029`/`H061`) — and the defender's controller (player or keeper) chooses
   a reaction or declines. Using a Reaction loses a prepared Aim (`CH07_H021`).
   NPCs are keeper-controlled sheets reached through their NPC record's
-  `stat_char`. `state.combat` and every `action_result` are viewer-projected.
-  The narration lane receives only the player-grade committed result.
+  `stat_char`; `.npc create <profile> | <name>` materializes one from
+  `npc_profiles.yaml` (three Troop profiles transcribed from the source PDF's
+  Chapter XII pp. 485–486 and Chapter XIII p. 543, which the Neon corpus lacks).
+  Damage above Wounds is Critical Damage (`CH07_H098`/`H099`/`H101`); a Troop
+  NPC is taken out of the fight by any Critical Damage (Chapter XII p. 469,
+  «Эффектная Гибель»), after which it gets no turns and is no longer a target.
+  `state.combat` and every `action_result` are viewer-projected. The narration
+  lane receives only the player-grade committed result.
 
 Relevant coverage includes `test_creation_layers.py`, `test_creation_flow.py`,
 `test_creation_finalization.py`, `test_advancement*.py`, `test_talent*.py`,
@@ -214,8 +220,13 @@ Stage 1 does **not** invent values or mechanics for areas whose source slice has
 - Dodge against multiple hits (`CH07_H030`): "each degree of success cancels one
   *additional* hit" is ambiguous against the current one-hit-per-degree contract
   and awaits errata/FAQ confirmation;
-- NPC stat-block authoring (Chapter XIII adversary profiles): an NPC's `stat_char`
-  sheet must already exist.
+- opponent profiles beyond the three Troops in `npc_profiles.yaml`: profiles need
+  weapons the item catalog can represent exactly (autopistol, stub revolver,
+  chain weapons, grenades are missing) and no Unnatural Characteristic traits;
+  the Инфектор Штамма autogun (`O/3/–`) contradicts the catalog autogun (`CH05_H078`);
+- Critical Effects (Tables 7-7…): PCs, Elite and Master NPCs past their Wounds
+  keep acting until those tables exist; the engine never declares them dead;
+- automatic encounter end: combatants have controllers but no sides/factions.
 
 The Divination table also requires sourced Table 8-15 data before every possible
 new character can finish creation. Do not bypass that dependency by rerolling.

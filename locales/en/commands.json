@@ -67,7 +67,7 @@
   "commands.cast.show.persona": "Persona: {persona}",
   "commands.cast.show.sheet": "Sheet: {name}",
   "commands.cast.show.title": "🎭 {name} [{id}]",
-  "commands.cast.usage": "Usage: `.npc [list | show <name> | delete <name>]` (`.companion [list | delete <name>]`).",
+  "commands.cast.usage": "Usage: `.npc [list | show <name> | delete <name> | profiles | create <profile> | <name>]` (`.companion [list | delete <name>]`).",
   "commands.character.created": "Created {system} character: {name}",
   "commands.character.default_name": "Adventurer",
   "commands.character.name_taken": "The name \"{name}\" already belongs to another player's character. Give yours its own name: `.{command} <name>`",
@@ -267,5 +267,13 @@
   "commands.undo.done": "Rewound {turns} turn(s); the room is back at the end of turn {turn}. Everyone's log has been cleared to match.",
   "commands.undo.too_deep": "Undo reaches back at most {depth} turns — that is the window the campaign summary has not folded yet, so a deeper rewind would leave the story and the summary describing different things.",
   "commands.undo.unavailable": "No saved turn boundary to rewind to. Available: {turns}",
-  "commands.undo.usage": "Usage: .undo [turns]"
+  "commands.undo.usage": "Usage: .undo [turns]",
+  "commands.cast.create.usage": "Usage: `.npc create <profile> | <name>` — see `.npc profiles`.",
+  "commands.cast.create.done": "✅ Created NPC {name} [{id}] from profile «{profile}» ({source}). Its stat sheet is keeper-controlled and ready for `.combat start`.",
+  "commands.cast.create.unknown_profile": "❌ No opponent profile named {profile}. See `.npc profiles`.",
+  "commands.cast.create.name_taken": "❌ The name {name} is already used by a character, sheet or cast record.",
+  "commands.cast.create.failed": "❌ The NPC could not be created: {reason}",
+  "commands.cast.profiles.header": "📜 Opponent profiles ({count}):",
+  "commands.cast.profiles.item": "· {id} — {name} ({kind}; {source})",
+  "commands.cast.profiles.empty": "This rule system declares no opponent profiles."
 }

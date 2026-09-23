@@ -1,0 +1,62 @@
+version: 1
+# Canonical opponent profiles, read from the stat blocks of the local
+# DH_II_-OKP_-_v_1_8.pdf (the same DH2_RU_OKP_V1_8 source). Chapters XII and XIII
+# are not in the Neon corpus, so each profile cites its book page. Only profiles
+# whose every weapon and armour value the item catalog can represent are listed.
+source: "DH2_RU_OKP_V1_8 (PDF): Глава XII «НИП и противники», Глава XIII «Тёмные Стремления»"
+# Book p.470: every NPC also carries a knife or other basic melee weapon unless
+# the profile says otherwise (natural weapons).
+default_melee_weapon: knife
+profiles:
+  hive_scum:
+    name: Отброс
+    aliases: [Отброс, Hive Scum]
+    npc_type: troop
+    source_reference: "Глава XII, с. 485, профиль «Отброс (Рядовой)»"
+    threat: 3
+    movement: {half: 3, full: 6, charge: 9, run: 18}
+    attributes: {WS: 30, BS: 25, S: 26, T: 24, Ag: 32, Int: 26, Per: 37, WP: 28, Fel: 30, Wounds: 9}
+    skills: {Survival: 2}
+    talents: []
+    traits: []
+    armour: []
+    weapons:
+      - {profile: knife, stated: {damage: "1к5+2БС", penetration: 0, damage_type: U}}
+    gear: [Отрепья, "1к5 человеческих зубов", Вши, "Пачка дешёвых лхо-сигарет"]
+    omitted: []
+
+  desoleum_oathsworn_trooper:
+    name: Пехотинец Десолеумского Обетного Кадра
+    aliases: [Пехотинец Десолеумского Обетного Кадра, Пехотинец, Oathsworn Trooper]
+    npc_type: troop
+    source_reference: "Глава XII, с. 486, профиль «Пехотинец Десолеумского Обетного Кадра (Рядовой)»"
+    threat: 7
+    movement: {half: 3, full: 6, charge: 9, run: 18}
+    attributes: {WS: 36, BS: 43, S: 38, T: 42, Ag: 35, Int: 28, Per: 44, WP: 32, Fel: 36, Wounds: 11}
+    skills: {Athletics: 1, Dodge: 1, Medicae: 2, "Operate::наземная": 2, TechUse: 2}
+    talents: [Быстрая Перезарядка, Искусный Стук]
+    traits: []
+    armour: [npc_profile_flak_armour]
+    weapons:
+      - {profile: lasgun, stated: {damage: "1к10+3", penetration: 0, range: 100, rate_of_fire: "O/3/–", clip: 60, reload: full, damage_type: E}}
+    gear: [Форменная флак-броня, Клятвенный механизм]
+    # Grenades are listed in the profile but the item catalog has no complete
+    # frag profile and no krak profile; they are not materialized.
+    omitted: ["Фраг гранаты (3)", "Крак гранаты (2)"]
+
+  hired_gun:
+    name: Подрядный Лазган
+    aliases: [Подрядный Лазган, Hired Gun]
+    npc_type: troop
+    source_reference: "Глава XIII, с. 543, профиль «Подрядный Лазган (Рядовой)»"
+    threat: 4
+    movement: {half: 3, full: 6, charge: 9, run: 18}
+    attributes: {WS: 35, BS: 37, S: 35, T: 41, Ag: 32, Int: 28, Per: 35, WP: 32, Fel: 25, Wounds: 10}
+    skills: {}
+    talents: [Негде Прятаться]
+    traits: []
+    armour: [npc_profile_flak_armour]
+    weapons:
+      - {profile: lasgun, stated: {damage: "1к10+3", penetration: 0, range: 100, rate_of_fire: "O/3/–", clip: 60, reload: full, damage_type: E}}
+    gear: ["2 дополнительных блока питания для лазгана", Флак-броня]
+    omitted: []

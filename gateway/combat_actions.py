@@ -52,7 +52,6 @@ from core.rulepacks import load_rulepack
 from infra.i18n import get_i18n
 from infra.room_facets import STORAGE_ROOM_STATE, RoomStateFacet
 
-NPC_OWNER_PREFIX = "npc:"
 _RECENT_REQUEST_LIMIT = 64
 _PACK_ACTIONS = {"ranged_attack", "melee_attack", "aim", "reload"}
 _ATTACK_ACTIONS = {"ranged_attack", "melee_attack"}
@@ -243,7 +242,9 @@ async def combat_surface(
             pack = load_rulepack(actor.system)
             targets = [
                 name for name in state.order
-                if name != actor.name and (viewer.is_keeper or not state.combatants[name].hidden)
+                if name != actor.name
+                and not state.combatants[name].defeated
+                and (viewer.is_keeper or not state.combatants[name].hidden)
             ]
             surface["actor"] = actor.name
             surface["actions"] = available_actions(pack, actor, targets, ctx.locale, state)
@@ -496,9 +497,9 @@ def should_narrate(frame: dict[str, Any]) -> bool:
 
 
 def _is_player_owner(owner: str) -> bool:
-    from agent.npc import COMPANION_UID_PREFIX
+    from agent.npc import COMPANION_UID_PREFIX, NPC_UID_PREFIX
 
-    return bool(owner) and not owner.startswith((NPC_OWNER_PREFIX, COMPANION_UID_PREFIX))
+    return bool(owner) and not owner.startswith((NPC_UID_PREFIX, COMPANION_UID_PREFIX))
 
 
 async def start_room_encounter(

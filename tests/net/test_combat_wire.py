@@ -276,3 +276,60 @@ async def test_protocol_version_advertised_is_2_7():
             assert welcome["protocol"] == "2.7"
     finally:
         await server.close()
+
+
+async def test_profile_npc_defeat_survives_failed_narration_and_reconnect():
+    from core.npc_profiles import load_npc_profiles
+
+    services, server, url, keys, chat_key, ada, seen = await _room(fail_narration=True)
+    pack = load_rulepack("dh2")
+    record = await npc_records.create_npc_from_profile(
+        services.documents, chat_key, "Scum", load_npc_profiles(pack)["hive_scum"], pack
+    )
+    row = await services.documents.get(chat_key, "sheet", "Scum")
+    data = dict(row.data)
+    data["attributes"] = {**data["attributes"], "DAMAGE": 9}  # at Wounds: the next damage is Critical
+    await services.documents.put(chat_key, "sheet", "Scum", data)
+    sockets = {}
+    for role in ("keeper", "p1", "p2"):
+        ws, *_ = await _connect_and_join(url, keys[role])
+        sockets[role] = ws
+    try:
+        await sockets["keeper"].send(json.dumps({"type": "input", "text": ".combat start Scum"}))
+        await _state_where(sockets["p1"], _has_encounter)
+        owner = {"Ada": "p1", "Bea": "p2", "Scum": "keeper"}
+        for step in range(4):
+            current = (await load_encounter(services, chat_key)).current_actor
+            if current == "Ada":
+                break
+            await sockets[owner[current]].send(json.dumps({
+                "type": "action_request", "id": f"skip-{step}", "actor": current, "action": END_TURN_ACTION,
+            }))
+            assert (await _result_for(sockets[owner[current]], f"skip-{step}"))["ok"]
+        await sockets["p1"].send(json.dumps({
+            "type": "action_request", "id": "swing", "actor": "Ada", "target": "Scum",
+            "action": "melee_attack", "mode": "single", "weapon_instance_id": _sword(ada),
+        }))
+        pending = await _result_for(sockets["keeper"], "swing")
+        await sockets["keeper"].send(json.dumps({
+            "type": "action_request", "id": "fall", "actor": "Scum", "action": REACTION_ACTION,
+            "mode": "decline", "pending_id": pending["result"]["pending_reaction"]["id"],
+        }))
+        public = await _result_for(sockets["p2"], "fall")
+        assert public["ok"] and public["result"]["target_defeated"] is True
+        assert public["result"]["state_delta"]["target_damage_after"] is None  # NPC counter stays private
+        # The room lock orders the next request after the (failing) narration attempt.
+        await sockets["p1"].send(json.dumps({"type": "action_request", "id": "end", "actor": "Ada", "action": END_TURN_ACTION}))
+        assert (await _result_for(sockets["p1"], "end"))["ok"]
+        assert len(seen) == 1
+        assert (await load_encounter(services, chat_key)).combatants["Scum"].defeated is True
+        assert record.stat_char == "Scum"
+
+        await sockets.pop("p2").close()
+        ws, state = await _rejoin(url, keys["p2"])
+        sockets["p2"] = ws
+        entry = next(item for item in state["combat"]["state"]["order"] if item["name"] == "Scum")
+        assert entry["defeated"] is True and "Scum" not in state["combat"]["state"]["combatants"]
+        assert state["combat"]["state"]["current_actor"] != "Scum"
+    finally:
+        await _close(sockets, server)

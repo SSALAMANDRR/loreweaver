@@ -19,8 +19,9 @@
   "combat.command.status": "Encounter — round {round}, current: {current}",
   "combat.command.order_line": "{index}. {name} — initiative {initiative}{marker}",
   "combat.command.hidden_marker": " (hidden)",
+  "combat.command.defeated_marker": " (out of the fight)",
   "combat.command.start_failed": "The encounter could not start: {reason}",
   "combat.command.ended": "The encounter has ended.",
   "combat.command.not_found": "No keeper-controlled combatant named {name}.",
-  "combat.narration.prompt": "Narrate one already resolved tabletop combat action in English. The deterministic engine already committed the result. Describe only its fictional consequences. Treat the supplied rolls, hits, reactions, damage, ammunition and state delta as final. Do not invent or recalculate mechanics. Do not claim an effect absent from the result. The optional context (scene, encounter order, public descriptions of the combatants) is what the players can see; do not reveal anything beyond it. An empty actor or target name means the players cannot see that combatant: do not name or describe it."
+  "combat.narration.prompt": "Narrate one already resolved tabletop combat action in English. The deterministic engine already committed the result. Describe only its fictional consequences. Treat the supplied rolls, hits, reactions, damage, ammunition and state delta as final. Do not invent or recalculate mechanics. Do not claim an effect absent from the result. The optional context (scene, encounter order, public descriptions of the combatants) is what the players can see; do not reveal anything beyond it. An empty actor or target name means the players cannot see that combatant: do not name or describe it. When `target_defeated` is true the engine has taken the target out of the fight: describe it falling, but do not decide whether it is dead or merely incapacitated."
 }

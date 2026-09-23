@@ -183,6 +183,8 @@ export interface CombatOrderEntry {
   /** The viewer may act (or react) for this combatant. */
   controlled: boolean
   keeper_controlled: boolean
+  /** Out of the fight by a server-applied defeat rule: it takes no further turns. */
+  defeated?: boolean
   /** Keeper view only. */
   hidden?: boolean
 }
@@ -264,6 +266,8 @@ export interface ActionResultFrame {
     mode?: string
     /** Set while the hit waits for the defender's reaction (no damage yet). */
     pending_reaction?: PendingReactionView | null
+    /** The committed damage took the target out of the fight (server defeat rule). */
+    target_defeated?: boolean
   } | null
   validation_failure: string | null
   labels?: {

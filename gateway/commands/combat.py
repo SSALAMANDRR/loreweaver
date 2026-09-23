@@ -47,7 +47,10 @@ class CombatCommands:
                     index=index,
                     name=name,
                     initiative=combatant.initiative if combatant.initiative is not None else "-",
-                    marker=ctx.i18n.t("combat.command.hidden_marker") if combatant.hidden else "",
+                    marker=(
+                        (ctx.i18n.t("combat.command.hidden_marker") if combatant.hidden else "")
+                        + (ctx.i18n.t("combat.command.defeated_marker") if combatant.defeated else "")
+                    ),
                 )
             )
         return "\n".join(lines)

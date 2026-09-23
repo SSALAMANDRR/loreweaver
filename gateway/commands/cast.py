@@ -98,6 +98,59 @@ class CastCommands:
             extra=getattr(ctx.raw_ctx, "extra", {}) or {},
         )
 
+    async def _npc_room_pack(self, ctx: CommandCtx):
+        return await ctx.services.room_rulepack(AgentCtx(chat_key=ctx.chat_key, user_id=ctx.user_id, locale=ctx.locale))
+
+    async def _npc_profiles(self, ctx: CommandCtx) -> str:
+        """`.npc profiles` — the room system's opponent profiles a keeper can create from."""
+        from core.npc_profiles import NpcProfileError, load_npc_profiles
+
+        try:
+            profiles = load_npc_profiles(await self._npc_room_pack(ctx))
+        except NpcProfileError as exc:
+            return ctx.fail(ctx.i18n.t("commands.cast.create.failed", reason=str(exc)))
+        if not profiles:
+            return ctx.i18n.t("commands.cast.profiles.empty")
+        lines = [ctx.i18n.t("commands.cast.profiles.header", count=len(profiles))]
+        lines.extend(
+            ctx.i18n.t(
+                "commands.cast.profiles.item",
+                id=profile.id,
+                name=profile.name,
+                kind=profile.npc_type,
+                source=profile.source_reference,
+            )
+            for profile in profiles.values()
+        )
+        return "\n".join(lines)
+
+    async def _npc_create(self, ctx: CommandCtx, rest: str) -> str:
+        """`.npc create <profile> | <name>` — an NPC record + stat sheet from a pack profile."""
+        from core.npc_profiles import NpcProfileError, find_npc_profile, load_npc_profiles
+
+        profile_query, _, name = rest.partition("|")
+        if not profile_query.strip() or not name.strip():
+            return ctx.fail(ctx.i18n.t("commands.cast.create.usage"))
+        pack = await self._npc_room_pack(ctx)
+        try:
+            profile = find_npc_profile(load_npc_profiles(pack), profile_query)
+            if profile is None:
+                return ctx.fail(ctx.i18n.t("commands.cast.create.unknown_profile", profile=profile_query.strip()))
+            record = await npc_records.create_npc_from_profile(
+                ctx.services.documents, ctx.chat_key, name, profile, pack
+            )
+        except (npc_records.NpcSheetNameTakenError, npc_records.PlayerNameReservedError):
+            return ctx.fail(ctx.i18n.t("commands.cast.create.name_taken", name=name.strip()))
+        except NpcProfileError as exc:
+            return ctx.fail(ctx.i18n.t("commands.cast.create.failed", reason=str(exc)))
+        return ctx.i18n.t(
+            "commands.cast.create.done",
+            name=record.name,
+            id=record.id,
+            profile=profile.name,
+            source=profile.source_reference,
+        )
+
     async def cmd_cast(self, ctx: CommandCtx) -> str:
         """`.npc [list|show <name>|delete <name>]` / `.companion [list|delete <name>]` — the
         keeper's hand on the room's CAST, deterministic and without spending a model turn.
@@ -118,6 +171,11 @@ class CastCommands:
 
         def _is_companion(record) -> bool:
             return record.role == npc_records.COMPANION_ROLE
+
+        if not companions_only and sub == "profiles":
+            return await self._npc_profiles(ctx)
+        if not companions_only and sub == "create":
+            return await self._npc_create(ctx, rest)
 
         if sub in {"list", "列表"} and not rest:
             records = (
