@@ -1,6 +1,35 @@
 *English · [中文](protocol.zh.md)*
 
-# loreweaver networked TUI — wire protocol 2.5
+# loreweaver networked TUI — wire protocol 2.6
+
+## Deterministic action transport (v2.6)
+
+`state.combat`, when present, is a per-viewer action catalog for the caller's
+active character. It contains `actor`, `actions` and nullable `state`. Every
+action has an `id`, localized server-authored `label`, `targets`, and `modes`.
+Each mode has an `id`, localized `label`, usable `weapons` (`id` is an item
+instance ID, `label` is its profile name), and supported `reactions`. The
+client selects from these values without interpreting a rule system. The
+`state` member carries the round, current actor, action budget, reaction
+budget, and aim state when combat has started.
+
+The client sends
+`{type:"action_request",id:string,actor:string,target?:string,action:string,mode:string,weapon_instance_id:string,reaction_type?:string,distance?:number}`.
+The server owns all rolls. `actor` must be the caller's active character;
+`target` names a sheet in the room. `reaction_type` is a reaction declared
+by the selected action mode. A request is resolved under the room turn lock.
+
+The server broadcasts
+`{type:"action_result",id:string,ok:true,result:CombatResult,validation_failure:null}`
+only after it atomically commits the combatant sheets, party resource cache,
+and combat turn state. `CombatResult` includes actor, target, action, weapon
+instance/profile, target/roll/success/margin/degrees, each hit's location and
+damage mitigation, reaction, ammo before/after, action/reaction costs, and
+`state_delta` with before/after values. It then publishes a fresh `state`
+snapshot and a Keeper `narrative` grounded in that same committed result.
+For an invalid request, only the caller receives
+`{type:"action_result",id:string,ok:false,result:null,validation_failure:string}`;
+no state is changed. Unknown frame types remain ignorable to older clients.
 
 ## Creation text-input presentation (v2.5)
 
@@ -62,7 +91,7 @@ This is the open, versioned wire protocol between a loreweaver server (started v
 (deterministic core + AI Keeper) is unaffected by transport; the transport-neutral
 session logic is `net.session.SessionCore`, and this document is the language-agnostic seam.
 
-Frames are JSON objects, each shaped `{"type": ...}`. Protocol version: `"2.5"`. The same
+Frames are JSON objects, each shaped `{"type": ...}`. Protocol version: `"2.6"`. The same
 frames + `join` handshake ride the transport; only the carrier + its framing differ:
 
 - **Iroh** (the transport `--serve` starts) — peer-to-peer QUIC. The server
@@ -168,7 +197,7 @@ connections receive `error too_many_connections` before `join` is read.
 ## Server → Client
 
 - `welcome` — sent once, on a successful `join`:
-  `{type:"welcome", protocol:"2.5", features:["media","audio", "imagegen"?, "demo"?, "update"?], room:string, you:{id:string,name:string,role:"player"|"keeper"}, locale:string, server:string, version?:string}`
+  `{type:"welcome", protocol:"2.6", features:["media","audio", "imagegen"?, "demo"?, "update"?], room:string, you:{id:string,name:string,role:"player"|"keeper"}, locale:string, server:string, version?:string}`
   `version` is the server's own release version (compare it to the client's to detect a mismatch). The `"update"` feature appears only for a keeper on a server whose operator configured a self-update command, and gates the `admin_update_server` control.
   `demo` means the server is using its offline sample Keeper, vector support is
   enabled, and this specific Keeper room was empty when the server checked it.

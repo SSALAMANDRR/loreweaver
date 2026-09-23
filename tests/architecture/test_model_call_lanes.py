@@ -31,10 +31,12 @@ KEEPER = "keeper"  # THE Keeper turn: context assembled by agent.prompt_builder 
 SCOPED_ACTOR = "scoped-actor"  # its own prompt from its own record (NPC, companion, Director, Scribe)
 MEMORY = "memory"  # the chronicle fold — summarizes player-grade records
 AUTHORING = "authoring"  # prep/offline generation: forge, module analysis, RAG answers, persona→sheet
+COMBAT_NARRATION = "combat-narration"  # prose over a committed result; no tools or state writes
 PLUMBING = "plumbing"  # transport wrappers that forward a call unchanged
 
 MODEL_CALL_LANES: dict[str, str] = {
     "agent/loop.py": KEEPER,
+    "agent/combat_narration.py": COMBAT_NARRATION,
     "agent/npc_actor.py": SCOPED_ACTOR,
     "agent/companion_actor.py": SCOPED_ACTOR,
     "agent/stage_director.py": SCOPED_ACTOR,

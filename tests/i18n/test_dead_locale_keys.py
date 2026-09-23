@@ -86,7 +86,7 @@ def test_real_locale_tree_is_key_for_key_symmetric():
     # strict parity and cannot silently lose keys or files.
     ru = catalogs.pop("ru")
     assert set(ru) == {
-        "advancement.json", "creation.json", "finalization.json",
+        "advancement.json", "combat.json", "creation.json", "finalization.json",
         "manual_roll.json", "readiness.json",
     }
     assert parity_violations({"en": {name: catalogs["en"][name] for name in ru}, "ru": ru}) == []

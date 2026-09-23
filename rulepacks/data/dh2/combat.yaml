@@ -1,4 +1,25 @@
 version: 1
+presentation:
+  actions:
+    ranged_attack: {en: Ranged attack, ru: Дистанционная атака, zh: 远程攻击}
+    melee_attack: {en: Melee attack, ru: Ближняя атака, zh: 近战攻击}
+    aim: {en: Aim, ru: Прицелиться, zh: 瞄准}
+    reload: {en: Reload, ru: Перезарядить, zh: 装弹}
+  modes:
+    single: {en: Single, ru: Одиночный, zh: 单发}
+    semi: {en: Semi-auto, ru: Полуавтоматический, zh: 半自动}
+    full: {en: Full-auto, ru: Автоматический, zh: 全自动}
+    half: {en: Half action, ru: Полудействие, zh: 半动作}
+  reactions:
+    dodge: {en: Dodge, ru: Уклонение, zh: 闪避}
+    parry: {en: Parry, ru: Парирование, zh: 格挡}
+  locations:
+    head: {en: Head, ru: Голова, zh: 头部}
+    right_arm: {en: Right arm, ru: Правая рука, zh: 右臂}
+    left_arm: {en: Left arm, ru: Левая рука, zh: 左臂}
+    body: {en: Body, ru: Корпус, zh: 躯干}
+    right_leg: {en: Right leg, ru: Правая нога, zh: 右腿}
+    left_leg: {en: Left leg, ru: Левая нога, zh: 左腿}
 # Combat MVP contract. One half action costs 1, one full action costs 2.
 turn_state:
   action_budget_per_turn: 2

@@ -194,6 +194,7 @@ DOCUMENTED_CEILING = (
     + 1  # the Director call, on a beat
     + KP_TURN_WORST_CASE  # the main KP turn
     + COMPANION_SUB_TURNS * (1 + KP_TURN_WORST_CASE)  # each companion: 1 actor call + a nested KP turn
+    + 1  # bounded combat narration over a committed deterministic action
 )
 
 
@@ -398,9 +399,9 @@ def test_the_documented_ceiling_matches_the_number_AGENTS_md_publishes():
     AGENTS.md is where a contributor reads the bound before adding a model-driven lane;
     this constant is what CI enforces. They drift the moment nobody checks.
     """
-    assert DOCUMENTED_CEILING == 155
+    assert DOCUMENTED_CEILING == 156
     assert KP_TURN_WORST_CASE == 21
     agents_md = (Path(__file__).resolve().parents[2] / "AGENTS.md").read_text(encoding="utf-8")
     budget_paragraph = agents_md.split("## Per-turn model-call budget", 1)[1].split("\n## ", 1)[0]
-    assert "~155 model calls" in budget_paragraph
+    assert "~156 model calls" in budget_paragraph
     assert f"= **{KP_TURN_WORST_CASE}**" in budget_paragraph

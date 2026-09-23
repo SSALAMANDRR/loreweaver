@@ -142,6 +142,17 @@ function isFinalization(value: unknown): boolean {
   )
 }
 
+function isCombatSurface(value: unknown): boolean {
+  return isObject(value) && isStr(value.actor) && (value.state === null || isObject(value.state)) &&
+    isArr(value.actions) && value.actions.every((action: unknown) =>
+      isObject(action) && isStr(action.id) && isStr(action.label) && isArr(action.targets) &&
+      action.targets.every(isStr) && isArr(action.modes) && action.modes.every((mode: unknown) =>
+        isObject(mode) && isStr(mode.id) && isStr(mode.label) && isArr(mode.weapons) &&
+        mode.weapons.every((weapon: unknown) => isObject(weapon) && isStr(weapon.id) && isStr(weapon.label)) &&
+        isArr(mode.reactions) && mode.reactions.every((reaction: unknown) =>
+          isObject(reaction) && isStr(reaction.id) && isStr(reaction.label))))
+}
+
 // Per-frame-type validation of the load-bearing required fields. A frame that
 // passes the `type` check but is missing/mistyped these (e.g. `{"type":"state"}`
 // with no party/initiative, or a narrative with no speaker/text) is DROPPED here
@@ -163,12 +174,24 @@ const serverFrameValidators: Record<string, (f: Record<string, unknown>) => bool
   [FrameType.NarrativeDelta]: (f) => isStr(f.id) && isStr(f.speaker) && isStr(f.text),
   [FrameType.PackCards]: (f) => isArr(f.cards),
   [FrameType.Dice]: (f) => isStr(f.actor) && isStr(f.expr) && isNum(f.total),
+  [FrameType.ActionResult]: (f) =>
+    isStr(f.id) && typeof f.ok === "boolean" &&
+    (f.ok ? isObject(f.result) && isStr(f.result.actor) && isStr(f.result.action) &&
+      isStr(f.result.target) && isStr(f.result.weapon_profile_id) &&
+      typeof f.result.success === "boolean" && isNum(f.result.final_damage) &&
+      isArr(f.result.hits) && f.result.hits.every(isObject) &&
+      (f.result.reaction === null || isObject(f.result.reaction)) &&
+      (f.labels === undefined || (isObject(f.labels) && isStr(f.labels.action) &&
+        isStr(f.labels.mode) && isStr(f.labels.weapon) && isStr(f.labels.reaction) &&
+        isObject(f.labels.locations) && Object.values(f.labels.locations).every(isStr)))
+      : isStr(f.validation_failure)),
   [FrameType.Ui]: (f) => isArr(f.blocks) && isStr(f.panel),
   // v1.8 module panels: a manifest is a full-replace panel list; a panel event names
   // its target panel (payload is opaque JSON and may legitimately be null/absent).
   [FrameType.UiManifest]: (f) => isArr(f.panels),
   [FrameType.PanelEvent]: (f) => isStr(f.panel) && f.panel.length > 0,
   [FrameType.State]: (f) => isArr(f.party) && isArr(f.initiative) && isNum(f.online) &&
+    (f.combat === undefined || isCombatSurface(f.combat)) &&
     (f.readiness === undefined || isReadiness(f.readiness)) &&
     (f.finalization === undefined || isFinalization(f.finalization)),
   [FrameType.Presence]: (f) => isArr(f.players) && isNum(f.online),

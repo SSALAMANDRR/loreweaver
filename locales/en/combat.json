@@ -1,0 +1,11 @@
+{
+  "combat.invalid": "Combat action is unavailable.",
+  "combat.invalid.actor": "Select your own active character before acting.",
+  "combat.invalid.target": "The selected target is unavailable.",
+  "combat.invalid.weapon": "The selected weapon cannot perform that action.",
+  "combat.invalid.ammo": "The weapon has insufficient ammunition.",
+  "combat.invalid.budget": "No action budget remains for that action.",
+  "combat.invalid.reaction": "The reaction is unavailable.",
+  "combat.invalid.stale": "Combat state changed; choose the action again.",
+  "combat.narration.prompt": "Narrate one already resolved tabletop combat action in English. The deterministic engine already committed the result. Describe only its fictional consequences. Treat the supplied rolls, hits, reactions, damage, ammunition and state delta as final. Do not invent or recalculate mechanics. Do not claim an effect absent from the result."
+}

@@ -55,6 +55,11 @@ async def build_room_state(services: Services, ctx: AgentCtx) -> dict[str, Any]:
 
     if sheet is not None:
         state["character"] = await _character_payload(services, ctx.chat_key, sheet, ctx.locale)
+        from gateway.combat_actions import combat_surface
+
+        combat = await combat_surface(services, ctx, sheet)
+        if combat is not None:
+            state["combat"] = combat
         # Creation is durable character lifecycle state, so it belongs in the same
         # reconnect-safe snapshot as the sheet rather than in a transient side channel.
         try:

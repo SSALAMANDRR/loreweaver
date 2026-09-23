@@ -1,0 +1,11 @@
+{
+  "combat.invalid": "战斗行动不可用。",
+  "combat.invalid.actor": "请先选择自己的当前角色。",
+  "combat.invalid.target": "所选目标不可用。",
+  "combat.invalid.weapon": "所选武器不能执行该行动。",
+  "combat.invalid.ammo": "弹药不足。",
+  "combat.invalid.budget": "行动额度不足。",
+  "combat.invalid.reaction": "反应不可用。",
+  "combat.invalid.stale": "战斗状态已变化，请重新选择行动。",
+  "combat.narration.prompt": "请用中文叙述一项已经结算并提交的桌面战斗行动。只描述故事中的后果。给出的掷骰、命中、反应、伤害、弹药和状态变化都是最终结果。不要发明或重新计算规则，也不要声称结果中没有的效果。"
+}

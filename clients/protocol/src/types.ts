@@ -7,11 +7,13 @@ import type { CreationCatalog, CreationState, CharacterReadinessState, Character
 // card listing (`list_pack_cards` → `pack_cards`), the structured lane behind every
 // "import from installed pack" picker. 2.3 adds each listed card's `kind`, so a picker
 // can send the right import verb. A 2.0/2.1 client ignores all of it.
-export const PROTOCOL_VERSION = "2.5" as const
+export const PROTOCOL_VERSION = "2.6" as const
 
 export const FrameType = {
   Join: "join",
   Input: "input",
+  ActionRequest: "action_request",
+  ActionResult: "action_result",
   Ping: "ping",
   // v2.2 additive: installed-pack card discovery (player-open) — the structured
   // lane behind "import from installed pack" pickers.
@@ -131,6 +133,80 @@ export interface JoinFrame {
 export interface InputFrame {
   type: typeof FrameType.Input
   text: string
+}
+
+/** A rule-agnostic action chosen from `state.combat.actions`. Rolls stay server-owned. */
+export interface ActionRequestFrame {
+  type: typeof FrameType.ActionRequest
+  id: string
+  actor: string
+  target?: string
+  action: string
+  mode: string
+  weapon_instance_id: string
+  reaction_type?: string
+  distance?: number
+}
+
+export interface ActionModeOption {
+  id: string
+  label: string
+  weapons: Array<{ id: string; label: string }>
+  reactions: Array<{ id: string; label: string }>
+}
+
+export interface ActionOption {
+  id: string
+  label: string
+  modes: ActionModeOption[]
+  targets: string[]
+}
+
+export interface CombatSurface {
+  actor: string
+  actions: ActionOption[]
+  state: Record<string, unknown> | null
+}
+
+/** Engine-authored result, including the committed before/after delta. */
+export interface ActionResultFrame {
+  type: typeof FrameType.ActionResult
+  id: string
+  ok: boolean
+  result: {
+    actor: string
+    target: string
+    action: string
+    weapon_instance_id: string
+    weapon_profile_id: string
+    attack_target: number | null
+    attack_roll: number | null
+    success: boolean
+    margin: number | null
+    degrees: number | null
+    hit_location: string | null
+    reaction: Record<string, unknown> | null
+    raw_damage: number | null
+    penetration: number | null
+    armour_before: number | null
+    armour_after_penetration: number | null
+    tb_reduction: number | null
+    final_damage: number
+    ammo_before: number | null
+    ammo_after: number | null
+    state_delta: Record<string, unknown> | null
+    validation_failure: string | null
+    hits: Array<Record<string, unknown>>
+    shots_fired: number
+  } | null
+  validation_failure: string | null
+  labels?: {
+    action: string
+    mode: string
+    weapon: string
+    locations: Record<string, string>
+    reaction: string
+  }
 }
 
 export interface PingFrame {
@@ -790,6 +866,7 @@ export interface StateFrame {
   finalization?: CharacterFinalizationState
   type: typeof FrameType.State
   character?: CharacterState
+  combat?: CombatSurface
   party: PartyMember[]
   scene?: SceneState
   clock?: ClockState
@@ -1135,6 +1212,7 @@ export interface AdminGeneratedFrame {
 export type ClientFrame =
   | JoinFrame
   | InputFrame
+  | ActionRequestFrame
   | PingFrame
   | ListPackCardsFrame
   | PanelIntentFrame
@@ -1173,6 +1251,7 @@ export type ServerFrame =
   | NarrativeDeltaFrame
   | PackCardsFrame
   | DiceFrame
+  | ActionResultFrame
   | UiFrame
   | UiManifestFrame
   | PanelEventFrame

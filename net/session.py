@@ -63,7 +63,7 @@ logger = logging.getLogger(__name__)
 # `panel_intent` client frame, and pack-asset resolution on the media byte channel.
 # v1.7 added declarative hook-emitted `ui` frames (core.hooks emitUI); v1.6 added
 # player-visible module variables on the state frame.
-_PROTOCOL_VERSION = "2.5"
+_PROTOCOL_VERSION = "2.6"
 # Public alias for out-of-band consumers (the `.lwpack` engine-minimum check in app.py).
 PROTOCOL_VERSION = _PROTOCOL_VERSION
 _SERVER_BANNER = "loreweaver/1"
@@ -229,6 +229,8 @@ def render_frame(event: Event) -> dict[str, Any] | None:
         return delta
     if event.kind == "dice":
         return {"type": "dice", **event.data}
+    if event.kind == "action_result":
+        return dict(event.data)
     if event.kind == "ui":
         return {"type": "ui", **event.data}
     if event.kind == "state":
@@ -586,6 +588,36 @@ class SessionCore:
                 return
             if kind == "panel_intent":
                 await self._handle_panel_intent(member, frame)
+                return
+            if kind == "action_request":
+                if not self.rate_limiter.allow(member.id) or not self.rate_limiter.allow(member.session_key):
+                    await member.send_frame(error_frame("rate_limited", i18n))
+                    return
+                async with self.hub.turn_lock(member.session_key):
+                    if not self._refresh_member_authorization(member):
+                        await member.send_frame(error_frame("forbidden", i18n))
+                        return
+                    from agent.combat_narration import narrate_combat
+                    from gateway.combat_actions import resolve_action
+                    from gateway.turn import publish_state, record_turn_events
+
+                    ctx = self._ctx_for(member)
+                    outcome = await resolve_action(self.services, ctx, frame)
+                    event = Event(kind="action_result", data=outcome)
+                    if not outcome["ok"]:
+                        await member.deliver(event)
+                        return
+                    await self.hub.publish(member.session_key, event)
+                    await record_turn_events(self.services, member.session_key, [event])
+                    await publish_state(self.hub, self.services, ctx)
+                    try:
+                        narration = await narrate_combat(self.services, member.session_key, outcome["result"], ctx.locale)
+                        if narration:
+                            line = Event.narrative(speaker="kp", text=narration)
+                            await self.hub.publish(member.session_key, line)
+                            await record_turn_events(self.services, member.session_key, [line])
+                    except Exception:
+                        logger.exception("combat narration failed after committed action")
                 return
             if kind == "list_pack_cards":
                 # v2.2, player-open: card FILENAMES from installed packs — claimable

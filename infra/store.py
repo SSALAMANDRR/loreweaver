@@ -677,6 +677,56 @@ class Store:
                 conn.rollback()
                 raise
 
+    async def commit_combat_rows(
+        self,
+        room: str,
+        *,
+        documents: Iterable[tuple[str, str, str, str]],
+        state: Iterable[tuple[str, str | None, str | None]],
+    ) -> bool:
+        """Compare and replace combat sheet data and room state in one transaction.
+
+        Each document tuple is (id, expected data, new data, new meta). Existing
+        schema, grants and sequence remain untouched. The room lock serializes
+        turns; these comparisons also reject stale writes from other code paths.
+        """
+        doc_rows = list(documents)
+        state_rows = list(state)
+        async with self._lock:
+            conn = self._ensure_conn()
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                for doc_id, expected, _, _ in doc_rows:
+                    row = conn.execute(
+                        "SELECT data FROM documents WHERE room = ? AND type = 'sheet' AND id = ?",
+                        (room, doc_id),
+                    ).fetchone()
+                    if row is None or row[0] != expected:
+                        conn.rollback()
+                        return False
+                for key, expected, _ in state_rows:
+                    row = conn.execute(
+                        "SELECT value FROM room_state WHERE room = ? AND key = ?", (room, key)
+                    ).fetchone()
+                    if (row[0] if row else None) != expected:
+                        conn.rollback()
+                        return False
+                for doc_id, _, data, meta in doc_rows:
+                    conn.execute(
+                        "UPDATE documents SET data = ?, meta = ? WHERE room = ? AND type = 'sheet' AND id = ?",
+                        (data, meta, room, doc_id),
+                    )
+                for key, _, value in state_rows:
+                    conn.execute(
+                        "INSERT OR REPLACE INTO room_state (room, key, value) VALUES (?, ?, ?)",
+                        (room, key, value),
+                    )
+                self._commit(conn)
+                return True
+            except BaseException:
+                conn.rollback()
+                raise
+
     def close(self) -> None:
         """Close the underlying connection, if one has been opened."""
         if self._conn is not None:

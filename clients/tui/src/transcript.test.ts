@@ -139,7 +139,7 @@ describe("file naming", () => {
   })
 
   test("the default directory honours TRPG_HOME", () => {
-    expect(resolveTranscriptDir({ TRPG_HOME: "/tmp/lw-home" })).toBe("/tmp/lw-home/transcripts")
+    expect(resolveTranscriptDir({ TRPG_HOME: "/tmp/lw-home" })).toBe(join("/tmp/lw-home", "transcripts"))
   })
 })
 

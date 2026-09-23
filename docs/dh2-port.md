@@ -161,10 +161,16 @@ Verified against the source tree on 2026-09-09:
   blocked on missing Table 8-15 data, preserving the roll. Rules written only in
   `rules` remain annotations; session-triggered effects are not automatically run.
 - Studio renders the generic staged-creation state, choices, purchases, equipment
-  and rich sheet information. Protocol 2.4 now owns the creation types and exposes
+  and rich sheet information. Protocol 2.6 owns the creation types and exposes
   readiness plus the mandatory finalization's available actions, rolled result
   and pending choices. Studio renders them without DH2 rules. Result 01 remains
   blocked on the missing table; no UI action bypasses it.
+- Protocol 2.6 also exposes a server-authored combat action catalog for the
+  active character. Studio sends a generic action request; the gateway resolves
+  it through the Combat MVP, atomically persists sheets and turn state, emits
+  the structured result, and asks a tools-disabled narration lane to describe
+  the committed outcome. Initiative advancement and a separate defending
+  player's reaction prompt remain outside this slice.
 
 Relevant coverage includes `test_creation_layers.py`, `test_creation_flow.py`,
 `test_creation_finalization.py`, `test_advancement*.py`, `test_talent*.py`,
@@ -196,8 +202,8 @@ new character can finish creation. Do not bypass that dependency by rerolling.
 ## Localization and distribution
 
 Russian rulepack labels and rule text are distinct from engine messages.
-`locales/ru/` currently translates five complete message domains: creation,
-advancement, manual rolls, finalization and readiness. Other domains use the
+`locales/ru/` currently translates six complete message domains: creation,
+advancement, manual rolls, finalization, readiness and combat. Other domains use the
 existing English fallback. Catalog tests pin the translated domains, key parity
 and format parameters; Russian is not yet a complete engine translation.
 

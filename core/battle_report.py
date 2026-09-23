@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import json
 import time
+import uuid
 from datetime import datetime
 
 from infra.i18n import I18n, get_i18n
@@ -318,7 +319,9 @@ class BattleReportGenerator:
         if current is not None:
             await self.end_session(chat_key)
 
-        session_id = f"session_{time.time_ns()}"
+        # Windows clocks can return the same nanosecond value for successive
+        # starts; a forced restart must not overwrite the archived session.
+        session_id = f"session_{time.time_ns()}_{uuid.uuid4().hex}"
 
         if not session_name:
             session_name = _default_session_name(datetime.now(), i18n)
