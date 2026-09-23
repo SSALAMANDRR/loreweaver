@@ -21,6 +21,23 @@ from gateway.turn import publish_state
 _HIDDEN_MARK = "?"
 
 
+# Engine diagnostics a keeper can act on, by the fragment that identifies them.
+_START_FAILURES = (
+    ("at least two", "combat.command.start.too_few"),
+    ("already active", "combat.command.start.active"),
+    ("not keeper-controlled", "combat.command.start.not_npc"),
+    ("unavailable", "combat.command.start.unknown"),
+    ("rulepack", "combat.command.start.system"),
+)
+
+
+def _start_failure(ctx: CommandCtx, reason: str) -> str:
+    for fragment, key in _START_FAILURES:
+        if fragment in reason:
+            return ctx.i18n.t(key)
+    return ctx.i18n.t("combat.command.start_failed", reason=reason)
+
+
 class CombatCommands:
     """`CommandRouter` mixin — see the module docstring."""
 
@@ -74,7 +91,7 @@ class CombatCommands:
             try:
                 await start_room_encounter(ctx.services, agent_ctx, names, hidden=hidden)
             except CombatValidationError as exc:
-                return ctx.fail(ctx.i18n.t("combat.command.start_failed", reason=str(exc)))
+                return ctx.fail(_start_failure(ctx, str(exc)))
         elif sub == "end":
             if not await end_room_encounter(ctx.services, agent_ctx):
                 return ctx.fail(ctx.i18n.t("combat.command.none"))

@@ -161,3 +161,64 @@ async def test_other_players_never_see_the_npc_sheet_values():
         assert "Искусный Стук" not in text and "\"BS\"" not in text
     keeper = await combat_surface(services, KEEPER)
     assert keeper["state"]["combatants"]["Trooper Vex"]["controller"] == "keeper"
+
+
+async def _solo_room(locale="ru"):
+    """Solo play: the keeper both runs the NPCs and plays their own PC."""
+    services = build_services(
+        Settings(locale=locale, default_rulepack="dh2"), llm=FakeLLM(script=[]), embeddings=FakeEmbeddings(64)
+    )
+    keeper = AgentCtx(chat_key=CHAT, user_id="keeper-1", platform="tui", locale=locale, extra={"role": "keeper"})
+    catalog = load_item_catalog(load_rulepack("dh2"))
+    kardel = CharacterSheet("Кардел", "dh2")
+    kardel.attributes.update({"BS": 40, "WS": 40, "S": 35, "T": 35, "Ag": 40, "WOUNDS": 12, "DAMAGE": 0})
+    kardel.equipment = [ItemInstance.create(catalog.resolve("lasgun"), state={"current_ammo": 60})]
+    await services.characters.save_character("keeper-1", CHAT, kardel)
+    return services, CommandRouter(services), keeper, kardel
+
+
+async def test_keeper_owned_pc_joins_the_encounter_as_a_player_character():
+    services, router, keeper, kardel = await _solo_room()
+    assert (await router.dispatch(keeper, ".npc create hive_scum | Культист")).startswith("✅")
+    started = await router.dispatch(keeper, ".combat start Культист")
+    assert not started.startswith("❌"), started
+
+    state = await load_encounter(services, CHAT)
+    assert sorted(state.order) == sorted(["Кардел", "Культист"]) and len(state.combatants) == 2
+    # The keeper's PC is a player character under the keeper's own member id; only the NPC is keeper-side.
+    assert state.combatants["Кардел"].controller == "keeper-1"
+    assert state.combatants["Культист"].controller == "keeper"
+    roster = {member["name"] for member in await services.characters.get_party_roster(CHAT)}
+    assert "Кардел" in roster and "Культист" not in roster
+
+    # The keeper drives both: its own PC on its turn and the NPC on the NPC's turn.
+    for step in range(2):
+        current = (await load_encounter(services, CHAT)).current_actor
+        surface = await combat_surface(services, keeper, kardel)
+        assert surface["actor"] == current and surface["end_turn"]
+        if current == "Кардел":
+            assert "Культист" in next(a for a in surface["actions"] if a["id"] == "ranged_attack")["targets"]
+        ended = await resolve_action(services, keeper, {"id": f"solo-{step}", "actor": current, "action": END_TURN_ACTION})
+        assert ended["ok"], ended
+
+
+async def test_keeper_cannot_name_their_own_pc_as_an_opponent():
+    services, router, keeper, _kardel = await _solo_room()
+    await router.dispatch(keeper, ".npc create hive_scum | Культист")
+    refused = await router.dispatch(keeper, ".combat start Культист, Кардел")
+    assert refused == get_i18n("ru").t("combat.command.start.not_npc")
+    assert await load_encounter(services, CHAT) is None
+    assert "Кардел" in {member["name"] for member in await services.characters.get_party_roster(CHAT)}
+
+
+async def test_start_failures_are_localized_rather_than_engine_english():
+    services = build_services(
+        Settings(locale="ru", default_rulepack="dh2"), llm=FakeLLM(script=[]), embeddings=FakeEmbeddings(64)
+    )
+    router = CommandRouter(services)
+    keeper = AgentCtx(chat_key=CHAT, user_id="keeper-1", platform="tui", locale="ru", extra={"role": "keeper"})
+    await router.dispatch(keeper, ".npc create hive_scum | Культист")
+    too_few = await router.dispatch(keeper, ".combat start Культист")
+    assert too_few == get_i18n("ru").t("combat.command.start.too_few")
+    assert "combatants" not in too_few
+    assert await router.dispatch(keeper, ".combat start Никто") == get_i18n("ru").t("combat.command.start.unknown")

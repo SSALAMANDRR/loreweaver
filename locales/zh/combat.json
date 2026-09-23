@@ -21,6 +21,11 @@
   "combat.command.hidden_marker": "（隐藏）",
   "combat.command.defeated_marker": "（已退出战斗）",
   "combat.command.start_failed": "无法开始战斗：{reason}",
+  "combat.command.start.too_few": "战斗至少需要两名战斗者：队伍中的角色加上至少一名 NPC。",
+  "combat.command.start.active": "战斗已在进行中；请先用 `.combat end` 结束它。",
+  "combat.command.start.not_npc": "只能把 NPC 属性卡（见 `.npc create`）指定为对手；玩家角色会自动从队伍加入。",
+  "combat.command.start.unknown": "没有该名字的 NPC 或属性卡。",
+  "combat.command.start.system": "所有战斗者必须使用同一规则系统。",
   "combat.command.ended": "战斗已结束。",
   "combat.command.not_found": "没有名为 {name} 的守秘人控制战斗者。",
   "combat.narration.prompt": "请用中文叙述一项已经结算并提交的桌面战斗行动。只描述故事中的后果。给出的掷骰、命中、反应、伤害、弹药和状态变化都是最终结果。不要发明或重新计算规则，也不要声称结果中没有的效果。可选的上下文（场景、行动顺序、战斗者的公开描述）是玩家能看到的内容；不要透露超出其范围的信息。攻击者或目标名字为空表示玩家看不到该战斗者：不要称呼或描述它。 当 `target_defeated` 为真时，引擎已让目标退出战斗：描写其倒下，但不要判定它是死亡还是仅失去战斗能力。"

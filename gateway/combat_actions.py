@@ -506,22 +506,27 @@ async def start_room_encounter(
     services: Services, ctx: AgentCtx, npc_names: list[str], *, hidden: set[str] | None = None
 ) -> tuple[CombatState, list[Any]]:
     """Open an encounter with every player character of the room's system plus the named
-    keeper-side combatants, rolling initiative server-side. Raises CombatValidationError."""
+    keeper-side combatants, rolling initiative server-side. Raises CombatValidationError.
+
+    A character sheet owned by a member is a player character whoever that member is:
+    a keeper playing their own PC (solo play) fights under their own member id, exactly
+    like any player. Keeper-side combatants are only sheets no member owns (`npc:`).
+    """
     from agent import npc as npc_records
 
     raw_state = await services.store.state_get(ctx.chat_key, COMBAT_STATE_KEY)
     if raw_state:
         raise CombatValidationError("an encounter is already active")  # i18n-exempt: internal validation diagnostic
-    keeper_uid = ctx.uid()
     members: list[EncounterCombatant] = []
     rows: dict[str, dict[str, Any]] = {}
     for requested in npc_names:
         record = await npc_records.get_npc(services.documents, ctx.chat_key, requested)
         sheet_name = (record.stat_char or record.name) if record is not None else requested
         row, sheet = await _sheet(services, ctx.chat_key, sheet_name)
-        owner = _owner(row)
-        if _is_player_owner(owner) and owner != keeper_uid:
+        if _is_player_owner(_owner(row)):
             raise CombatValidationError(f"combatant {sheet_name!r} is not keeper-controlled")  # i18n-exempt: internal validation diagnostic
+        if sheet.name in rows:
+            continue
         rows[sheet.name] = row
         members.append(EncounterCombatant(sheet, KEEPER_CONTROLLER, sheet.name in (hidden or set())))
     npc_system = members[0].sheet.system if members else ""
@@ -534,11 +539,11 @@ async def start_room_encounter(
             continue
         owner = _owner(row)
         sheet = CharacterSheet.from_dict(json.loads(row["data"]))
-        if not _is_player_owner(owner) or owner == keeper_uid or (npc_system and sheet.system != npc_system):
+        if not _is_player_owner(owner) or (npc_system and sheet.system != npc_system):
             continue
         rows[sheet.name] = row
         members.append(EncounterCombatant(sheet, owner))
-    if not members:
+    if len(members) < 2:
         raise CombatValidationError("an encounter needs at least two uniquely named combatants")  # i18n-exempt: internal validation diagnostic
     pack = load_rulepack(members[0].sheet.system)
     state, rolls = start_encounter(members, pack=pack)
