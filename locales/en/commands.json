@@ -126,6 +126,7 @@
   "commands.help.hidden_roll": "Roll hidden dice.",
   "commands.help.imagegen": "Keeper: show, set, or disable the image-generation endpoint.",
   "commands.help.init": "Roll initiative.",
+  "commands.help.combat": "Keeper: start, inspect, curate or end the deterministic combat encounter.",
   "commands.help.jrrp": "Show daily luck.",
   "commands.help.keeper_section": "Keeper: {commands}",
   "commands.help.language": "Set the room language.",

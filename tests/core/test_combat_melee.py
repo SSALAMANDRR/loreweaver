@@ -61,7 +61,7 @@ def test_successful_melee_hit_uses_ws_weapon_damage_armour_tb_and_action_budget(
     result = resolve_melee_attack(request, combat_state=combat_state, pack=pack)
 
     assert result.ok and result.action == "melee_attack"
-    assert result.attack_target == 50 and result.attack_roll == 20
+    assert result.attack_target == 60 and result.attack_roll == 20  # WS 50 + Standard Attack +10
     assert result.success is True and result.hit_location == "body"
     assert result.raw_damage == damage_roll + 4
     assert result.penetration == 0
@@ -85,7 +85,7 @@ def test_failed_ws_check_consumes_action_without_damage():
 
     result = resolve_melee_attack(request, combat_state=combat_state, pack=pack)
 
-    assert result.ok and result.attack_target == 50 and result.success is False
+    assert result.ok and result.attack_target == 60 and result.success is False
     assert result.final_damage == 0
     apply_state_delta(request, result, combat_state=combat_state, pack=pack)
     assert target.attributes["DAMAGE"] == 0

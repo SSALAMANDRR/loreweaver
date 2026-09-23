@@ -1,35 +1,58 @@
 *English · [中文](protocol.zh.md)*
 
-# loreweaver networked TUI — wire protocol 2.6
+# loreweaver networked TUI — wire protocol 2.7
 
-## Deterministic action transport (v2.6)
+## Encounters and defender reactions (v2.7)
 
-`state.combat`, when present, is a per-viewer action catalog for the caller's
-active character. It contains `actor`, `actions` and nullable `state`. Every
-action has an `id`, localized server-authored `label`, `targets`, and `modes`.
-Each mode has an `id`, localized `label`, usable `weapons` (`id` is an item
-instance ID, `label` is its profile name), and supported `reactions`. The
-client selects from these values without interpreting a rule system. The
-`state` member carries the round, current actor, action budget, reaction
-budget, and aim state when combat has started.
+A keeper opens an encounter with `.combat start <npc>[, ?<hidden npc>…]`: the
+server rolls every combatant's initiative from the rulepack, orders it, and
+stores round, current actor, budgets and at most one pending reaction. While no
+encounter is active `state.combat` is absent and every `action_request` is
+refused.
 
-The client sends
-`{type:"action_request",id:string,actor:string,target?:string,action:string,mode:string,weapon_instance_id:string,reaction_type?:string,distance?:number}`.
-The server owns all rolls. `actor` must be the caller's active character;
-`target` names a sheet in the room. `reaction_type` is a reaction declared
-by the selected action mode. A request is resolved under the room turn lock.
+`state.combat` is projected per viewer (the same chokepoint discipline as
+documents): `{actor, actions, state, end_turn?, reaction?}`.
 
-The server broadcasts
-`{type:"action_result",id:string,ok:true,result:CombatResult,validation_failure:null}`
-only after it atomically commits the combatant sheets, party resource cache,
-and combat turn state. `CombatResult` includes actor, target, action, weapon
-instance/profile, target/roll/success/margin/degrees, each hit's location and
-damage mitigation, reaction, ammo before/after, action/reaction costs, and
-`state_delta` with before/after values. It then publishes a fresh `state`
-snapshot and a Keeper `narrative` grounded in that same committed result.
-For an invalid request, only the caller receives
-`{type:"action_result",id:string,ok:false,result:null,validation_failure:string}`;
-no state is changed. Unknown frame types remain ignorable to older clients.
+- `state` — `{round_number, current_actor, order, combatants, pending_reaction}`.
+  `order` lists `{name, initiative, current, controlled, keeper_controlled}`
+  for combatants the viewer may see; players never see hidden combatants
+  (`current_actor` is `null` while a hidden one acts). `combatants` holds
+  counters only for combatants that are not keeper-controlled (keepers see all).
+  `pending_reaction` is `{id, attacker, defender, action, mode, hit_count,
+  choices?}`; `attacker` is `""` when hidden, and `choices` appears only for the
+  viewer who controls the defender.
+- `actor` / `actions` / `end_turn` — present only when the viewer controls the
+  current combatant and no reaction is pending. `actions` already excludes
+  anything the rules or turn state forbid (spent budget, repeated actions,
+  per-turn subtype limits). `end_turn` is `{id, label}`.
+- `reaction` — only for the viewer authorised to answer the pending attack:
+  `{id, actor, attacker, action, hit_count, choices:[{id,label}]}`; the last
+  choice is always `decline`.
+
+Clients send one frame shape for every choice:
+`{type:"action_request", id, actor, action, mode?, weapon_instance_id?, target?, distance?, pending_id?}`.
+
+- catalog action: `action`, `mode`, `weapon_instance_id` (+ `target`) from `actions`;
+- end turn: `action: end_turn.id`;
+- reaction: `action:"reaction"`, `mode:<choice id>`, `pending_id: reaction.id`,
+  `actor: reaction.actor`.
+
+The server owns every roll. A request is refused (no state changes) when the
+actor is not controlled by the caller, it is not the actor's turn, a reaction is
+pending, the attacker names a reaction (`reaction_type` is rejected), or `id`
+repeats a recent request. A hit whose defender can still react stops **before
+damage**: the result carries `pending_reaction` and no damage; the defender's
+answer finishes the attack. Requests run under the room turn lock and commit
+sheets, party resource cache and encounter state in one compare-and-swap
+transaction.
+
+`action_result` (`{type, id, ok, result, labels?, validation_failure}`) is sent
+per connection: keeper connections get the full `CombatResult`; players get a
+projection without `state_delta.combat_state_*`, with keeper-side values of
+keeper-controlled combatants (skill targets, armour/TB mitigation, damage
+counters, ammunition) set to `null`, and hidden combatant names blanked. Only a
+fully resolved attack/utility action is narrated, from that player-grade
+projection. An invalid request's result goes to the caller alone.
 
 ## Creation text-input presentation (v2.5)
 
@@ -91,7 +114,7 @@ This is the open, versioned wire protocol between a loreweaver server (started v
 (deterministic core + AI Keeper) is unaffected by transport; the transport-neutral
 session logic is `net.session.SessionCore`, and this document is the language-agnostic seam.
 
-Frames are JSON objects, each shaped `{"type": ...}`. Protocol version: `"2.6"`. The same
+Frames are JSON objects, each shaped `{"type": ...}`. Protocol version: `"2.7"`. The same
 frames + `join` handshake ride the transport; only the carrier + its framing differ:
 
 - **Iroh** (the transport `--serve` starts) — peer-to-peer QUIC. The server
@@ -197,7 +220,7 @@ connections receive `error too_many_connections` before `join` is read.
 ## Server → Client
 
 - `welcome` — sent once, on a successful `join`:
-  `{type:"welcome", protocol:"2.6", features:["media","audio", "imagegen"?, "demo"?, "update"?], room:string, you:{id:string,name:string,role:"player"|"keeper"}, locale:string, server:string, version?:string}`
+  `{type:"welcome", protocol:"2.7", features:["media","audio", "imagegen"?, "demo"?, "update"?], room:string, you:{id:string,name:string,role:"player"|"keeper"}, locale:string, server:string, version?:string}`
   `version` is the server's own release version (compare it to the client's to detect a mismatch). The `"update"` feature appears only for a keeper on a server whose operator configured a self-update command, and gates the `admin_update_server` control.
   `demo` means the server is using its offline sample Keeper, vector support is
   enabled, and this specific Keeper room was empty when the server checked it.

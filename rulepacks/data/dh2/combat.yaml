@@ -20,17 +20,35 @@ presentation:
     body: {en: Body, ru: Корпус, zh: 躯干}
     right_leg: {en: Right leg, ru: Правая нога, zh: 右腿}
     left_leg: {en: Left leg, ru: Левая нога, zh: 左腿}
-# Combat MVP contract. One half action costs 1, one full action costs 2.
+# One half action costs 1, one full action costs 2 (a full action excludes half actions).
 turn_state:
   action_budget_per_turn: 2
   reactions_per_round: 1
   reaction_reset: round
+  # Two half actions in one turn must be different actions.
+  distinct_actions_per_turn: true
+  # At most one Attack-subtype and one Concentration-subtype action per turn.
+  subtype_limits_per_turn: {attack: 1, concentration: 1}
+  # Evasion happens after the hit is established and before damage is rolled.
+  reaction_window: before_damage
+  aim_lost_on_reaction: true
+initiative:
+  # Roll expression: rulepacks/dh2.yaml `initiative.roll` (1d10 + Agility Bonus).
+  order: descending
+  tie_breakers:
+    - {value: Ag}
+    # The source does not say what happens when the 1d10 roll-off ties again;
+    # repeating it is our policy (see provenance.implementation_choices).
+    - {roll: 1d10, repeat_on_tie: true}
 margin_unit: degrees
 actions:
   ranged_attack:
     modes:
       single:
         action_cost: 1
+        subtypes: [attack]
+        # Standard Attack is an Ordinary (+10) test.
+        attack_modifier: 10
         attack_value: BS
         damage_value: Damage
         toughness_value: TB
@@ -64,6 +82,9 @@ actions:
     modes:
       single:
         action_cost: 1
+        subtypes: [attack]
+        # Standard Attack is an Ordinary (+10) test.
+        attack_modifier: 10
         attack_value: WS
         damage_value: Damage
         toughness_value: TB
@@ -75,18 +96,34 @@ actions:
           dodge: {cost: 1, spend_on: attempt, target_value: DodgeTarget, hits_avoided_per_degree: 1}
   aim:
     modes:
-      half: {action_cost: 1, attack_modifier: 10}
-      full: {action_cost: 2, attack_modifier: 20}
+      half: {action_cost: 1, attack_modifier: 10, subtypes: [concentration]}
+      full: {action_cost: 2, attack_modifier: 20, subtypes: [concentration]}
   reload:
     modes:
-      full: {action_cost: 2}
+      full: {action_cost: 2, subtypes: [misc]}
+# Rule sources: section keys of rule source DH2_RU_OKP_V1_8 (docs/dh2-port.md).
+# null = the value is a local MVP contract not yet verified against the source.
 provenance:
-  action_economy: null
-  reaction_economy: null
-  aim_modifiers: null
+  action_economy: [CH07_H013, CH07_H014, CH07_H019]
+  distinct_actions_per_turn: [CH07_H014, CH07_H019]
+  subtype_limits_per_turn: CH07_H019
+  action_subtypes: [CH07_H051, CH07_H021, CH07_H046]
+  standard_attack_modifier: CH07_H051
+  reaction_economy: CH07_H015
+  reaction_outside_own_turn: [CH07_H015, CH07_H019, CH07_H029]
+  reaction_window: [CH07_H029, CH07_H061]
+  reaction_choices: CH07_H029
+  aim_modifiers: CH07_H021
+  aim_lost_on_reaction: CH07_H021
+  initiative_roll: CH07_H011
+  initiative_tie_breakers: CH07_H011
+  turn_order: [CH07_H002, CH07_H003, CH07_H008, CH07_H009, CH07_H011]
   range_modifiers: null
   fire_mode_modifiers: null
   extra_hit_locations: null
+  # Engine policies for edge cases the source leaves unspecified — NOT canon.
+  implementation_choices:
+    initiative_roll_off_repeat: "CH07_H011 orders a 1d10 roll-off for equal initiative and Agility but is silent on a repeated tie; the still-tied combatants roll again."
 hit_locations:
   - {max: 10, id: head}
   - {max: 20, id: right_arm}

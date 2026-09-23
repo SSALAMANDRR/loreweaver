@@ -7,16 +7,31 @@ and the other system-specific values consumed here.
 from __future__ import annotations
 
 import copy
+import json
+import re
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
 from core.check_outcome import CheckOutcome, RollDetail
 from core.dice_engine import DiceRoller
+from core.documents import Viewer
 from core.item_model import ItemInstance, ItemProfileCatalog
 from core.sheets import sheet_value
 from core.yaml_safety import safe_load_no_aliases
+
+# The room_state row holding the serialized encounter (written by gateway.combat_actions).
+COMBAT_STATE_KEY = "combat_state"
+# The opaque controller token for keeper-run combatants; any other non-empty
+# controller is the member id that owns the combatant's sheet.
+KEEPER_CONTROLLER = "keeper"
+DECLINE_REACTION = "decline"
+# Engine lifecycle action ids; a rulepack may not declare actions with these names.
+END_TURN_ACTION = "end_turn"
+REACTION_ACTION = "reaction"
+_RESERVED_ACTIONS = frozenset({END_TURN_ACTION, REACTION_ACTION})
+_ROLL_OFF_LIMIT = 100
 
 
 class CombatValidationError(ValueError):
@@ -33,15 +48,21 @@ class CombatantState:
     reactions_max: int
     aim_bonus: int = 0
     aimed_weapon_instance_id: str | None = None
+    turn_actions: list[str] = field(default_factory=list)
+    initiative: int | None = None
+    controller: str = ""
+    hidden: bool = False
 
 
 @dataclass
 class CombatState:
-    """Minimal round/turn state, deliberately not a full encounter manager."""
+    """Encounter state: initiative order, turn pointer, budgets, one pending reaction."""
 
     round_number: int
     current_actor: str
     combatants: dict[str, CombatantState] = field(default_factory=dict)
+    order: list[str] = field(default_factory=list)
+    pending_reaction: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -72,6 +93,7 @@ class _ActionContract:
     reactions: Mapping[str, _ReactionContract]
     attack_modifier: int = 0
     extra_hit_degrees: int | None = None
+    subtypes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -79,6 +101,10 @@ class _CombatContract:
     action_budget_per_turn: int
     reactions_per_round: int
     reaction_reset: str
+    distinct_actions_per_turn: bool = False
+    subtype_limits: Mapping[str, int] = field(default_factory=dict)
+    reaction_window: str | None = None
+    aim_lost_on_reaction: bool = False
 
 
 @dataclass(frozen=True)
@@ -139,6 +165,9 @@ class CombatResult:
     validation_failure: str | None = None
     hits: tuple[HitResult, ...] = ()
     shots_fired: int = 0
+    mode: str = ""
+    # Set when the attack hit and now waits for the defender's reaction choice.
+    pending_reaction: Mapping[str, Any] | None = None
 
     @property
     def ok(self) -> bool:
@@ -156,6 +185,18 @@ class HitResult:
     armour_after_penetration: int
     tb_reduction: int
     final_damage: int
+
+
+def combat_state_from_json(raw: str) -> CombatState:
+    """Parse a stored encounter row; transport bookkeeping keys are ignored."""
+    data = json.loads(raw)
+    return CombatState(
+        round_number=data["round_number"],
+        current_actor=data["current_actor"],
+        combatants={name: CombatantState(**row) for name, row in data["combatants"].items()},
+        order=list(data.get("order") or []),
+        pending_reaction=data.get("pending_reaction"),
+    )
 
 
 def _data_path(pack: Any) -> Path:
@@ -192,6 +233,12 @@ def _contract(pack: Any) -> _CombatContract:
     reset = str(raw.get("reaction_reset") or "").strip()
     if reset != "round":
         raise CombatValidationError("unsupported reaction reset semantics")
+    window = raw.get("reaction_window")
+    if window is not None and window != "before_damage":
+        raise CombatValidationError("unsupported reaction window semantics")
+    limits_raw = raw.get("subtype_limits_per_turn") or {}
+    if not isinstance(limits_raw, Mapping):
+        raise CombatValidationError("turn subtype limits must be a mapping")  # i18n-exempt: internal validation diagnostic
     return _CombatContract(
         action_budget_per_turn=_required_int(
             raw.get("action_budget_per_turn"),
@@ -202,10 +249,19 @@ def _contract(pack: Any) -> _CombatContract:
             raw.get("reactions_per_round"), where="turn_state.reactions_per_round"
         ),
         reaction_reset=reset,
+        distinct_actions_per_turn=raw.get("distinct_actions_per_turn") is True,
+        subtype_limits={
+            str(name): _required_int(limit, where="subtype limit", minimum=1)
+            for name, limit in limits_raw.items()
+        },
+        reaction_window=window,
+        aim_lost_on_reaction=raw.get("aim_lost_on_reaction") is True,
     )
 
 
 def _action_contract(pack: Any, action: str, mode: str) -> _ActionContract:
+    if action in _RESERVED_ACTIONS:
+        raise CombatValidationError(f"combat action {action!r} is reserved by the engine")
     actions = _combat_data(pack).get("actions")
     action_raw = actions.get(action) if isinstance(actions, Mapping) else None
     modes = action_raw.get("modes") if isinstance(action_raw, Mapping) else None
@@ -238,6 +294,10 @@ def _action_contract(pack: Any, action: str, mode: str) -> _ActionContract:
             if mode_raw.get("extra_hit_degrees") is not None else None
         ),
     }
+    subtypes_raw = mode_raw.get("subtypes") or []
+    if not isinstance(subtypes_raw, list) or not all(isinstance(value, str) and value for value in subtypes_raw):
+        raise CombatValidationError("action subtypes must be a list of names")  # i18n-exempt: internal validation diagnostic
+    extra_values["subtypes"] = tuple(subtypes_raw)
     if extra_values["extra_hit_degrees"] is not None and _combat_data(pack).get("margin_unit") != "degrees":
         raise CombatValidationError("multi-hit action requires degree margin")  # i18n-exempt: internal validation diagnostic
     reactions_raw = mode_raw.get("reactions")
@@ -307,6 +367,7 @@ def resolve_turn_transition(
     next_state = after.combatants[next_actor]
     next_state.action_budget = contract.action_budget_per_turn
     next_state.action_budget_max = contract.action_budget_per_turn
+    next_state.turn_actions = []
     if next_round > state.round_number and contract.reaction_reset == "round":
         for combatant in after.combatants.values():
             combatant.reactions_remaining = contract.reactions_per_round
@@ -330,6 +391,141 @@ def apply_combat_state_delta(state: CombatState, delta: StateDelta) -> None:
     if state != delta.combat_state_before:
         raise CombatValidationError("stale combat state")
     _replace_combat_state(state, delta.combat_state_after)
+
+
+@dataclass(frozen=True)
+class InitiativeEntry:
+    """One combatant's committed initiative roll and the tie-break values used."""
+
+    name: str
+    expression: str
+    total: int
+    tie_break: tuple[int, ...] = ()
+
+
+@dataclass(frozen=True)
+class EncounterCombatant:
+    sheet: Any
+    controller: str
+    hidden: bool = False
+
+
+def _initiative_contract(pack: Any) -> list[Mapping[str, Any]]:
+    raw = _combat_data(pack).get("initiative")
+    if not isinstance(raw, Mapping) or raw.get("order") != "descending":
+        raise CombatValidationError("combat initiative contract is missing")  # i18n-exempt: internal validation diagnostic
+    breakers = raw.get("tie_breakers") or []
+    if not isinstance(breakers, list):
+        raise CombatValidationError("initiative tie breakers must be a list")  # i18n-exempt: internal validation diagnostic
+    for breaker in breakers:
+        valid = isinstance(breaker, Mapping) and (
+            set(breaker) == {"value"} or set(breaker) in ({"roll"}, {"roll", "repeat_on_tie"})
+        )
+        if not valid or ("repeat_on_tie" in breaker and not isinstance(breaker["repeat_on_tie"], bool)):
+            raise CombatValidationError("unsupported initiative tie breaker")  # i18n-exempt: internal validation diagnostic
+    return list(breakers)
+
+
+def roll_initiative(sheet: Any, pack: Any, dice: DiceRoller | None = None) -> InitiativeEntry:
+    """Roll the pack's ``initiative.roll``; ``{Name}`` slots read canonical sheet values."""
+    expression = str(getattr(pack, "initiative_roll", "") or "")
+    if not expression:
+        raise CombatValidationError("rulepack declares no initiative roll")  # i18n-exempt: internal validation diagnostic
+    filled = re.sub(r"\{([^{}]+)\}", lambda match: str(sheet_value(sheet, pack, match.group(1))), expression)
+    total = (dice or DiceRoller()).roll_expression(_dice_expression(filled)).total
+    return InitiativeEntry(_name(sheet), filled, int(total))
+
+
+def order_initiative(
+    entries: list[InitiativeEntry], sheets: Mapping[str, Any], pack: Any, dice: DiceRoller | None = None
+) -> list[InitiativeEntry]:
+    """Order highest first, applying the pack's tie breakers only inside tied groups."""
+    breakers = _initiative_contract(pack)
+    roller = dice or DiceRoller()
+
+    def settle(group: list[InitiativeEntry], depth: int) -> list[InitiativeEntry]:
+        # A tie no declared breaker separates keeps the combatants' declaration order.
+        if len(group) < 2 or depth >= len(breakers):
+            return group
+        breaker = breakers[depth]
+        if "value" in breaker:
+            keyed = [
+                (sheet_value(sheets[entry.name], pack, str(breaker["value"])), entry) for entry in group
+            ]
+            return split(keyed, lambda tied: settle(tied, depth + 1))
+        roll = _dice_expression(str(breaker["roll"]))
+        if breaker.get("repeat_on_tie") is not True:
+            keyed = [(roller.roll_expression(roll).total, entry) for entry in group]
+            return split(keyed, lambda tied: settle(tied, depth + 1))
+        # Pack policy: repeat the roll-off among whoever it leaves tied.
+        for _attempt in range(_ROLL_OFF_LIMIT):
+            keyed = [(roller.roll_expression(roll).total, entry) for entry in group]
+            if len({value for value, _entry in keyed}) > 1:
+                return split(keyed, lambda tied: settle(tied, depth))
+        return group
+
+    def split(keyed: list[tuple[int, InitiativeEntry]], resolve_tie: Any) -> list[InitiativeEntry]:
+        ordered: list[InitiativeEntry] = []
+        for value in sorted({value for value, _entry in keyed}, reverse=True):
+            tied = [
+                InitiativeEntry(entry.name, entry.expression, entry.total, (*entry.tie_break, int(value)))
+                for key, entry in keyed
+                if key == value
+            ]
+            ordered.extend(resolve_tie(tied) if len(tied) > 1 else tied)
+        return ordered
+
+    by_total: dict[int, list[InitiativeEntry]] = {}
+    for entry in entries:
+        by_total.setdefault(entry.total, []).append(entry)
+    ordered: list[InitiativeEntry] = []
+    for total in sorted(by_total, reverse=True):
+        ordered.extend(settle(by_total[total], 0))
+    return ordered
+
+
+def start_encounter(
+    combatants: Iterable[EncounterCombatant], *, pack: Any, dice: DiceRoller | None = None
+) -> tuple[CombatState, list[InitiativeEntry]]:
+    """Roll initiative for every combatant and open round one on the highest roll."""
+    members = list(combatants)
+    names = [_name(member.sheet) for member in members]
+    if len(members) < 2 or len(set(names)) != len(names) or not all(names):
+        raise CombatValidationError("an encounter needs at least two uniquely named combatants")  # i18n-exempt: internal validation diagnostic
+    if any(getattr(member.sheet, "system", "") != pack.system for member in members):
+        raise CombatValidationError("every combatant must use the encounter rulepack")  # i18n-exempt: internal validation diagnostic
+    if any(not member.controller for member in members):
+        raise CombatValidationError("every combatant needs a controller")  # i18n-exempt: internal validation diagnostic
+    roller = dice or DiceRoller()
+    sheets = {_name(member.sheet): member.sheet for member in members}
+    rolled = [roll_initiative(member.sheet, pack, roller) for member in members]
+    ordered = order_initiative(rolled, sheets, pack, roller)
+    order = [entry.name for entry in ordered]
+    state = create_combat_state(order, current_actor=order[0], pack=pack)
+    state.order = order
+    for member, entry in zip(members, rolled, strict=True):
+        combatant = state.combatants[entry.name]
+        combatant.initiative = entry.total
+        combatant.controller = member.controller
+        combatant.hidden = member.hidden
+    return state, ordered
+
+
+def resolve_end_turn(state: CombatState, *, pack: Any) -> StateDelta:
+    """Advance to the next combatant in initiative order, opening a new round on wrap."""
+    if state.pending_reaction is not None:
+        raise CombatValidationError("a reaction is pending")
+    if not state.order or state.current_actor not in state.order:
+        raise CombatValidationError("encounter has no initiative order")  # i18n-exempt: internal validation diagnostic
+    index = state.order.index(state.current_actor)
+    wrapped = index + 1 >= len(state.order)
+    next_actor = state.order[0 if wrapped else index + 1]
+    return resolve_turn_transition(
+        state,
+        next_actor=next_actor,
+        pack=pack,
+        round_number=state.round_number + 1 if wrapped else state.round_number,
+    )
 
 
 def _location(pack: Any, roll: int) -> str:
@@ -423,6 +619,97 @@ def _range_modifier(pack: Any, distance: int | None, profile: Any) -> int:
     raise CombatValidationError("target is out of weapon range")  # i18n-exempt: internal validation diagnostic
 
 
+def _turn_entry(action: str, mode: str) -> str:
+    return f"{action}:{mode}"
+
+
+def _check_turn_constraints(
+    pack: Any, action: str, action_contract: _ActionContract, state: CombatState, actor_state: CombatantState
+) -> None:
+    """Pack-declared per-turn limits: repeated actions and per-subtype caps."""
+    if state.pending_reaction is not None:
+        raise CombatValidationError("a reaction is pending")
+    contract = _contract(pack)
+    taken = [entry.split(":", 1) for entry in actor_state.turn_actions]
+    if contract.distinct_actions_per_turn and any(done == action for done, _mode in taken):
+        raise CombatValidationError("action was already taken this turn")  # i18n-exempt: internal validation diagnostic
+    for subtype in action_contract.subtypes:
+        limit = contract.subtype_limits.get(subtype)
+        if limit is None:
+            continue
+        used = sum(
+            1 for done, done_mode in taken if subtype in _action_contract(pack, done, done_mode).subtypes
+        )
+        if used >= limit:
+            raise CombatValidationError(f"{subtype} action limit already taken this turn")  # i18n-exempt: internal validation diagnostic
+
+
+def _reaction_choices(
+    action_contract: _ActionContract, state: CombatState, defender: str
+) -> list[str]:
+    """Reactions the defender may still choose: sheet-backed, affordable, outside own turn."""
+    if defender == state.current_actor:
+        return []
+    defender_state = _combatant(state, defender)
+    return [
+        kind
+        for kind, reaction in action_contract.reactions.items()
+        if reaction.target_value is not None and defender_state.reactions_remaining >= reaction.cost
+    ]
+
+
+def _damage_hits(
+    *,
+    pack: Any,
+    catalog: ItemProfileCatalog,
+    profile: Any,
+    action_contract: _ActionContract,
+    attacker: Any,
+    target: Any,
+    hit_count: int,
+    location: str | None,
+    roller: DiceRoller,
+    damage_rolls: tuple[int, ...] = (),
+    location_rolls: tuple[int, ...] = (),
+    damage_roll: int | None = None,
+) -> list[HitResult]:
+    if profile.damage_expression is None or profile.penetration is None:
+        raise CombatValidationError("weapon damage profile is incomplete")
+    if damage_rolls and len(damage_rolls) != hit_count:
+        raise CombatValidationError("damage rolls do not match hit count")  # i18n-exempt: internal validation diagnostic
+    if location_rolls and len(location_rolls) != hit_count:
+        raise CombatValidationError("location rolls do not match hit count")  # i18n-exempt: internal validation diagnostic
+    hits: list[HitResult] = []
+    for index in range(hit_count):
+        hit_location = _location(pack, location_rolls[index]) if location_rolls else location
+        hit_damage = (
+            damage_rolls[index] if damage_rolls else
+            damage_roll if index == 0 and damage_roll is not None else
+            roller.roll_expression(_dice_expression(profile.damage_expression)).total
+        )
+        if isinstance(hit_damage, bool) or not isinstance(hit_damage, int) or hit_damage < 0:
+            raise CombatValidationError("damage roll must be non-negative")  # i18n-exempt: internal validation diagnostic
+        if action_contract.damage_bonus_value is not None:
+            hit_damage += sheet_value(attacker, pack, action_contract.damage_bonus_value)
+        hit_armour = 0
+        for item in getattr(target, "equipment", []) or []:
+            if isinstance(item, ItemInstance):
+                armour_profile = catalog.get(item.profile_id)
+                if armour_profile is not None and armour_profile.kind == "armour":
+                    hit_armour = max(hit_armour, armour_profile.armor_at(hit_location))
+        hit_penetration = int(profile.penetration)
+        reduced_armour = max(0, hit_armour - hit_penetration)
+        hit_tb = sheet_value(target, pack, action_contract.toughness_value)
+        hit_final = max(0, int(hit_damage) - reduced_armour - hit_tb)
+        hits.append(HitResult(hit_location, hit_damage, hit_penetration, hit_armour, reduced_armour, hit_tb, hit_final))
+    return hits
+
+
+def _lose_aim(combatant: CombatantState) -> None:
+    combatant.aim_bonus = 0
+    combatant.aimed_weapon_instance_id = None
+
+
 def _resolve_attack(
     request: ActionRequest,
     *,
@@ -430,8 +717,14 @@ def _resolve_attack(
     combat_state: CombatState,
     pack: Any | None = None,
     dice: DiceRoller | None = None,
+    reaction_window: bool = False,
+    pending_id: str | None = None,
 ) -> CombatResult:
-    """Resolve one pack-declared attack without mutating entity or combat state."""
+    """Resolve one pack-declared attack without mutating entity or combat state.
+
+    With ``reaction_window`` a hit stops before damage when the defender still has a
+    reaction to choose; the result then carries ``pending_reaction`` instead of damage.
+    """
     try:
         if request.actor is None or request.target is None:
             raise CombatValidationError("actor and target are required")
@@ -443,12 +736,20 @@ def _resolve_attack(
             raise CombatValidationError("actor and target must use the same rulepack")  # i18n-exempt: internal validation diagnostic
         actor_name = _name(request.actor)
         target_name = _name(request.target)
+        if actor_name == target_name:
+            raise CombatValidationError("target is the acting combatant")  # i18n-exempt: internal validation diagnostic
         if combat_state.current_actor != actor_name:
             raise CombatValidationError("actor does not have the current turn")  # i18n-exempt: internal validation diagnostic
         action_contract = _action_contract(pack, action, request.mode)
         actor_state = _combatant(combat_state, actor_name)
+        _combatant(combat_state, target_name)
         if actor_state.action_budget < action_contract.cost.amount:
             raise CombatValidationError("insufficient action budget")
+        _check_turn_constraints(pack, action, action_contract, combat_state, actor_state)
+        if reaction_window and (request.reaction_type is not None or request.reaction_roll is not None):
+            raise CombatValidationError("the attacker cannot choose the defender's reaction")  # i18n-exempt: internal validation diagnostic
+        if reaction_window and not pending_id:
+            raise CombatValidationError("a reaction window needs a pending id")  # i18n-exempt: internal validation diagnostic
         reaction_contract = _reaction_contract(action_contract, request)
         if reaction_contract is not None:
             target_state = _combatant(combat_state, target_name)
@@ -484,6 +785,7 @@ def _resolve_attack(
         state_before = copy.deepcopy(combat_state)
         state_after = copy.deepcopy(combat_state)
         state_after.combatants[actor_name].action_budget -= action_contract.cost.amount
+        state_after.combatants[actor_name].turn_actions.append(_turn_entry(action, request.mode))
         reaction_cost = 0
         ammo_before = weapon.current_ammo if action_contract.consumes_ammo else None
         aim_bonus = actor_state.aim_bonus if actor_state.aimed_weapon_instance_id == weapon.instance_id else 0
@@ -516,6 +818,48 @@ def _resolve_attack(
             hit_count = 1
             if action_contract.extra_hit_degrees is not None:
                 hit_count = min(shots_fired, 1 + max(0, degrees - 1) // action_contract.extra_hit_degrees)
+            choices = (
+                _reaction_choices(action_contract, combat_state, target_name)
+                if reaction_window and _contract(pack).reaction_window == "before_damage"
+                else []
+            )
+            if choices:
+                pending = {
+                    "id": pending_id,
+                    "attacker": actor_name,
+                    "defender": target_name,
+                    "action": action,
+                    "mode": request.mode,
+                    "weapon_instance_id": weapon.instance_id,
+                    "weapon_profile_id": profile.id,
+                    "attack_target": target_value,
+                    "attack_roll": attack.total,
+                    "margin": outcome.margin,
+                    "degrees": degrees,
+                    "location": location,
+                    "hit_count": hit_count,
+                    "shots_fired": shots_fired,
+                    "ammo_before": ammo_before,
+                    "ammo_after": ammo_before - shots_fired if ammo_before is not None else None,
+                    "choices": choices,
+                }
+                state_after.pending_reaction = pending
+                delta = StateDelta(
+                    combat_state_before=state_before,
+                    combat_state_after=state_after,
+                    action_cost=action_contract.cost.amount,
+                    ammo_before=ammo_before,
+                    ammo_after=pending["ammo_after"],
+                    target_damage_before=damage_before,
+                    target_damage_after=damage_before,
+                    weapon_instance_id=weapon.instance_id,
+                )
+                return CombatResult(
+                    actor_name, target_name, action, weapon.instance_id, profile.id,
+                    target_value, attack.total, True, outcome.margin, degrees, location,
+                    ammo_before=ammo_before, ammo_after=pending["ammo_after"], state_delta=delta,
+                    shots_fired=shots_fired, mode=request.mode, pending_reaction=pending,
+                )
             if reaction_contract is not None:
                 target_state = _combatant(state_after, target_name)
                 rr = (
@@ -532,6 +876,8 @@ def _resolve_attack(
                 reaction_success = bool(reaction_outcome.rank.success)
                 reaction_cost = reaction_contract.cost
                 target_state.reactions_remaining -= reaction_cost
+                if _contract(pack).aim_lost_on_reaction:
+                    _lose_aim(target_state)
                 reaction = {
                     "type": reaction_contract.kind,
                     "roll": rr,
@@ -550,34 +896,12 @@ def _resolve_attack(
                     success = hit_count > 0
                     reaction["prevents_hit"] = hit_count == 0
             if hit_count:
-                if profile.damage_expression is None or profile.penetration is None:
-                    raise CombatValidationError("weapon damage profile is incomplete")
-                if request.damage_rolls and len(request.damage_rolls) != hit_count:
-                    raise CombatValidationError("damage rolls do not match hit count")  # i18n-exempt: internal validation diagnostic
-                if request.location_rolls and len(request.location_rolls) != hit_count:
-                    raise CombatValidationError("location rolls do not match hit count")  # i18n-exempt: internal validation diagnostic
-                for index in range(hit_count):
-                    hit_location = _location(pack, request.location_rolls[index]) if request.location_rolls else location
-                    hit_damage = (
-                        request.damage_rolls[index] if request.damage_rolls else
-                        request.damage_roll if index == 0 and request.damage_roll is not None else
-                        roller.roll_expression(_dice_expression(profile.damage_expression)).total
-                    )
-                    if isinstance(hit_damage, bool) or not isinstance(hit_damage, int) or hit_damage < 0:
-                        raise CombatValidationError("damage roll must be non-negative")  # i18n-exempt: internal validation diagnostic
-                    if action_contract.damage_bonus_value is not None:
-                        hit_damage += sheet_value(request.actor, pack, action_contract.damage_bonus_value)
-                    hit_armour = 0
-                    for item in getattr(request.target, "equipment", []) or []:
-                        if isinstance(item, ItemInstance):
-                            armour_profile = catalog.get(item.profile_id)
-                            if armour_profile is not None and armour_profile.kind == "armour":
-                                hit_armour = max(hit_armour, armour_profile.armor_at(hit_location))
-                    hit_penetration = int(profile.penetration)
-                    reduced_armour = max(0, hit_armour - hit_penetration)
-                    hit_tb = sheet_value(request.target, pack, action_contract.toughness_value)
-                    hit_final = max(0, int(hit_damage) - reduced_armour - hit_tb)
-                    hits.append(HitResult(hit_location, hit_damage, hit_penetration, hit_armour, reduced_armour, hit_tb, hit_final))
+                hits = _damage_hits(
+                    pack=pack, catalog=catalog, profile=profile, action_contract=action_contract,
+                    attacker=request.actor, target=request.target, hit_count=hit_count,
+                    location=location, roller=roller, damage_rolls=request.damage_rolls,
+                    location_rolls=request.location_rolls, damage_roll=request.damage_roll,
+                )
                 first = hits[0]
                 raw_damage, penetration, armour, armour_after, tb = (
                     first.raw_damage, first.penetration, first.armour_before,
@@ -620,6 +944,7 @@ def _resolve_attack(
             delta,
             hits=tuple(hits),
             shots_fired=shots_fired,
+            mode=request.mode,
         )
     except CombatValidationError as exc:
         return CombatResult(
@@ -629,6 +954,7 @@ def _resolve_attack(
             request.weapon_instance_id,
             "",
             validation_failure=str(exc),
+            mode=request.mode,
         )
 
 
@@ -638,6 +964,8 @@ def resolve_first_shot(
     combat_state: CombatState,
     pack: Any | None = None,
     dice: DiceRoller | None = None,
+    reaction_window: bool = False,
+    pending_id: str | None = None,
 ) -> CombatResult:
     """Resolve one pack-declared single shot without mutating entity or combat state."""
     return _resolve_attack(
@@ -646,6 +974,8 @@ def resolve_first_shot(
         combat_state=combat_state,
         pack=pack,
         dice=dice,
+        reaction_window=reaction_window,
+        pending_id=pending_id,
     )
 
 
@@ -655,6 +985,8 @@ def resolve_melee_attack(
     combat_state: CombatState,
     pack: Any | None = None,
     dice: DiceRoller | None = None,
+    reaction_window: bool = False,
+    pending_id: str | None = None,
 ) -> CombatResult:
     """Resolve one pack-declared basic melee attack without mutating state."""
     return _resolve_attack(
@@ -663,6 +995,8 @@ def resolve_melee_attack(
         combat_state=combat_state,
         pack=pack,
         dice=dice,
+        reaction_window=reaction_window,
+        pending_id=pending_id,
     )
 
 
@@ -684,6 +1018,7 @@ def _resolve_utility_action(
         actor_state = _combatant(combat_state, actor_name)
         if actor_state.action_budget < contract.cost.amount:
             raise CombatValidationError("insufficient action budget")
+        _check_turn_constraints(pack, action, contract, combat_state, actor_state)
         weapon = _find_weapon(request.actor, request)
         catalog = _profiles(request.actor, pack)
         profile = catalog.get(weapon.profile_id)
@@ -704,6 +1039,7 @@ def _resolve_utility_action(
         after = copy.deepcopy(combat_state)
         after_actor = after.combatants[actor_name]
         after_actor.action_budget -= contract.cost.amount
+        after_actor.turn_actions.append(_turn_entry(action, request.mode))
         if action == "aim":
             after_actor.aim_bonus = contract.attack_modifier
             after_actor.aimed_weapon_instance_id = weapon.instance_id
@@ -717,12 +1053,12 @@ def _resolve_utility_action(
         )
         return CombatResult(
             actor_name, _name(request.target), action, weapon.instance_id, profile.id,
-            ammo_before=ammo_before, ammo_after=ammo_after, state_delta=delta,
+            ammo_before=ammo_before, ammo_after=ammo_after, state_delta=delta, mode=request.mode,
         )
     except CombatValidationError as exc:
         return CombatResult(
             _name(request.actor), _name(request.target), action,
-            request.weapon_instance_id, "", validation_failure=str(exc),
+            request.weapon_instance_id, "", validation_failure=str(exc), mode=request.mode,
         )
 
 
@@ -742,6 +1078,8 @@ def _replace_combat_state(target: CombatState, source: CombatState) -> None:
     target.round_number = source.round_number
     target.current_actor = source.current_actor
     target.combatants = copy.deepcopy(source.combatants)
+    target.order = list(source.order)
+    target.pending_reaction = copy.deepcopy(source.pending_reaction)
 
 
 def apply_state_delta(
@@ -821,3 +1159,260 @@ def apply_state_delta(
         weapon.state.update(weapon_state_before)
         _replace_combat_state(combat_state, combat_before)
         raise
+
+
+def resolve_reaction(
+    *,
+    pending_id: str,
+    choice: str,
+    attacker: Any,
+    defender: Any,
+    combat_state: CombatState,
+    pack: Any,
+    dice: DiceRoller | None = None,
+    reaction_roll: int | None = None,
+    damage_rolls: tuple[int, ...] = (),
+    location_rolls: tuple[int, ...] = (),
+) -> CombatResult:
+    """Finish a pending attack with the defender's choice (a declared reaction or decline)."""
+    pending = combat_state.pending_reaction
+    try:
+        if pending is None or pending.get("id") != pending_id:
+            raise CombatValidationError("no matching reaction is pending")
+        if attacker is None or defender is None:
+            raise CombatValidationError("attacker and defender are required")  # i18n-exempt: internal validation diagnostic
+        attacker_name, defender_name = _name(attacker), _name(defender)
+        if pending["attacker"] != attacker_name or pending["defender"] != defender_name:
+            raise CombatValidationError("reaction does not match the pending attack")  # i18n-exempt: internal validation diagnostic
+        if defender_name == combat_state.current_actor:
+            raise CombatValidationError("a reaction cannot be used during the defender's own turn")  # i18n-exempt: internal validation diagnostic
+        action, mode = str(pending["action"]), str(pending["mode"])
+        action_contract = _action_contract(pack, action, mode)
+        weapon = _find_weapon(attacker, ActionRequest(attacker, defender, str(pending["weapon_instance_id"])))
+        catalog = _profiles(attacker, pack)
+        profile = catalog.get(weapon.profile_id)
+        if profile is None or profile.id != pending["weapon_profile_id"]:
+            raise CombatValidationError("stale weapon state")
+        if pack.resolver is None:
+            raise CombatValidationError("rulepack has no check resolver")
+        state_before = copy.deepcopy(combat_state)
+        state_after = copy.deepcopy(combat_state)
+        defender_state = _combatant(state_after, defender_name)
+        hit_count = int(pending["hit_count"])
+        reaction_cost = 0
+        roller = dice or DiceRoller()
+        if choice == DECLINE_REACTION:
+            reaction: dict[str, Any] = {
+                "type": DECLINE_REACTION, "declined": True, "spent": False,
+                "success": False, "prevents_hit": False,
+            }
+        else:
+            reaction_contract = action_contract.reactions.get(choice)
+            if choice not in pending.get("choices", []) or reaction_contract is None or reaction_contract.target_value is None:
+                raise CombatValidationError("reaction is not offered for this attack")  # i18n-exempt: internal validation diagnostic
+            if defender_state.reactions_remaining < reaction_contract.cost:
+                raise CombatValidationError("reaction is unavailable")
+            rr = reaction_roll if reaction_roll is not None else roller.roll_detail("1d100").total
+            reaction_target = sheet_value(defender, pack, reaction_contract.target_value)
+            reaction_outcome = pack.resolver.interpret(_roll_detail(rr), reaction_target)
+            reaction_success = bool(reaction_outcome.rank.success)
+            reaction_cost = reaction_contract.cost
+            defender_state.reactions_remaining -= reaction_cost
+            if _contract(pack).aim_lost_on_reaction:
+                _lose_aim(defender_state)
+            reaction = {
+                "type": choice, "roll": rr, "target": reaction_target,
+                "success": reaction_success, "prevents_hit": False, "spent": True,
+            }
+            if reaction_success:
+                avoided = hit_count
+                if reaction_contract.hits_avoided_per_degree is not None:
+                    reaction_degrees = abs(reaction_outcome.margin) if reaction_outcome.margin is not None else 1
+                    avoided = min(hit_count, reaction_degrees * reaction_contract.hits_avoided_per_degree)
+                    reaction["hits_avoided"] = avoided
+                hit_count -= avoided
+                reaction["prevents_hit"] = hit_count == 0
+        state_after.pending_reaction = None
+        damage_before = sheet_value(defender, pack, action_contract.damage_value)
+        hits = _damage_hits(
+            pack=pack, catalog=catalog, profile=profile, action_contract=action_contract,
+            attacker=attacker, target=defender, hit_count=hit_count, location=pending.get("location"),
+            roller=roller, damage_rolls=damage_rolls, location_rolls=location_rolls,
+        ) if hit_count else []
+        final = sum(hit.final_damage for hit in hits)
+        delta = StateDelta(
+            combat_state_before=state_before,
+            combat_state_after=state_after,
+            reaction_cost=reaction_cost,
+            target_damage_before=damage_before,
+            target_damage_after=damage_before + final,
+        )
+        first = hits[0] if hits else None
+        return CombatResult(
+            attacker_name, defender_name, action, weapon.instance_id, profile.id,
+            pending.get("attack_target"), pending.get("attack_roll"), hit_count > 0,
+            pending.get("margin"), pending.get("degrees"), pending.get("location"), reaction,
+            first.raw_damage if first else None,
+            first.penetration if first else None,
+            first.armour_before if first else None,
+            first.armour_after_penetration if first else None,
+            first.tb_reduction if first else None,
+            final,
+            pending.get("ammo_before"), pending.get("ammo_after"), delta,
+            hits=tuple(hits), shots_fired=int(pending.get("shots_fired") or 0), mode=mode,
+        )
+    except CombatValidationError as exc:
+        pending = pending or {}
+        return CombatResult(
+            _name(attacker), _name(defender), str(pending.get("action") or REACTION_ACTION),
+            str(pending.get("weapon_instance_id") or ""), "", validation_failure=str(exc),
+            mode=str(pending.get("mode") or ""),
+        )
+
+
+def apply_reaction_delta(defender: Any, result: CombatResult, *, combat_state: CombatState, pack: Any) -> None:
+    """Apply a finished reaction's defender damage and combat state together, or neither."""
+    if not result.ok or result.state_delta is None:
+        raise CombatValidationError("cannot apply invalid combat result")
+    delta = result.state_delta
+    pending = combat_state.pending_reaction
+    if pending is None or result.target != _name(defender) or result.target != pending.get("defender"):
+        raise CombatValidationError("stale combat state")
+    if delta.action_cost or delta.ammo_before is not None or delta.ammo_after is not None or delta.weapon_instance_id:
+        raise CombatValidationError("reaction delta contains attacker changes")  # i18n-exempt: internal validation diagnostic
+    if combat_state != delta.combat_state_before:
+        raise CombatValidationError("stale combat state")
+    action_contract = _action_contract(pack, result.action, result.mode)
+    if sheet_value(defender, pack, action_contract.damage_value) != delta.target_damage_before:
+        raise CombatValidationError("stale target damage state")
+    if (
+        delta.target_damage_before is None
+        or result.final_damage != sum(hit.final_damage for hit in result.hits)
+        or delta.target_damage_after != delta.target_damage_before + result.final_damage
+    ):
+        raise CombatValidationError("combat damage delta is invalid")  # i18n-exempt: internal validation diagnostic
+    damage_key = pack.sheet_spec.attr_keys.get(action_contract.damage_value) if pack.sheet_spec else None
+    if not damage_key:
+        raise CombatValidationError("combat damage value has no writable attribute")  # i18n-exempt: internal validation diagnostic
+    attributes_before = copy.deepcopy(defender.attributes)
+    combat_before = copy.deepcopy(combat_state)
+    try:
+        defender.attributes[damage_key] = delta.target_damage_after
+        _replace_combat_state(combat_state, delta.combat_state_after)
+    except Exception:
+        defender.attributes.clear()
+        defender.attributes.update(attributes_before)
+        _replace_combat_state(combat_state, combat_before)
+        raise
+
+
+# ---------------------------------------------------------------------------
+# Viewer projection: the single outbound chokepoint for combat state and results.
+# ---------------------------------------------------------------------------
+
+_PUBLIC_COUNTERS = ("action_budget", "action_budget_max", "reactions_remaining", "reactions_max", "aim_bonus")
+
+
+def viewer_controls(combatant: CombatantState, viewer: Viewer) -> bool:
+    """A keeper runs keeper-controlled combatants; a member runs the combatants they own."""
+    if combatant.controller == KEEPER_CONTROLLER:
+        return viewer.is_keeper
+    return bool(viewer.member_id) and combatant.controller == viewer.member_id
+
+
+def _keeper_side(combatant: CombatantState | None) -> bool:
+    return combatant is not None and combatant.controller == KEEPER_CONTROLLER
+
+
+def _project_pending(
+    pending: Mapping[str, Any] | None, state: CombatState, viewer: Viewer
+) -> dict[str, Any] | None:
+    if pending is None:
+        return None
+    if viewer.is_keeper:
+        return copy.deepcopy(dict(pending))
+    attacker = state.combatants.get(str(pending.get("attacker")))
+    defender = state.combatants.get(str(pending.get("defender")))
+    if defender is None or defender.hidden:
+        return None
+    view: dict[str, Any] = {
+        "id": pending.get("id"),
+        "attacker": "" if attacker is None or attacker.hidden else pending.get("attacker"),
+        "defender": pending.get("defender"),
+        "action": pending.get("action"),
+        "mode": pending.get("mode"),
+        "hit_count": pending.get("hit_count"),
+    }
+    if not _keeper_side(attacker):
+        view.update(attack_roll=pending.get("attack_roll"), degrees=pending.get("degrees"))
+    if viewer_controls(defender, viewer):
+        view["choices"] = list(pending.get("choices") or [])
+    return view
+
+
+def project_combat_state(state: CombatState, viewer: Viewer) -> dict[str, Any]:
+    """Keeper sees everything; players never see hidden combatants or keeper-side counters."""
+    visible = {
+        name: combatant for name, combatant in state.combatants.items()
+        if viewer.is_keeper or not combatant.hidden
+    }
+    order: list[dict[str, Any]] = []
+    for name in state.order or list(state.combatants):
+        combatant = visible.get(name)
+        if combatant is None:
+            continue
+        entry: dict[str, Any] = {
+            "name": name,
+            "initiative": combatant.initiative,
+            "current": name == state.current_actor,
+            "controlled": viewer_controls(combatant, viewer),
+            "keeper_controlled": combatant.controller == KEEPER_CONTROLLER,
+        }
+        if viewer.is_keeper:
+            entry["hidden"] = combatant.hidden
+        order.append(entry)
+    combatants: dict[str, Any] = {}
+    for name, combatant in visible.items():
+        if viewer.is_keeper:
+            combatants[name] = asdict(combatant)
+        elif not _keeper_side(combatant):
+            combatants[name] = {key: getattr(combatant, key) for key in _PUBLIC_COUNTERS}
+    return {
+        "round_number": state.round_number,
+        "current_actor": state.current_actor if state.current_actor in visible else None,
+        "order": order,
+        "combatants": combatants,
+        "pending_reaction": _project_pending(state.pending_reaction, state, viewer),
+    }
+
+
+def project_combat_result(result: Mapping[str, Any], state: CombatState, viewer: Viewer) -> dict[str, Any]:
+    """The per-viewer copy of a committed ``CombatResult`` (``asdict`` form)."""
+    view = copy.deepcopy(dict(result))
+    if viewer.is_keeper:
+        return view
+    actor = state.combatants.get(str(view.get("actor")))
+    target = state.combatants.get(str(view.get("target")))
+    delta = view.get("state_delta")
+    if isinstance(delta, dict):
+        delta.pop("combat_state_before", None)
+        delta.pop("combat_state_after", None)
+    if _keeper_side(actor):
+        view.update(attack_target=None, ammo_before=None, ammo_after=None, weapon_instance_id="")
+        if isinstance(delta, dict):
+            delta.update(ammo_before=None, ammo_after=None, weapon_instance_id=None)
+    if _keeper_side(target):
+        view.update(armour_before=None, armour_after_penetration=None, tb_reduction=None)
+        for hit in view.get("hits") or []:
+            hit.update(armour_before=None, armour_after_penetration=None, tb_reduction=None)
+        if isinstance(delta, dict):
+            delta.update(target_damage_before=None, target_damage_after=None)
+        if isinstance(view.get("reaction"), dict):
+            view["reaction"].pop("target", None)
+    if actor is not None and actor.hidden:
+        view["actor"] = ""
+    if target is not None and target.hidden:
+        view["target"] = ""
+    if view.get("pending_reaction") is not None:
+        view["pending_reaction"] = _project_pending(view["pending_reaction"], state, viewer)
+    return view

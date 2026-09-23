@@ -20,10 +20,15 @@ all hits and ammunition together; individual `HitResult` records expose every
 impact without allowing a partial commit.
 
 The local checkout has representative equipment profiles and the DH2 check
-resolver, but no authoritative local combat-rule text for the added Aim,
-range, fire-mode, and burst-location numbers. Those values in `combat.yaml`
-are therefore a local MVP contract requiring source verification before they
-are called canonically complete. In particular, additional burst hits currently
+resolver, but no authoritative local combat-rule text for the added range,
+fire-mode, and burst-location numbers. Those values in `combat.yaml` are
+therefore a local MVP contract requiring source verification before they are
+called canonically complete; `provenance` marks them `null`. The action economy,
+per-turn limits, reaction economy/window/choices, Aim modifiers and initiative
+contract have since been verified against `DH2_RU_OKP_V1_8` Chapter VII and carry
+section keys. Verifying Chapter VII also showed that Standard Attack is an
+Ordinary (+10) test (`CH07_H051`); both single modes now declare
+`attack_modifier: 10`, while the burst modes keep their own unverified values. In particular, additional burst hits currently
 reuse the first hit location unless deterministic test inputs provide individual
 locations. The laspistol profile remains incomplete and is rejected by the
 attack validator. Reload refills a clip without tracking reserve ammunition;

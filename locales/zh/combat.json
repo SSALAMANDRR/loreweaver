@@ -1,11 +1,26 @@
 {
   "combat.invalid": "战斗行动不可用。",
-  "combat.invalid.actor": "请先选择自己的当前角色。",
+  "combat.invalid.actor": "请先选择由你控制的战斗者。",
   "combat.invalid.target": "所选目标不可用。",
   "combat.invalid.weapon": "所选武器不能执行该行动。",
   "combat.invalid.ammo": "弹药不足。",
   "combat.invalid.budget": "行动额度不足。",
   "combat.invalid.reaction": "反应不可用。",
   "combat.invalid.stale": "战斗状态已变化，请重新选择行动。",
-  "combat.narration.prompt": "请用中文叙述一项已经结算并提交的桌面战斗行动。只描述故事中的后果。给出的掷骰、命中、反应、伤害、弹药和状态变化都是最终结果。不要发明或重新计算规则，也不要声称结果中没有的效果。"
+  "combat.invalid.duplicate": "该请求已被处理。",
+  "combat.invalid.encounter": "当前没有进行中的战斗。",
+  "combat.invalid.pending": "须先结算防御者的反应。",
+  "combat.invalid.turn": "现在不是该战斗者的回合。",
+  "combat.invalid.repeat": "本回合不能重复该行动。",
+  "combat.reaction.decline": "不作反应",
+  "combat.control.end_turn": "结束回合",
+  "combat.command.usage": "用法：.combat [status | start <NPC>[, ?<隐藏NPC>...] | end | hide <名字> | reveal <名字>]",
+  "combat.command.none": "当前没有进行中的战斗。",
+  "combat.command.status": "战斗 — 第 {round} 轮，当前行动：{current}",
+  "combat.command.order_line": "{index}. {name} — 先攻 {initiative}{marker}",
+  "combat.command.hidden_marker": "（隐藏）",
+  "combat.command.start_failed": "无法开始战斗：{reason}",
+  "combat.command.ended": "战斗已结束。",
+  "combat.command.not_found": "没有名为 {name} 的守秘人控制战斗者。",
+  "combat.narration.prompt": "请用中文叙述一项已经结算并提交的桌面战斗行动。只描述故事中的后果。给出的掷骰、命中、反应、伤害、弹药和状态变化都是最终结果。不要发明或重新计算规则，也不要声称结果中没有的效果。可选的上下文（场景、行动顺序、战斗者的公开描述）是玩家能看到的内容；不要透露超出其范围的信息。攻击者或目标名字为空表示玩家看不到该战斗者：不要称呼或描述它。"
 }

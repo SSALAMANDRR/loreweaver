@@ -142,8 +142,26 @@ function isFinalization(value: unknown): boolean {
   )
 }
 
+function isLabelled(value: unknown): boolean {
+  return isObject(value) && isStr(value.id) && isStr(value.label)
+}
+
+function isEncounterView(value: unknown): boolean {
+  return isObject(value) && isNum(value.round_number) &&
+    (value.current_actor === null || isStr(value.current_actor)) &&
+    isArr(value.order) && value.order.every((entry: unknown) =>
+      isObject(entry) && isStr(entry.name) && typeof entry.current === "boolean" &&
+      typeof entry.controlled === "boolean") &&
+    isObject(value.combatants) &&
+    (value.pending_reaction === null || (isObject(value.pending_reaction) &&
+      isStr(value.pending_reaction.id) && isStr(value.pending_reaction.defender)))
+}
+
 function isCombatSurface(value: unknown): boolean {
-  return isObject(value) && isStr(value.actor) && (value.state === null || isObject(value.state)) &&
+  return isObject(value) && isStr(value.actor) && (value.state === null || isEncounterView(value.state)) &&
+    (value.end_turn === undefined || isLabelled(value.end_turn)) &&
+    (value.reaction === undefined || (isObject(value.reaction) && isStr(value.reaction.id) &&
+      isStr(value.reaction.actor) && isArr(value.reaction.choices) && value.reaction.choices.every(isLabelled))) &&
     isArr(value.actions) && value.actions.every((action: unknown) =>
       isObject(action) && isStr(action.id) && isStr(action.label) && isArr(action.targets) &&
       action.targets.every(isStr) && isArr(action.modes) && action.modes.every((mode: unknown) =>

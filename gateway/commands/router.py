@@ -21,6 +21,7 @@ from core.character_manager import (
 from core.resolution import ResolutionError
 from gateway.commands.cast import CastCommands
 from gateway.commands.checks import ChecksCommands, _resolution_notice
+from gateway.commands.combat import CombatCommands
 from gateway.commands.forge import ForgeCommands
 from gateway.commands.llm import LlmCommands
 from gateway.commands.media import MediaCommands
@@ -67,6 +68,7 @@ class CommandRouter(
     MediaCommands,
     LlmCommands,
     ForgeCommands,
+    CombatCommands,
 ):
     def __init__(
         self,
@@ -355,6 +357,18 @@ class CommandRouter(
                 keeper_help=True,
             ),
             CommandSpec("init", self.cmd_initiative, ["init", "initiative", "ri"], ["ri", "init"], {"name": "init"}, "commands.help.init"),
+            CommandSpec(
+                "combat",
+                self.cmd_combat,
+                ["combat"],
+                ["combat", "战斗", "戰鬥"],
+                None,
+                "commands.help.combat",
+                # The listing names hidden combatants and keeper-side initiative; the
+                # table sees the projected encounter through its own state frame.
+                private_reply=True,
+                keeper_help=True,
+            ),
             CommandSpec(
                 "genchar",
                 self.cmd_genchar,

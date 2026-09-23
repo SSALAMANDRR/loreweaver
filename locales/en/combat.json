@@ -1,11 +1,26 @@
 {
   "combat.invalid": "Combat action is unavailable.",
-  "combat.invalid.actor": "Select your own active character before acting.",
+  "combat.invalid.actor": "Select a combatant you control before acting.",
   "combat.invalid.target": "The selected target is unavailable.",
   "combat.invalid.weapon": "The selected weapon cannot perform that action.",
   "combat.invalid.ammo": "The weapon has insufficient ammunition.",
   "combat.invalid.budget": "No action budget remains for that action.",
   "combat.invalid.reaction": "The reaction is unavailable.",
   "combat.invalid.stale": "Combat state changed; choose the action again.",
-  "combat.narration.prompt": "Narrate one already resolved tabletop combat action in English. The deterministic engine already committed the result. Describe only its fictional consequences. Treat the supplied rolls, hits, reactions, damage, ammunition and state delta as final. Do not invent or recalculate mechanics. Do not claim an effect absent from the result."
+  "combat.invalid.duplicate": "That request was already processed.",
+  "combat.invalid.encounter": "No encounter is active.",
+  "combat.invalid.pending": "A defender's reaction must be resolved first.",
+  "combat.invalid.turn": "It is not that combatant's turn.",
+  "combat.invalid.repeat": "That action cannot be repeated this turn.",
+  "combat.reaction.decline": "No reaction",
+  "combat.control.end_turn": "End turn",
+  "combat.command.usage": "Usage: .combat [status | start <npc>[, ?<hidden npc>...] | end | hide <name> | reveal <name>]",
+  "combat.command.none": "No encounter is active.",
+  "combat.command.status": "Encounter — round {round}, current: {current}",
+  "combat.command.order_line": "{index}. {name} — initiative {initiative}{marker}",
+  "combat.command.hidden_marker": " (hidden)",
+  "combat.command.start_failed": "The encounter could not start: {reason}",
+  "combat.command.ended": "The encounter has ended.",
+  "combat.command.not_found": "No keeper-controlled combatant named {name}.",
+  "combat.narration.prompt": "Narrate one already resolved tabletop combat action in English. The deterministic engine already committed the result. Describe only its fictional consequences. Treat the supplied rolls, hits, reactions, damage, ammunition and state delta as final. Do not invent or recalculate mechanics. Do not claim an effect absent from the result. The optional context (scene, encounter order, public descriptions of the combatants) is what the players can see; do not reveal anything beyond it. An empty actor or target name means the players cannot see that combatant: do not name or describe it."
 }

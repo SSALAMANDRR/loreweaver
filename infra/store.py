@@ -686,9 +686,10 @@ class Store:
     ) -> bool:
         """Compare and replace combat sheet data and room state in one transaction.
 
-        Each document tuple is (id, expected data, new data, new meta). Existing
-        schema, grants and sequence remain untouched. The room lock serializes
-        turns; these comparisons also reject stale writes from other code paths.
+        Each document tuple is (id, expected data, new data, new meta); a state
+        tuple whose new value is None deletes that row. Existing schema, grants and
+        sequence remain untouched. The room lock serializes turns; these
+        comparisons also reject stale writes from other code paths.
         """
         doc_rows = list(documents)
         state_rows = list(state)
@@ -717,6 +718,9 @@ class Store:
                         (data, meta, room, doc_id),
                     )
                 for key, _, value in state_rows:
+                    if value is None:
+                        conn.execute("DELETE FROM room_state WHERE room = ? AND key = ?", (room, key))
+                        continue
                     conn.execute(
                         "INSERT OR REPLACE INTO room_state (room, key, value) VALUES (?, ?, ?)",
                         (room, key, value),

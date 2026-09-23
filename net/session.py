@@ -54,6 +54,9 @@ from net.room_backup import room_rows, room_vector_points
 
 logger = logging.getLogger(__name__)
 
+# v2.7 makes `state.combat` a per-viewer encounter projection (initiative order, current
+# actor, round, pending defender reaction) and adds the `end_turn` / `reaction`
+# `action_request` actions; an attacker may no longer choose the defender's reaction.
 # v2.3 adds `kind` to every `pack_cards` entry — the 拆卡 classification a picker needs
 # to send the right import verb (without it every client hard-coded `.import <ref> pc`
 # and a world card was offered to players as a character). v2.2 added the installed-pack
@@ -63,7 +66,7 @@ logger = logging.getLogger(__name__)
 # `panel_intent` client frame, and pack-asset resolution on the media byte channel.
 # v1.7 added declarative hook-emitted `ui` frames (core.hooks emitUI); v1.6 added
 # player-visible module variables on the state frame.
-_PROTOCOL_VERSION = "2.6"
+_PROTOCOL_VERSION = "2.7"
 # Public alias for out-of-band consumers (the `.lwpack` engine-minimum check in app.py).
 PROTOCOL_VERSION = _PROTOCOL_VERSION
 _SERVER_BANNER = "loreweaver/1"
@@ -598,26 +601,54 @@ class SessionCore:
                         await member.send_frame(error_frame("forbidden", i18n))
                         return
                     from agent.combat_narration import narrate_combat
-                    from gateway.combat_actions import resolve_action
+                    from core.combat import project_combat_state
+                    from core.documents import PLAYER_VIEWER
+                    from gateway.combat_actions import (
+                        load_encounter,
+                        member_viewer,
+                        project_action_frame,
+                        resolve_action,
+                        should_narrate,
+                    )
                     from gateway.turn import publish_state, record_turn_events
 
                     ctx = self._ctx_for(member)
                     outcome = await resolve_action(self.services, ctx, frame)
-                    event = Event(kind="action_result", data=outcome)
                     if not outcome["ok"]:
-                        await member.deliver(event)
+                        await member.deliver(Event(kind="action_result", data=outcome))
                         return
-                    await self.hub.publish(member.session_key, event)
-                    await record_turn_events(self.services, member.session_key, [event])
+                    key = member.session_key
+
+                    async def personalized(target: Any) -> Event:
+                        viewer = member_viewer(target, ctx.locale)
+                        return Event(
+                            kind="action_result",
+                            data=await project_action_frame(self.services, key, outcome, viewer),
+                        )
+
+                    # Every connection gets its own projection; replay keeps only the player grade.
+                    await self.hub.publish_each(key, personalized)
+                    public = await project_action_frame(self.services, key, outcome, PLAYER_VIEWER)
+                    await record_turn_events(self.services, key, [Event(kind="action_result", data=public)])
                     await publish_state(self.hub, self.services, ctx)
-                    try:
-                        narration = await narrate_combat(self.services, member.session_key, outcome["result"], ctx.locale)
-                        if narration:
-                            line = Event.narrative(speaker="kp", text=narration)
-                            await self.hub.publish(member.session_key, line)
-                            await record_turn_events(self.services, member.session_key, [line])
-                    except Exception:
-                        logger.exception("combat narration failed after committed action")
+                    if should_narrate(outcome):
+                        try:
+                            encounter = await load_encounter(self.services, key)
+                            narration = await narrate_combat(
+                                self.services,
+                                key,
+                                public["result"],
+                                ctx.locale,
+                                encounter=(
+                                    project_combat_state(encounter, PLAYER_VIEWER) if encounter is not None else None
+                                ),
+                            )
+                            if narration:
+                                line = Event.narrative(speaker="kp", text=narration)
+                                await self.hub.publish(key, line)
+                                await record_turn_events(self.services, key, [line])
+                        except Exception:
+                            logger.exception("combat narration failed after committed action")
                 return
             if kind == "list_pack_cards":
                 # v2.2, player-open: card FILENAMES from installed packs — claimable

@@ -165,12 +165,21 @@ Verified against the source tree on 2026-09-09:
   readiness plus the mandatory finalization's available actions, rolled result
   and pending choices. Studio renders them without DH2 rules. Result 01 remains
   blocked on the missing table; no UI action bypasses it.
-- Protocol 2.6 also exposes a server-authored combat action catalog for the
-  active character. Studio sends a generic action request; the gateway resolves
-  it through the Combat MVP, atomically persists sheets and turn state, emits
-  the structured result, and asks a tools-disabled narration lane to describe
-  the committed outcome. Initiative advancement and a separate defending
-  player's reaction prompt remain outside this slice.
+- Protocol 2.7 runs a server-authoritative encounter (`.combat start`): initiative
+  `1d10 + AgB` ordered high to low, ties by higher Agility then a 1d10 roll-off
+  (`CH07_H011`; repeating a roll-off that ties again is an engine policy the source
+  does not state, recorded under `provenance.implementation_choices`); one turn per combatant per round and a new round after
+  the last turn (`CH07_H002`/`H003`/`H008`/`H009`); a full action or two
+  *different* half actions, at most one Attack- and one Concentration-subtype
+  action per turn (`CH07_H013`/`H014`/`H019`); Standard Attack is an Ordinary
+  (+10) test (`CH07_H051`); one Reaction per round, never in
+  one's own turn (`CH07_H015`/`H029`). A hit stops before damage while the
+  defender may still Evade — Dodge against ranged, Dodge or Parry against melee
+  (`CH07_H029`/`H061`) — and the defender's controller (player or keeper) chooses
+  a reaction or declines. Using a Reaction loses a prepared Aim (`CH07_H021`).
+  NPCs are keeper-controlled sheets reached through their NPC record's
+  `stat_char`. `state.combat` and every `action_result` are viewer-projected.
+  The narration lane receives only the player-grade committed result.
 
 Relevant coverage includes `test_creation_layers.py`, `test_creation_flow.py`,
 `test_creation_finalization.py`, `test_advancement*.py`, `test_talent*.py`,
@@ -194,7 +203,19 @@ Stage 1 does **not** invent values or mechanics for areas whose source slice has
 - reserve ammunition inventory and reload logistics beyond clip refill;
 - righteous fury and critical-effect tables;
 - conditions and duration tracking;
-- psychic powers.
+- psychic powers;
+- surprise rounds (`CH07_H005`/`H012`), grouped initiative for identical hostiles
+  (optional GM simplification in `CH07_H011`), mid-fight joins and GM reordering;
+- "must be aware of the attack" for Evasion (`CH07_H029`) — a GM judgment the
+  engine cannot observe; the defender's controller decides by declining;
+- attack-action modifiers other than Standard Attack's +10 (bursts, Aim across a
+  weapon switch — `CH07_H021` says "the next attack" while the engine binds Aim to
+  the aimed weapon);
+- Dodge against multiple hits (`CH07_H030`): "each degree of success cancels one
+  *additional* hit" is ambiguous against the current one-hit-per-degree contract
+  and awaits errata/FAQ confirmation;
+- NPC stat-block authoring (Chapter XIII adversary profiles): an NPC's `stat_char`
+  sheet must already exist.
 
 The Divination table also requires sourced Table 8-15 data before every possible
 new character can finish creation. Do not bypass that dependency by rerolling.

@@ -126,6 +126,7 @@
   "commands.help.hidden_roll": "暗骰。",
   "commands.help.imagegen": "守秘人：查看、设置或关闭图片生成端点。",
   "commands.help.init": "进行先攻检定。",
+  "commands.help.combat": "守秘人：开始、查看、调整或结束确定性战斗遭遇。",
   "commands.help.jrrp": "查看今日人品。",
   "commands.help.keeper_section": "守秘人：{commands}",
   "commands.help.language": "设置房间语言。",

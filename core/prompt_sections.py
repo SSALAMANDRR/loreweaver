@@ -322,6 +322,46 @@ async def inject_game_state_prompt(ctx: Any, character_manager: Any, store: Stor
         except Exception:
             pass
 
+        # -- engine encounter (keeper view: hidden combatants included) -----
+        try:
+            from core.combat import COMBAT_STATE_KEY, KEEPER_CONTROLLER, combat_state_from_json
+
+            raw_encounter = await store.state_get(chat_key, COMBAT_STATE_KEY)
+            if raw_encounter:
+                encounter = combat_state_from_json(raw_encounter)
+                lines.append("")
+                lines.append(i18n.t("prompt.game_state.encounter_header", round=encounter.round_number))
+                for idx, name in enumerate(encounter.order, 1):
+                    combatant = encounter.combatants[name]
+                    lines.append(
+                        i18n.t(
+                            "prompt.game_state.encounter_line",
+                            index=idx,
+                            name=name,
+                            initiative=combatant.initiative,
+                            kind=(
+                                i18n.t("prompt.game_state.encounter_npc")
+                                if combatant.controller == KEEPER_CONTROLLER
+                                else ""
+                            ),
+                            marker=(
+                                (i18n.t("prompt.game_state.encounter_hidden") if combatant.hidden else "")
+                                + (" \U0001F448" if name == encounter.current_actor else "")
+                            ),
+                        )
+                    )
+                pending = encounter.pending_reaction
+                if pending:
+                    lines.append(
+                        i18n.t(
+                            "prompt.game_state.encounter_pending",
+                            defender=pending.get("defender", ""),
+                            attacker=pending.get("attacker", ""),
+                        )
+                    )
+        except Exception:
+            pass
+
         lines.append(divider)
         return "\n".join(lines)
 

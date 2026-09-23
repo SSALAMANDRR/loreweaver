@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { isServerFrame } from "./client"
-import type { ActionRequestFrame } from "./types"
+import type { ActionRequestFrame, StateFrame } from "./types"
 
 test("generic combat request round-trips without client rule names", () => {
   const request: ActionRequestFrame = {
@@ -8,6 +8,10 @@ test("generic combat request round-trips without client rule names", () => {
     mode: "variant", weapon_instance_id: "instance-1",
   }
   expect(JSON.parse(JSON.stringify(request))).toEqual(request)
+  const reaction: ActionRequestFrame = {
+    type: "action_request", id: "r2", actor: "B", action: "reaction", mode: "server-choice", pending_id: "p1",
+  }
+  expect(JSON.parse(JSON.stringify(reaction))).toEqual(reaction)
 })
 
 test("structured result validates and malformed payload is rejected", () => {
@@ -20,10 +24,37 @@ test("structured result validates and malformed payload is rejected", () => {
       penetration: 0, armour_before: 3, armour_after_penetration: 3, tb_reduction: 4,
       final_damage: 3, ammo_before: 4, ammo_after: 3, shots_fired: 1,
       hits: [{ location: "body", final_damage: 3 }], validation_failure: null,
-      state_delta: { ammo_before: 4, ammo_after: 3 },
+      state_delta: { ammo_before: 4, ammo_after: 3 }, mode: "variant", pending_reaction: null,
     },
   }
   expect(isServerFrame(JSON.parse(JSON.stringify(result)))).toBe(true)
   expect(isServerFrame({ ...result, result: null })).toBe(false)
   expect(isServerFrame({ ...result, labels: {} })).toBe(false)
+})
+
+const encounterState = (combat: unknown) => ({ type: "state", party: [], initiative: [], online: 1, combat })
+
+test("encounter state with a reaction offer validates; a malformed offer is rejected", () => {
+  const combat: StateFrame["combat"] = {
+    actor: "B",
+    actions: [],
+    state: {
+      round_number: 2,
+      current_actor: "A",
+      order: [
+        { name: "A", initiative: 12, current: true, controlled: false, keeper_controlled: true },
+        { name: "B", initiative: 7, current: false, controlled: true, keeper_controlled: false },
+      ],
+      combatants: { B: { action_budget: 2 } },
+      pending_reaction: { id: "p1", attacker: "A", defender: "B", action: "x", mode: "y", hit_count: 1, choices: ["z"] },
+    },
+    reaction: {
+      id: "p1", actor: "B", attacker: "A", action: "Server attack", hit_count: 1,
+      choices: [{ id: "z", label: "Server reaction" }, { id: "decline", label: "No reaction" }],
+    },
+  }
+  expect(isServerFrame(encounterState(combat))).toBe(true)
+  expect(isServerFrame(encounterState({ ...combat, reaction: { id: "p1", actor: "B", choices: [{ id: 1 }] } }))).toBe(false)
+  expect(isServerFrame(encounterState({ ...combat, state: { round_number: "2" } }))).toBe(false)
+  expect(isServerFrame(encounterState({ ...combat, end_turn: { id: "end_turn", label: "End turn" } }))).toBe(true)
 })

@@ -7,7 +7,7 @@ import type { CreationCatalog, CreationState, CharacterReadinessState, Character
 // card listing (`list_pack_cards` → `pack_cards`), the structured lane behind every
 // "import from installed pack" picker. 2.3 adds each listed card's `kind`, so a picker
 // can send the right import verb. A 2.0/2.1 client ignores all of it.
-export const PROTOCOL_VERSION = "2.6" as const
+export const PROTOCOL_VERSION = "2.7" as const
 
 export const FrameType = {
   Join: "join",
@@ -135,16 +135,28 @@ export interface InputFrame {
   text: string
 }
 
-/** A rule-agnostic action chosen from `state.combat.actions`. Rolls stay server-owned. */
+/** Engine action ids fixed by the protocol (v2.7); every other action id is server-authored. */
+export const CombatAction = {
+  Reaction: "reaction",
+} as const
+
+/**
+ * A rule-agnostic choice taken from `state.combat`. Rolls stay server-owned.
+ * - a catalog action: `action`/`mode`/`weapon_instance_id` (+ `target`) from `actions`;
+ * - `action: state.combat.end_turn.id` ends the actor's turn;
+ * - `action: "reaction"`, `mode: <choice id>`, `pending_id: state.combat.reaction.id`
+ *   answers a pending attack for the defender named in `state.combat.reaction.actor`.
+ * `id` is the idempotency key: a repeated `id` is refused, never re-applied.
+ */
 export interface ActionRequestFrame {
   type: typeof FrameType.ActionRequest
   id: string
   actor: string
   target?: string
   action: string
-  mode: string
-  weapon_instance_id: string
-  reaction_type?: string
+  mode?: string
+  weapon_instance_id?: string
+  pending_id?: string
   distance?: number
 }
 
@@ -152,6 +164,7 @@ export interface ActionModeOption {
   id: string
   label: string
   weapons: Array<{ id: string; label: string }>
+  /** Reactions a defender may use against this mode (informational; the defender chooses). */
   reactions: Array<{ id: string; label: string }>
 }
 
@@ -162,10 +175,60 @@ export interface ActionOption {
   targets: string[]
 }
 
+/** One visible combatant in initiative order, as projected for this viewer. */
+export interface CombatOrderEntry {
+  name: string
+  initiative: number | null
+  current: boolean
+  /** The viewer may act (or react) for this combatant. */
+  controlled: boolean
+  keeper_controlled: boolean
+  /** Keeper view only. */
+  hidden?: boolean
+}
+
+/** A hit waiting for the defender's reaction choice, as projected for this viewer. */
+export interface PendingReactionView {
+  id: string
+  /** Empty when the attacker is hidden from this viewer. */
+  attacker: string
+  defender: string
+  action: string
+  mode: string
+  hit_count: number | null
+  attack_roll?: number | null
+  degrees?: number | null
+  choices?: string[]
+}
+
+export interface CombatEncounterView {
+  round_number: number
+  /** Null when the acting combatant is hidden from this viewer. */
+  current_actor: string | null
+  order: CombatOrderEntry[]
+  /** Counters the viewer may see, keyed by combatant name. */
+  combatants: Record<string, Record<string, unknown>>
+  pending_reaction: PendingReactionView | null
+}
+
+/** Present only for the viewer the server authorised to answer the pending attack. */
+export interface CombatReactionOffer {
+  id: string
+  /** The defender this viewer answers for. */
+  actor: string
+  attacker: string
+  action: string
+  hit_count: number | null
+  choices: Array<{ id: string; label: string }>
+}
+
 export interface CombatSurface {
+  /** The combatant this viewer acts for now ("" when none). */
   actor: string
   actions: ActionOption[]
-  state: Record<string, unknown> | null
+  state: CombatEncounterView | null
+  end_turn?: { id: string; label: string }
+  reaction?: CombatReactionOffer
 }
 
 /** Engine-authored result, including the committed before/after delta. */
@@ -198,6 +261,9 @@ export interface ActionResultFrame {
     validation_failure: string | null
     hits: Array<Record<string, unknown>>
     shots_fired: number
+    mode?: string
+    /** Set while the hit waits for the defender's reaction (no damage yet). */
+    pending_reaction?: PendingReactionView | null
   } | null
   validation_failure: string | null
   labels?: {

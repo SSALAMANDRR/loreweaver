@@ -46,7 +46,7 @@ def test_hit_location_reverses_attack_roll_without_location_input():
 def test_range_modifier_is_pack_declared_and_out_of_range_rejects():
     pack, attacker, target, weapon, state = _scene()
     near = ActionRequest(attacker, target, weapon.instance_id, attack_roll=50, distance=2, damage_roll=7)
-    assert resolve_first_shot(near, combat_state=state, pack=pack).attack_target == 80
+    assert resolve_first_shot(near, combat_state=state, pack=pack).attack_target == 90  # BS 50 + Standard +10 + point blank +30
     distant = ActionRequest(attacker, target, weapon.instance_id, attack_roll=20, distance=500)
     before = copy.deepcopy(state)
     rejected = resolve_first_shot(distant, combat_state=state, pack=pack)
@@ -69,14 +69,16 @@ def test_dodge_uses_reaction_state_and_controls_damage(roll, damage):
     assert target.attributes["DAMAGE"] == damage
     assert state.combatants[target.name].reactions_remaining == 0
 
-    # The attacker still has one half action, but the defender has no reaction.
+    # The attacker still has one half action, but a second Standard Attack in the
+    # same turn is not a *different* half action (CH07_H019); reaction exhaustion
+    # itself is covered by test_second_reaction_in_same_round_is_rejected_*.
     second = ActionRequest(
         attacker, target, weapon.instance_id, attack_roll=23,
         reaction_type="dodge", reaction_roll=10,
     )
     before = copy.deepcopy(state)
     rejected = resolve_first_shot(second, combat_state=state, pack=pack)
-    assert rejected.validation_failure == "reaction is unavailable"
+    assert rejected.validation_failure == "action was already taken this turn"
     assert state == before
 
 
@@ -90,7 +92,7 @@ def test_half_aim_then_half_attack_consumes_whole_budget_and_bonus_once():
 
     shot = ActionRequest(attacker, target, weapon.instance_id, attack_roll=55, damage_roll=8)
     result = resolve_first_shot(shot, combat_state=state, pack=pack)
-    assert result.attack_target == 60 and result.success
+    assert result.attack_target == 70 and result.success  # BS 50 + Standard +10 + half Aim +10
     apply_state_delta(shot, result, combat_state=state, pack=pack)
     assert state.combatants[attacker.name].action_budget == 0
     assert state.combatants[attacker.name].aim_bonus == 0
@@ -109,7 +111,7 @@ def test_full_aim_persists_until_next_turn_attack():
     transition = resolve_turn_transition(state, next_actor="attacker", round_number=2, pack=pack)
     apply_combat_state_delta(state, transition)
     shot = ActionRequest(attacker, target, weapon.instance_id, attack_roll=65, damage_roll=8)
-    assert resolve_first_shot(shot, combat_state=state, pack=pack).attack_target == 70
+    assert resolve_first_shot(shot, combat_state=state, pack=pack).attack_target == 80  # BS 50 + Standard +10 + full Aim +20
 
 
 def test_reload_refills_clip_and_uses_full_action():
@@ -190,15 +192,21 @@ def test_multi_hit_reduces_armour_and_tb_independently_and_applies_atomically():
     assert target.attributes["DAMAGE"] == 9 and weapon.current_ammo == 17
 
 
-def test_two_half_attacks_accumulate_canonical_damage():
+def test_attacks_on_successive_turns_accumulate_canonical_damage():
     pack, attacker, target, weapon, state = _scene()
     request = ActionRequest(attacker, target, weapon.instance_id, attack_roll=23, damage_roll=10)
     for expected_damage in (3, 6):
+        if expected_damage == 6:
+            # Two Standard Attacks may not share one turn (CH07_H019): target's turn, then a new round.
+            apply_combat_state_delta(state, resolve_turn_transition(state, next_actor=target.name, pack=pack))
+            apply_combat_state_delta(
+                state, resolve_turn_transition(state, next_actor=attacker.name, pack=pack, round_number=2)
+            )
         result = resolve_first_shot(request, combat_state=state, pack=pack)
         assert result.state_delta.target_damage_after == expected_damage
         apply_state_delta(request, result, combat_state=state, pack=pack)
         assert target.attributes["DAMAGE"] == expected_damage
-    assert state.combatants[attacker.name].action_budget == 0
+    assert state.combatants[attacker.name].action_budget == 1
 
 
 def test_invalid_fixed_roll_rejects_without_mutation():
