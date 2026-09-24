@@ -279,5 +279,6 @@
   "kp_tools.subsystem.spend.insufficient": "❌ Cannot spend {points} {label}; only {available} remains",
   "kp_tools.subsystem.spend.invalid_points": "❌ {label} spend must be a positive whole number",
   "kp_tools.subsystem.spend.no_check": "❌ This character has no recorded skill check to adjust",
-  "kp_tools.subsystem.spend.no_session": "❌ There is no active session recording with a check to adjust"
+  "kp_tools.subsystem.spend.no_session": "❌ There is no active session recording with a check to adjust",
+  "kp_tools.dice.skill_check.combat_attack": "⚔️ An encounter is active: attacks with {skill} are resolved by the combat engine (hit, reactions, damage, defeat), not by a check. Ask the player to act through the combat controls; do not narrate a hit, a wound or a kill the engine has not reported. A combatant already out of the fight needs no roll to be finished off, searched or bound."
 }

@@ -18,7 +18,7 @@
   "combat.control.end_turn": "结束回合",
   "combat.manual.attack": "攻击掷骰",
   "combat.manual.reaction": "反应掷骰",
-  "combat.command.usage": "用法：.combat [status | start <NPC>[, ?<隐藏NPC>...] | end | hide <名字> | reveal <名字>]",
+  "combat.command.usage": "用法：.combat [status | start <NPC>[, ?<隐藏NPC>, +<友方NPC>...] | end | hide <名字> | reveal <名字>]",
   "combat.command.none": "当前没有进行中的战斗。",
   "combat.command.status": "战斗 — 第 {round} 轮，当前行动：{current}",
   "combat.command.order_line": "{index}. {name} — 先攻 {initiative}{marker}",
@@ -32,5 +32,7 @@
   "combat.command.start.system": "所有战斗者必须使用同一规则系统。",
   "combat.command.ended": "战斗已结束。",
   "combat.command.not_found": "没有名为 {name} 的守秘人控制战斗者。",
-  "combat.narration.prompt": "请用中文叙述一项已经结算并提交的桌面战斗行动。只描述故事中的后果。给出的掷骰、命中、反应、伤害、弹药和状态变化都是最终结果。不要发明或重新计算规则，也不要声称结果中没有的效果。可选的上下文（场景、行动顺序、战斗者的公开描述）是玩家能看到的内容；不要透露超出其范围的信息。攻击者或目标名字为空表示玩家看不到该战斗者：不要称呼或描述它。 当 `target_defeated` 为真时，引擎已让目标退出战斗：描写其倒下，但不要判定它是死亡还是仅失去战斗能力。 `roll_sources` 标明每次掷骰的来源：\"manual\" 表示玩家掷了实体骰子并输入了数值，\"server\" 表示由引擎掷骰。切勿声称标记为 manual 的掷骰由系统完成，也不要质疑输入的数值。"
+  "combat.narration.prompt": "请用中文叙述一项已经结算并提交的桌面战斗行动。只描述故事中的后果。给出的掷骰、命中、反应、伤害、弹药和状态变化都是最终结果。不要发明或重新计算规则，也不要声称结果中没有的效果。可选的上下文（场景、行动顺序、战斗者的公开描述）是玩家能看到的内容；不要透露超出其范围的信息。攻击者或目标名字为空表示玩家看不到该战斗者：不要称呼或描述它。 当 `target_defeated` 为真时，引擎已让目标退出战斗：描写其倒下，但不要判定它是死亡还是仅失去战斗能力。 `roll_sources` 标明每次掷骰的来源：\"manual\" 表示玩家掷了实体骰子并输入了数值，\"server\" 表示由引擎掷骰。切勿声称标记为 manual 的掷骰由系统完成，也不要质疑输入的数值。 当 `encounter_ended` 为真时，本次行动结束了战斗：已没有对手留在战斗中。请收束战斗场景；不要描写新的攻击，也不要让退出战斗者重新站起。",
+  "combat.command.start.defeated": "该 NPC 已退出战斗，不能加入新的遭遇。",
+  "combat.ended_notice": "战斗结束：已没有对手留在战斗中。"
 }

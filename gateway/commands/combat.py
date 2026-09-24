@@ -19,6 +19,7 @@ from gateway.commands.types import CommandCtx
 from gateway.turn import publish_state
 
 _HIDDEN_MARK = "?"
+_ALLY_MARK = "+"
 
 
 # Engine diagnostics a keeper can act on, by the fragment that identifies them.
@@ -26,6 +27,7 @@ _START_FAILURES = (
     ("at least two", "combat.command.start.too_few"),
     ("already active", "combat.command.start.active"),
     ("not keeper-controlled", "combat.command.start.not_npc"),
+    ("already defeated", "combat.command.start.defeated"),
     ("unavailable", "combat.command.start.unknown"),
     ("rulepack", "combat.command.start.system"),
 )
@@ -73,7 +75,7 @@ class CombatCommands:
         return "\n".join(lines)
 
     async def cmd_combat(self, ctx: CommandCtx) -> str:
-        """`.combat [status | start <npc>[, ?<hidden npc>…] | end | hide <name> | reveal <name>]`."""
+        """`.combat [status | start <npc>[, ?<hidden npc>, +<allied npc>…] | end | hide <name> | reveal <name>]`."""
         if not _is_keeper(ctx.raw_ctx):
             return ctx.fail(ctx.i18n.t("rooms.denied"))
         sub, _, rest = ctx.args.strip().partition(" ")
@@ -83,13 +85,25 @@ class CombatCommands:
         if sub in {"", "status"}:
             return await self._combat_order(ctx)
         if sub == "start":
-            names = [piece.strip() for piece in rest.split(",") if piece.strip()]
-            hidden = {name[len(_HIDDEN_MARK):].strip() for name in names if name.startswith(_HIDDEN_MARK)}
-            names = [name[len(_HIDDEN_MARK):].strip() if name.startswith(_HIDDEN_MARK) else name for name in names]
+            names: list[str] = []
+            hidden: set[str] = set()
+            allies: set[str] = set()
+            for piece in (piece.strip() for piece in rest.split(",")):
+                marks = set()
+                while piece and piece[0] in (_HIDDEN_MARK, _ALLY_MARK):
+                    marks.add(piece[0])
+                    piece = piece[1:].strip()
+                if not piece:
+                    continue
+                names.append(piece)
+                if _HIDDEN_MARK in marks:
+                    hidden.add(piece)
+                if _ALLY_MARK in marks:
+                    allies.add(piece)
             if not names:
                 return ctx.fail(ctx.i18n.t("combat.command.usage"))
             try:
-                await start_room_encounter(ctx.services, agent_ctx, names, hidden=hidden)
+                await start_room_encounter(ctx.services, agent_ctx, names, hidden=hidden, allies=allies)
             except CombatValidationError as exc:
                 return ctx.fail(_start_failure(ctx, str(exc)))
         elif sub == "end":

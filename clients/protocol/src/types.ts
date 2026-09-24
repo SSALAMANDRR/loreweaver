@@ -7,7 +7,7 @@ import type { CreationCatalog, CreationState, CharacterReadinessState, Character
 // card listing (`list_pack_cards` → `pack_cards`), the structured lane behind every
 // "import from installed pack" picker. 2.3 adds each listed card's `kind`, so a picker
 // can send the right import verb. A 2.0/2.1 client ignores all of it.
-export const PROTOCOL_VERSION = "2.8" as const
+export const PROTOCOL_VERSION = "2.9" as const
 
 export const FrameType = {
   Join: "join",
@@ -299,6 +299,11 @@ export interface ActionResultFrame {
     roll_sources?: Record<string, RollSource>
   } | null
   validation_failure: string | null
+  /**
+   * v2.9: this committed action ended the encounter (one side has nobody left in the
+   * fight). `state.combat` is absent from the next state frame; clients close the panel.
+   */
+  encounter_ended?: boolean
   labels?: {
     action: string
     mode: string

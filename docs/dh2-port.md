@@ -193,6 +193,25 @@ Verified against the source tree on 2026-09-09:
   «Эффектная Гибель»), after which it gets no turns and is no longer a target.
   `state.combat` and every `action_result` are viewer-projected. The narration
   lane receives only the player-grade committed result.
+- Canonical attack details (2026-09-24 audit against the source PDF, Chapter VII
+  pp. 271–284): Short Burst (semi) and Long Burst (full) are **half** actions of the
+  Attack subtype, at +0 and −10 (Table 7-1, `CH07_H033`/`H048`/`H035`), so a burst
+  leaves a non-attack half action (Aim) in the same turn. Range bands: point blank
+  ≤ 2 m +30, short range *strictly under* half the weapon's range +10, long range
+  beyond double −10, extreme beyond triple −30, no shot beyond four times
+  (`CH07_H079`/`H090`/`H092`, Chapter V p. 175). The summed situational modifier is
+  capped at ±60 (`CH07_H059`). Further hits on one target follow Table 7-2
+  (`CH07_H043`); the table names limbs without a side, so the engine keeps the first
+  hit's side, else the right one (engine policy). One damage die per attack may take
+  the attack's degrees of success (`CH07_H064`); the engine applies it to the lowest
+  die whenever it raises the damage.
+- Protocol 2.9 ends an encounter by itself once one side (party / opposition; a
+  `+`-marked keeper NPC is a party ally) has nobody left in the fight, in the same
+  commit as the deciding action. The Keeper keeps a keeper-grade aftermath, and a
+  defeated NPC cannot join a new encounter. While a fight is open, the Keeper's
+  `skill_check` refuses checks on a pack attack value (`combat.yaml` `attack_value`),
+  and the Keeper prompt says the engine owns attacks, damage and defeat
+  (`docs/notes/encounter-end-and-keeper-boundary.md`).
 
 Relevant coverage includes `test_creation_layers.py`, `test_creation_flow.py`,
 `test_creation_finalization.py`, `test_advancement*.py`, `test_talent*.py`,
@@ -211,7 +230,12 @@ Stage 1 does **not** invent values or mechanics for areas whose source slice has
 - Insanity and Corruption tracks;
 - situational alternative-characteristic selection for skill checks;
 - action types beyond the Combat MVP half/full attack, Aim and Reload contract;
-- burst hit-location sequencing beyond automatic first-hit digit reversal;
+- weapon jams (Table 7-1 bursts jam on 94+, other attacks 96+; Reliable weapons
+  such as the lasgun only on 100, Chapter V p. 179) and the Full-action clear-jam
+  test; an unmodified jam roll is an ordinary miss/hit in the engine today;
+- helpless targets (automatic melee hit, damage rolled twice, p. 283);
+- point blank for weapons whose range is under 3 m (1 m less, p. 283) and the
+  point-blank ban when the two are in melee with each other;
 - advanced Dodge/Parry modifiers and weapon-quality effects;
 - reserve ammunition inventory and reload logistics beyond clip refill;
 - righteous fury and critical-effect tables;
@@ -221,9 +245,8 @@ Stage 1 does **not** invent values or mechanics for areas whose source slice has
   (optional GM simplification in `CH07_H011`), mid-fight joins and GM reordering;
 - "must be aware of the attack" for Evasion (`CH07_H029`) — a GM judgment the
   engine cannot observe; the defender's controller decides by declining;
-- attack-action modifiers other than Standard Attack's +10 (bursts, Aim across a
-  weapon switch — `CH07_H021` says "the next attack" while the engine binds Aim to
-  the aimed weapon);
+- Aim across a weapon switch — `CH07_H021` says "the next attack" while the engine
+  binds Aim to the aimed weapon;
 - Dodge against multiple hits (`CH07_H030`): "each degree of success cancels one
   *additional* hit" is ambiguous against the current one-hit-per-degree contract
   and awaits errata/FAQ confirmation;
@@ -233,10 +256,13 @@ Stage 1 does **not** invent values or mechanics for areas whose source slice has
   the Инфектор Штамма autogun (`O/3/–`) contradicts the catalog autogun (`CH05_H078`);
 - Critical Effects (Tables 7-7…): PCs, Elite and Master NPCs past their Wounds
   keep acting until those tables exist; the engine never declares them dead;
-- automatic encounter end: combatants have controllers but no sides/factions.
-- semi-auto fire (`ranged_attack.semi`) is declared as a full action (`action_cost: 2`);
-  live play flagged this as wrong. It is an open action-economy item to verify against
-  the Short Burst section (`CH07_H048`) and fix on its own, not with transport changes.
+- Righteous Fury (a natural 10 on a damage die, p. 280): no confirmation roll or
+  Critical Effect; the source's "low-level NPCs simply die" is therefore not applied
+  either — Troops still leave the fight through Critical Damage only;
+- damage entered as physical dice (attack and reaction rolls only; damage is rolled
+  by the server in the same step as the reaction);
+- the degrees-of-success die substitution is always taken when it helps: with
+  Righteous Fury unimplemented there is no case where keeping the lower die pays.
 
 The Divination table also requires sourced Table 8-15 data before every possible
 new character can finish creation. Do not bypass that dependency by rerolling.

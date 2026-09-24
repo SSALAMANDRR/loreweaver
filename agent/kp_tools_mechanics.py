@@ -126,6 +126,17 @@ async def _resolve_actor_identity(
     return (matched_name, False) if matched_name else (actor_name, True)
 
 
+
+async def _encounter_owns_attack(services: Services, ctx: AgentCtx, pack: object, canonical: str) -> bool:
+    from core.combat import COMBAT_STATE_KEY, attack_values
+
+    try:
+        if canonical not in attack_values(pack):
+            return False
+    except Exception:
+        return False
+    return bool(await services.store.state_get(ctx.chat_key, COMBAT_STATE_KEY))
+
 class CharacterTools:
     """AI-KP tools for creating, inspecting and mutating player character sheets."""
 
@@ -735,6 +746,10 @@ class DiceTools:
             check = resolver.check
 
             canonical = pack.resolve_skill(skill_name) or skill_name.strip()
+            if await _encounter_owns_attack(self.services, ctx, pack, canonical):
+                # An attack during an open encounter is resolved by the combat engine
+                # (hit, reactions, damage, defeat); a bare check would bypass all of it.
+                return i18n.t("kp_tools.dice.skill_check.combat_attack", skill=pack.display_name(canonical, ctx.locale))
             if not is_npc and not has_check_value(character, pack, canonical):
                 # Unknown name (no alias, not on the sheet): refuse the roll
                 # instead of running a degenerate target-0 check where a

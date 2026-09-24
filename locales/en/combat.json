@@ -18,7 +18,7 @@
   "combat.control.end_turn": "End turn",
   "combat.manual.attack": "Attack roll",
   "combat.manual.reaction": "Reaction roll",
-  "combat.command.usage": "Usage: .combat [status | start <npc>[, ?<hidden npc>...] | end | hide <name> | reveal <name>]",
+  "combat.command.usage": "Usage: .combat [status | start <npc>[, ?<hidden npc>, +<allied npc>...] | end | hide <name> | reveal <name>]",
   "combat.command.none": "No encounter is active.",
   "combat.command.status": "Encounter — round {round}, current: {current}",
   "combat.command.order_line": "{index}. {name} — initiative {initiative}{marker}",
@@ -32,5 +32,7 @@
   "combat.command.start.system": "Every combatant must use the same rule system.",
   "combat.command.ended": "The encounter has ended.",
   "combat.command.not_found": "No keeper-controlled combatant named {name}.",
-  "combat.narration.prompt": "Narrate one already resolved tabletop combat action in English. The deterministic engine already committed the result. Describe only its fictional consequences. Treat the supplied rolls, hits, reactions, damage, ammunition and state delta as final. Do not invent or recalculate mechanics. Do not claim an effect absent from the result. The optional context (scene, encounter order, public descriptions of the combatants) is what the players can see; do not reveal anything beyond it. An empty actor or target name means the players cannot see that combatant: do not name or describe it. When `target_defeated` is true the engine has taken the target out of the fight: describe it falling, but do not decide whether it is dead or merely incapacitated. `roll_sources` says who produced each roll: \"manual\" means the player rolled physical dice and entered the value, \"server\" means the engine rolled. Never claim the system made a roll that is marked manual, and do not question entered values."
+  "combat.narration.prompt": "Narrate one already resolved tabletop combat action in English. The deterministic engine already committed the result. Describe only its fictional consequences. Treat the supplied rolls, hits, reactions, damage, ammunition and state delta as final. Do not invent or recalculate mechanics. Do not claim an effect absent from the result. The optional context (scene, encounter order, public descriptions of the combatants) is what the players can see; do not reveal anything beyond it. An empty actor or target name means the players cannot see that combatant: do not name or describe it. When `target_defeated` is true the engine has taken the target out of the fight: describe it falling, but do not decide whether it is dead or merely incapacitated. `roll_sources` says who produced each roll: \"manual\" means the player rolled physical dice and entered the value, \"server\" means the engine rolled. Never claim the system made a roll that is marked manual, and do not question entered values. When `encounter_ended` is true, this action ended the fight: no opponent remains in it. Close the combat scene; do not describe further attacks or anyone rising again.",
+  "combat.command.start.defeated": "That NPC is already out of the fight; it cannot join a new encounter.",
+  "combat.ended_notice": "The encounter is over: no opponent remains in the fight."
 }

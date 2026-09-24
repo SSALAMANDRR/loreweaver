@@ -153,7 +153,8 @@ def test_reload_rejects_insufficient_full_action_budget():
 
 @pytest.mark.parametrize(
     ("mode", "roll", "shots", "hits", "budget"),
-    [("single", 20, 1, 1, 1), ("semi", 20, 3, 2, 0), ("full", 10, 10, 4, 0)],
+    # Short and Long Burst are half actions (CH07_H048, CH07_H035): one half action remains.
+    [("single", 20, 1, 1, 1), ("semi", 20, 3, 2, 1), ("full", 10, 10, 4, 1)],
 )
 def test_rate_of_fire_spends_ammo_and_resolves_each_hit(mode, roll, shots, hits, budget):
     pack, attacker, target, weapon, state = _scene()

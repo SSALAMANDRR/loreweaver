@@ -279,5 +279,6 @@
   "kp_tools.subsystem.spend.insufficient": "❌ 无法消耗 {points} 点{label}；当前仅剩 {available} 点",
   "kp_tools.subsystem.spend.invalid_points": "❌ {label}消耗点数必须是正整数",
   "kp_tools.subsystem.spend.no_check": "❌ 该角色没有可调整的已记录技能检定",
-  "kp_tools.subsystem.spend.no_session": "❌ 当前没有包含可调整检定的活动团录"
+  "kp_tools.subsystem.spend.no_session": "❌ 当前没有包含可调整检定的活动团录",
+  "kp_tools.dice.skill_check.combat_attack": "⚔️ 战斗遭遇进行中：使用 {skill} 的攻击由战斗引擎结算（命中、反应、伤害、击倒），不能用检定代替。请让玩家通过战斗操作行动；不要叙述引擎未报告的命中、伤势或击杀。已退出战斗的对象无需掷骰即可被补刀、搜身或捆绑。"
 }

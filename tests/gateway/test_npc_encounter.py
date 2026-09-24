@@ -74,7 +74,7 @@ async def test_npc_create_refuses_players_bad_profiles_and_name_clashes_without_
     assert await npc_records.find_npc_by_name(services.documents, CHAT, "Ada") is None
 
 
-_CONTROLLER = {"Ada": PLAYER, "Bea": BYSTANDER, "Ratgut": KEEPER}
+_CONTROLLER = {"Ada": PLAYER, "Bea": BYSTANDER, "Ratgut": KEEPER, "Sneak": KEEPER}
 
 
 async def _advance_to(services, actor, tag):
@@ -93,7 +93,9 @@ async def _advance_to(services, actor, tag):
 async def test_created_npc_fights_both_ways_and_a_defeated_troop_leaves_the_turn_order():
     services, router, ada = await _room()
     await router.dispatch(KEEPER, ".npc create hive_scum | Ratgut")
-    await start_room_encounter(services, KEEPER, ["Ratgut"])
+    # A second opponent keeps the fight open after Ratgut falls (the last one ends it).
+    await router.dispatch(KEEPER, ".npc create hive_scum | Sneak")
+    await start_room_encounter(services, KEEPER, ["Ratgut", "Sneak"])
     assert (await load_encounter(services, CHAT)).combatants["Ratgut"].controller == "keeper"
 
     # The NPC attacks the player on its own turn; the player declines.
@@ -142,11 +144,11 @@ async def test_created_npc_fights_both_ways_and_a_defeated_troop_leaves_the_turn
     assert all("Ratgut" not in action["targets"] for action in surface["actions"])
     assert next(entry for entry in surface["state"]["order"] if entry["name"] == "Ratgut")["defeated"] is True
     seen = []
-    for step in range(4):
+    for step in range(5):
         current = (await load_encounter(services, CHAT)).current_actor
         seen.append(current)
         assert (await resolve_action(services, _CONTROLLER[current], {"id": f"lap-{step}", "actor": current, "action": END_TURN_ACTION}))["ok"]
-    assert "Ratgut" not in seen and {"Ada", "Bea"} <= set(seen)
+    assert "Ratgut" not in seen and {"Ada", "Bea", "Sneak"} <= set(seen)
 
 
 async def test_other_players_never_see_the_npc_sheet_values():

@@ -8,13 +8,14 @@ import websockets
 from agent import npc as npc_records
 from agent.services import build_services
 from core.character_manager import CharacterSheet
-from core.combat import COMBAT_STATE_KEY, END_TURN_ACTION, REACTION_ACTION
+from core.combat import COMBAT_AFTERMATH_KEY, COMBAT_STATE_KEY, END_TURN_ACTION, REACTION_ACTION
 from core.item_model import ItemInstance, load_item_catalog
 from core.rulepacks import load_rulepack
 from gateway.combat_actions import load_encounter
 from gateway.session import SessionSource
 from infra.config import Settings
 from infra.embeddings import FakeEmbeddings
+from infra.i18n import get_i18n
 from infra.llm import FakeLLM, assistant_text
 from net.keystore import Keystore, member_id_for_key
 from net.tui_server import TuiServer
@@ -267,13 +268,13 @@ async def test_players_cannot_start_an_encounter():
         await server.close()
 
 
-async def test_protocol_version_advertised_is_2_8():
+async def test_protocol_version_advertised_is_2_9():
     services, server, url, keys, chat_key, ada, seen = await _room()
     try:
         async with websockets.connect(url) as ws:
             await ws.send(json.dumps({"type": "join", "key": keys["p1"]}))
             welcome = await _recv(ws)
-            assert welcome["protocol"] == "2.8"
+            assert welcome["protocol"] == "2.9"
     finally:
         await server.close()
 
@@ -318,19 +319,28 @@ async def test_profile_npc_defeat_survives_failed_narration_and_reconnect():
         public = await _result_for(sockets["p2"], "fall")
         assert public["ok"] and public["result"]["target_defeated"] is True
         assert public["result"]["state_delta"]["target_damage_after"] is None  # NPC counter stays private
-        # The room lock orders the next request after the (failing) narration attempt.
+        # Scum was the only opponent: the deciding commit also ended the encounter.
+        assert public["encounter_ended"] is True
+        # The panel-less state goes out first, then the room-wide notice.
+        await _state_where(sockets["p2"], lambda frame: not _has_encounter(frame))
+        notice = await _recv_until(sockets["p2"], "system")
+        assert notice["text"] == get_i18n("en").t("combat.ended_notice")
+        assert await load_encounter(services, chat_key) is None
+        aftermath = json.loads(await services.store.state_get(chat_key, COMBAT_AFTERMATH_KEY))
+        assert {entry["name"]: entry["defeated"] for entry in aftermath["combatants"]}["Scum"] is True
+        # The room lock orders the next request after the (failing) narration attempt;
+        # with the fight over, a late turn pass is refused instead of looping one PC.
         await sockets["p1"].send(json.dumps({"type": "action_request", "id": "end", "actor": "Ada", "action": END_TURN_ACTION}))
-        assert (await _result_for(sockets["p1"], "end"))["ok"]
+        assert (await _result_for(sockets["p1"], "end"))["ok"] is False
         assert len(seen) == 1
-        assert (await load_encounter(services, chat_key)).combatants["Scum"].defeated is True
+        assert json.loads(seen[0][0][1]["content"])["context"]["encounter_ended"] is True
         assert record.stat_char == "Scum"
 
         await sockets.pop("p2").close()
         ws, state = await _rejoin(url, keys["p2"])
         sockets["p2"] = ws
-        entry = next(item for item in state["combat"]["state"]["order"] if item["name"] == "Scum")
-        assert entry["defeated"] is True and "Scum" not in state["combat"]["state"]["combatants"]
-        assert state["combat"]["state"]["current_actor"] != "Scum"
+        assert not _has_encounter(state)  # no panel after reconnect either
+        assert (await services.documents.get(chat_key, "sheet", "Scum")).data["attributes"]["DAMAGE"] > 9
     finally:
         await _close(sockets, server)
 

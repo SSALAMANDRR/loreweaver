@@ -18,10 +18,12 @@ from agent.context import AgentCtx
 from agent.services import Services
 from core.character_manager import CharacterSheet, character_resources
 from core.combat import (
+    COMBAT_AFTERMATH_KEY,
     COMBAT_STATE_KEY,
     DECLINE_REACTION,
     END_TURN_ACTION,
     KEEPER_CONTROLLER,
+    PARTY_SIDE,
     REACTION_ACTION,
     ActionRequest,
     CombatantState,
@@ -37,6 +39,8 @@ from core.combat import (
     apply_reaction_delta,
     apply_state_delta,
     combat_state_from_json,
+    combatant_side,
+    encounter_concluded,
     project_combat_result,
     project_combat_state,
     resolve_aim,
@@ -45,6 +49,7 @@ from core.combat import (
     resolve_melee_attack,
     resolve_reaction,
     resolve_reload,
+    sheet_is_defeated,
     start_encounter,
     viewer_controls,
 )
@@ -69,6 +74,16 @@ ROOM_FACETS = (
         state_keys=frozenset({COMBAT_STATE_KEY}),
         storages=frozenset({STORAGE_ROOM_STATE}),
     ),
+    # How the last encounter ended (who fought, who was taken out), kept after the
+    # encounter row is gone so the Keeper narrates the aftermath from engine facts.
+    # Replaced by the next encounter's end; cleared when a new encounter starts.
+    RoomStateFacet(
+        name="combat_aftermath",
+        owner=__name__,
+        reset_scope="story",
+        state_keys=frozenset({COMBAT_AFTERMATH_KEY}),
+        storages=frozenset({STORAGE_ROOM_STATE}),
+    ),
 )
 
 
@@ -81,6 +96,36 @@ def _load(raw: str | None) -> tuple[CombatState | None, list[str]]:
 
 def _dump(state: CombatState, recent: list[str]) -> str:
     return json.dumps({**asdict(state), "recent_requests": recent[-_RECENT_REQUEST_LIMIT:]}, ensure_ascii=False)
+
+
+def _aftermath(state: CombatState, reason: str) -> str:
+    return json.dumps(
+        {
+            "reason": reason,
+            "round_number": state.round_number,
+            "combatants": [
+                {
+                    "name": name,
+                    "side": combatant_side(state.combatants[name]),
+                    "keeper_controlled": state.combatants[name].controller == KEEPER_CONTROLLER,
+                    "hidden": state.combatants[name].hidden,
+                    "defeated": state.combatants[name].defeated,
+                }
+                for name in state.order or list(state.combatants)
+            ],
+            "state": asdict(state),
+        },
+        ensure_ascii=False,
+    )
+
+
+def load_aftermath(raw: str | None) -> tuple[dict[str, Any] | None, CombatState | None]:
+    """The stored aftermath and the final encounter state it closed, if any."""
+    if not raw:
+        return None, None
+    data = json.loads(raw)
+    final = data.get("state")
+    return data, combat_state_from_json(json.dumps(final)) if isinstance(final, dict) else None
 
 
 def combat_viewer(ctx: AgentCtx) -> Viewer:
@@ -386,10 +431,20 @@ async def _commit(
     state: CombatState,
     recent: list[str],
     sheets: list[tuple[dict[str, Any], CharacterSheet]],
-) -> None:
+) -> bool:
+    """Commit one resolved action; returns True when it concluded the encounter, in which
+    case the encounter row is deleted and the aftermath written in the same transaction."""
     old_roster = await services.store.state_get(chat_key, "party_roster")
     roster = json.loads(old_roster) if old_roster else {}
-    state_rows = [(COMBAT_STATE_KEY, raw_state, _dump(state, recent))]
+    concluded = encounter_concluded(state)
+    if concluded:
+        old_aftermath = await services.store.state_get(chat_key, COMBAT_AFTERMATH_KEY)
+        state_rows = [
+            (COMBAT_STATE_KEY, raw_state, None),
+            (COMBAT_AFTERMATH_KEY, old_aftermath, _aftermath(state, "concluded")),
+        ]
+    else:
+        state_rows = [(COMBAT_STATE_KEY, raw_state, _dump(state, recent))]
     touched = [sheet for _row, sheet in sheets if sheet.name in roster]
     for sheet in touched:
         roster[sheet.name]["resources"] = character_resources(sheet)
@@ -398,6 +453,7 @@ async def _commit(
     documents = [_sheet_update(row, sheet) for row, sheet in sheets]
     if not await services.store.commit_combat_rows(chat_key, documents=documents, state=state_rows):
         raise CombatValidationError("stale combat state")
+    return concluded
 
 
 def _labels(pack: Any, result: CombatResult, locale: str) -> dict[str, Any]:
@@ -520,7 +576,7 @@ async def resolve_action(services: Services, ctx: AgentCtx, frame: dict[str, Any
         else:
             raise CombatValidationError("unknown action")
 
-        await _commit(services, ctx.chat_key, raw_state=raw_state, state=state, recent=recent, sheets=sheets)
+        ended = await _commit(services, ctx.chat_key, raw_state=raw_state, state=state, recent=recent, sheets=sheets)
         return {
             "type": "action_result",
             "id": request_id,
@@ -528,6 +584,7 @@ async def resolve_action(services: Services, ctx: AgentCtx, frame: dict[str, Any
             "result": asdict(result),
             "labels": _labels(pack, result, ctx.locale),
             "validation_failure": None,
+            "encounter_ended": ended,
         }
     except (CombatValidationError, ValueError, KeyError, TypeError) as exc:
         await _trace_rejection(services, ctx, frame, exc)
@@ -592,6 +649,9 @@ async def project_action_frame(
     if not frame.get("ok") or not isinstance(frame.get("result"), dict):
         return dict(frame)
     state, _recent = _load(await services.store.state_get(chat_key, COMBAT_STATE_KEY))
+    if state is None and frame.get("encounter_ended"):
+        # The action ended the encounter: project against the state it closed.
+        _data, state = load_aftermath(await services.store.state_get(chat_key, COMBAT_AFTERMATH_KEY))
     if state is None:
         # Fail closed: with no encounter to consult, mask both sides as keeper-side.
         names = {str(frame["result"].get(key) or "") for key in ("actor", "target")} - {""}
@@ -601,11 +661,12 @@ async def project_action_frame(
 
 def should_narrate(frame: dict[str, Any]) -> bool:
     """Only a fully resolved pack action is narrated; turn passes and open reaction
-    windows have no fictional outcome yet."""
+    windows have no fictional outcome yet. A turn pass that ended the encounter is
+    narrated too: the fight's close is a fictional outcome."""
     result = frame.get("result") if frame.get("ok") else None
     return (
         isinstance(result, dict)
-        and result.get("action") != END_TURN_ACTION
+        and (result.get("action") != END_TURN_ACTION or bool(frame.get("encounter_ended")))
         and result.get("pending_reaction") is None
     )
 
@@ -620,14 +681,21 @@ def _is_player_owner(owner: str) -> bool:
 
 
 async def start_room_encounter(
-    services: Services, ctx: AgentCtx, npc_names: list[str], *, hidden: set[str] | None = None
+    services: Services,
+    ctx: AgentCtx,
+    npc_names: list[str],
+    *,
+    hidden: set[str] | None = None,
+    allies: set[str] | None = None,
 ) -> tuple[CombatState, list[Any]]:
     """Open an encounter with every player character of the room's system plus the named
     keeper-side combatants, rolling initiative server-side. Raises CombatValidationError.
 
     A character sheet owned by a member is a player character whoever that member is:
     a keeper playing their own PC (solo play) fights under their own member id, exactly
-    like any player. Keeper-side combatants are only sheets no member owns (`npc:`).
+    like any player. Keeper-side combatants are only sheets no member owns (`npc:`);
+    they oppose the party unless named in `allies`. An NPC a defeat rule already took
+    out of a previous fight is refused.
     """
     from agent import npc as npc_records
 
@@ -644,8 +712,13 @@ async def start_room_encounter(
             raise CombatValidationError(f"combatant {sheet_name!r} is not keeper-controlled")  # i18n-exempt: internal validation diagnostic
         if sheet.name in rows:
             continue
+        if sheet_is_defeated(load_rulepack(sheet.system), sheet):
+            raise CombatValidationError(f"combatant {sheet_name!r} is already defeated")  # i18n-exempt: internal validation diagnostic
         rows[sheet.name] = row
-        members.append(EncounterCombatant(sheet, KEEPER_CONTROLLER, sheet.name in (hidden or set())))
+        members.append(EncounterCombatant(
+            sheet, KEEPER_CONTROLLER, requested in (hidden or set()) or sheet.name in (hidden or set()),
+            side=PARTY_SIDE if requested in (allies or set()) or sheet.name in (allies or set()) else "",
+        ))
     npc_system = members[0].sheet.system if members else ""
     for member in await services.characters.get_party_roster(ctx.chat_key):
         name = str(member.get("name") or "")
@@ -668,6 +741,9 @@ async def start_room_encounter(
     old_roster = await services.store.state_get(ctx.chat_key, "party_roster")
     roster = json.loads(old_roster) if old_roster else {}
     state_rows = [(COMBAT_STATE_KEY, None, _dump(state, []))]
+    old_aftermath = await services.store.state_get(ctx.chat_key, COMBAT_AFTERMATH_KEY)
+    if old_aftermath is not None:
+        state_rows.append((COMBAT_AFTERMATH_KEY, old_aftermath, None))
     npc_in_roster = [member.sheet.name for member in members if member.controller == KEEPER_CONTROLLER and member.sheet.name in roster]
     if npc_in_roster:
         for name in npc_in_roster:
@@ -679,11 +755,19 @@ async def start_room_encounter(
 
 
 async def end_room_encounter(services: Services, ctx: AgentCtx) -> bool:
+    """The keeper closes the encounter; its outcome is kept as the aftermath."""
     raw_state = await services.store.state_get(ctx.chat_key, COMBAT_STATE_KEY)
     if not raw_state:
         return False
+    state, _recent = _load(raw_state)
+    old_aftermath = await services.store.state_get(ctx.chat_key, COMBAT_AFTERMATH_KEY)
     return await services.store.commit_combat_rows(
-        ctx.chat_key, documents=[], state=[(COMBAT_STATE_KEY, raw_state, None)]
+        ctx.chat_key,
+        documents=[],
+        state=[
+            (COMBAT_STATE_KEY, raw_state, None),
+            (COMBAT_AFTERMATH_KEY, old_aftermath, _aftermath(state, "ended_by_keeper")),
+        ],
     )
 
 

@@ -61,8 +61,8 @@ def _lasgun(sheet):
     return next(item.instance_id for item in sheet.equipment if item.profile_id == "lasgun")
 
 
-def _shoot_and_decline(pack, pc, target, state, damage=5):
-    request = ActionRequest(pc, target, _lasgun(pc), attack_roll=5)
+def _shoot_and_decline(pack, pc, target, state, damage=5, attack_roll=5):
+    request = ActionRequest(pc, target, _lasgun(pc), attack_roll=attack_roll)
     pending = resolve_first_shot(request, combat_state=state, pack=pack, reaction_window=True, pending_id="p")
     apply_state_delta(request, pending, combat_state=state, pack=pack)
     final = resolve_reaction(
@@ -86,8 +86,9 @@ def test_critical_damage_takes_a_troop_out_of_the_fight_in_the_same_delta():
 
 def test_damage_up_to_wounds_is_not_critical_and_does_not_defeat():
     pack, pc, scum, state = _scene(npc_damage=0)
-    final = _shoot_and_decline(pack, pc, scum, state, damage=4)  # rolled total 4 - TB2 = 2 <= Wounds 9
-    assert final.final_damage == 2 and final.target_defeated is False
+    # Roll 99 vs 110: 2 degrees, below the die face 3, so no substitution: 6 - TB 2 = 4.
+    final = _shoot_and_decline(pack, pc, scum, state, damage=6, attack_roll=99)
+    assert final.final_damage == 4 and final.target_defeated is False
 
 
 def test_a_player_character_above_wounds_is_never_auto_defeated():

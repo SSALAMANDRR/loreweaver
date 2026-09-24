@@ -1,6 +1,22 @@
 *English · [中文](protocol.zh.md)*
 
-# loreweaver networked TUI — wire protocol 2.8
+# loreweaver networked TUI — wire protocol 2.9
+
+## Encounter end (v2.9)
+
+An encounter ends by itself when at most one side still has a combatant in the
+fight and no attack is waiting on a reaction. Each combatant fights for the party (a
+member-controlled character) or the opposition (keeper-controlled); the keeper names
+a keeper-controlled ally with a `+` mark: `.combat start <npc>, +<allied npc>`.
+Marks combine (`?+<npc>` is a hidden ally). The deciding commit removes the encounter
+in the same transaction, and its `action_result` carries `encounter_ended: true`.
+(That frame is projected against the state it closed.) The next state frame has no
+`state.combat`, so clients close the combat panel. The room gets a `system` notice, and
+the narration of the deciding action closes the scene. Later `action_request`s are
+refused. The server keeps a keeper-only aftermath (who fought, who was taken out) for
+the Keeper, and `.combat start` refuses an NPC that a defeat rule already took out.
+Keeper-grade `combatants` counters gain `side` (`"party" | "opposition"`); player
+projections are unchanged. `.combat end` still closes a fight by hand.
 
 ## Physical dice in combat (v2.8)
 
@@ -139,7 +155,7 @@ This is the open, versioned wire protocol between a loreweaver server (started v
 (deterministic core + AI Keeper) is unaffected by transport; the transport-neutral
 session logic is `net.session.SessionCore`, and this document is the language-agnostic seam.
 
-Frames are JSON objects, each shaped `{"type": ...}`. Protocol version: `"2.8"`. The same
+Frames are JSON objects, each shaped `{"type": ...}`. Protocol version: `"2.9"`. The same
 frames + `join` handshake ride the transport; only the carrier + its framing differ:
 
 - **Iroh** (the transport `--serve` starts) — peer-to-peer QUIC. The server
@@ -245,7 +261,7 @@ connections receive `error too_many_connections` before `join` is read.
 ## Server → Client
 
 - `welcome` — sent once, on a successful `join`:
-  `{type:"welcome", protocol:"2.8", features:["media","audio", "imagegen"?, "demo"?, "update"?], room:string, you:{id:string,name:string,role:"player"|"keeper"}, locale:string, server:string, version?:string}`
+  `{type:"welcome", protocol:"2.9", features:["media","audio", "imagegen"?, "demo"?, "update"?], room:string, you:{id:string,name:string,role:"player"|"keeper"}, locale:string, server:string, version?:string}`
   `version` is the server's own release version (compare it to the client's to detect a mismatch). The `"update"` feature appears only for a keeper on a server whose operator configured a self-update command, and gates the `admin_update_server` control.
   `demo` means the server is using its offline sample Keeper, vector support is
   enabled, and this specific Keeper room was empty when the server checked it.

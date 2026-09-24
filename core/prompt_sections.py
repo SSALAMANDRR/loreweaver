@@ -335,7 +335,12 @@ async def inject_game_state_prompt(ctx: Any, character_manager: Any, store: Stor
 
         # -- engine encounter (keeper view: hidden combatants included) -----
         try:
-            from core.combat import COMBAT_STATE_KEY, KEEPER_CONTROLLER, combat_state_from_json
+            from core.combat import (
+                COMBAT_AFTERMATH_KEY,
+                COMBAT_STATE_KEY,
+                KEEPER_CONTROLLER,
+                combat_state_from_json,
+            )
 
             raw_encounter = await store.state_get(chat_key, COMBAT_STATE_KEY)
             if raw_encounter:
@@ -371,6 +376,28 @@ async def inject_game_state_prompt(ctx: Any, character_manager: Any, store: Stor
                             attacker=pending.get("attacker", ""),
                         )
                     )
+                lines.append(i18n.t("prompt.game_state.encounter_contract"))
+            else:
+                # The last encounter's engine outcome, until the next one opens.
+                raw_aftermath = await store.state_get(chat_key, COMBAT_AFTERMATH_KEY)
+                aftermath = json.loads(raw_aftermath) if raw_aftermath else None
+                if isinstance(aftermath, dict) and aftermath.get("combatants"):
+                    lines.append("")
+                    lines.append(i18n.t("prompt.game_state.aftermath_header", round=aftermath.get("round_number", "")))
+                    for entry in aftermath["combatants"]:
+                        lines.append(
+                            i18n.t(
+                                "prompt.game_state.aftermath_line",
+                                name=entry.get("name", ""),
+                                kind=i18n.t("prompt.game_state.encounter_npc") if entry.get("keeper_controlled") else "",
+                                outcome=i18n.t(
+                                    "prompt.game_state.aftermath_defeated"
+                                    if entry.get("defeated")
+                                    else "prompt.game_state.aftermath_standing"
+                                ),
+                            )
+                        )
+                    lines.append(i18n.t("prompt.game_state.aftermath_contract"))
         except Exception:
             pass
 

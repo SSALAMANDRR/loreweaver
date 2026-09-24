@@ -38,5 +38,6 @@ action" to the GM.
 
 A defeated combatant is skipped by `resolve_end_turn`, is not offered as a target,
 and is refused as one. Nothing else leaves the encounter: PCs and Elite/Master
-NPCs past their Wounds keep acting until the Critical Effect tables exist, and the
-encounter does not end itself, because combatants have controllers but no sides.
+NPCs past their Wounds keep acting until the Critical Effect tables exist. Since protocol 2.9 the
+encounter ends itself once one side has nobody left in the fight
+(`encounter-end-and-keeper-boundary.md`).

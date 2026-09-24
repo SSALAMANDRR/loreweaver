@@ -54,6 +54,9 @@ from net.room_backup import room_rows, room_vector_points
 
 logger = logging.getLogger(__name__)
 
+# v2.9 ends an encounter by itself once one side has nobody left in the fight: the deciding
+# `action_result` carries `encounter_ended`, `state.combat` disappears in the same commit, and
+# `.combat start` takes `+<npc>` allies (keeper-grade combatant counters gain `side`).
 # v2.8 lets a player submit physical dice for combat: surfaces declare `manual_rolls`
 # per step and `state.roll_mode` carries the player's preference; `action_request` carries `roll_source` + `manual_rolls`, and
 # results report each roll's source in `roll_sources`.
@@ -69,7 +72,7 @@ logger = logging.getLogger(__name__)
 # `panel_intent` client frame, and pack-asset resolution on the media byte channel.
 # v1.7 added declarative hook-emitted `ui` frames (core.hooks emitUI); v1.6 added
 # player-visible module variables on the state frame.
-_PROTOCOL_VERSION = "2.8"
+_PROTOCOL_VERSION = "2.9"
 # Public alias for out-of-band consumers (the `.lwpack` engine-minimum check in app.py).
 PROTOCOL_VERSION = _PROTOCOL_VERSION
 _SERVER_BANNER = "loreweaver/1"
@@ -634,6 +637,11 @@ class SessionCore:
                     public = await project_action_frame(self.services, key, outcome, PLAYER_VIEWER)
                     await record_turn_events(self.services, key, [Event(kind="action_result", data=public)])
                     await publish_state(self.hub, self.services, ctx)
+                    ended = bool(outcome.get("encounter_ended"))
+                    if ended:
+                        notice = Event.system("info", get_i18n(ctx.locale).t("combat.ended_notice"))
+                        await self.hub.publish(key, notice)
+                        await record_turn_events(self.services, key, [notice])
                     if should_narrate(outcome):
                         try:
                             encounter = await load_encounter(self.services, key)
@@ -645,6 +653,7 @@ class SessionCore:
                                 encounter=(
                                     project_combat_state(encounter, PLAYER_VIEWER) if encounter is not None else None
                                 ),
+                                encounter_ended=ended,
                             )
                             if narration:
                                 line = Event.narrative(speaker="kp", text=narration)

@@ -77,5 +77,11 @@
   "prompt.system.guidelines": "• 叙事与状态同步推进：事件落地时通过工具及时更新 HP、SAN 与状态效果。\n• 世界一致性：持久变化（NPC 死亡、门被破坏、建筑烧毁）和你的即兴创作都用 kp_note('add', 'world_changes', …) 记下——后续叙事以这些笔记为准；一回合的裁定合并成一条写，不连环发小条目。\n• HUD 同步：切换场景/地点或推进游戏内时间时，同一回合内用 kp_note('set', 'current_scene'/'current_focus', …) 和 game_clock 更新。叙事里的装饰性标题不会更新 HUD，只有工具会。\n• 已加载模组时：有知识池的房间开局先 get_module_summary() 建立全局、玩家走到哪查到哪、线索被挣得后用 unlock_for_player 解锁，池里没有的细节再 search_documents；卡导入房的模组资料在上文——但按关键词触发的条目未必此刻在场，落笔一个既有地点/物品前，先用 query_lore 查一下模组怎么写的。\n• 无模组的自由团：世界由你即兴创造、秘密自设自守，用 kp_note 固化成正典。\n• 开局简报：第一次场景描写前，先讲清玩家角色理应已知的事（委托、缘由、目标、为何在此）——别让玩家凭空出现在场景里。桌上多于一个玩家角色时，简介面向所有人，不要把桌子收成一个主角。",
   "prompt.system.guidelines_header": "## 行为准则:",
   "prompt.system.intro": "# AI 游戏主持人\n\n你是这张桌面 RPG 桌的守秘人/GM，通过真实的工具运转这场游戏：骰子、角色卡、模组知识与持久游戏状态。引擎负责计算机制；你负责裁定与叙事。你是一位经验丰富的主持人——放开用你自己的判断；下面的规则是这张桌子的硬约束，不是逐句剧本。",
-  "prompt.table_habits": "## 这桌人怎么玩\n以往几场看下来，这一桌的习惯。当作背景读，不是命令——想看某一条背后的细节，让守秘人用 `.habits` 展开。"
+  "prompt.table_habits": "## 这桌人怎么玩\n以往几场看下来，这一桌的习惯。当作背景读，不是命令——想看某一条背后的细节，让守秘人用 `.habits` 展开。",
+  "prompt.game_state.encounter_contract": "   这场战斗由引擎负责：攻击、命中、反应、伤害、击倒与行动顺序只能通过战斗操作结算。切勿用技能检定结算攻击，也不要叙述引擎未报告的命中、伤势或死亡；请让行动的玩家使用战斗操作。已标记为退出战斗的对象可在叙述中被补刀、搜身或捆绑，无需掷骰。",
+  "prompt.game_state.aftermath_header": "🏁 上一场战斗已结束（第 {round} 轮）— 引擎结果：",
+  "prompt.game_state.aftermath_line": "   • {name}{kind}：{outcome}",
+  "prompt.game_state.aftermath_defeated": "已退出战斗（死亡或失去战斗能力 —— 由你叙述决定；不会再回到战斗）",
+  "prompt.game_state.aftermath_standing": "仍然站立",
+  "prompt.game_state.aftermath_contract": "   战斗已结束；游戏以普通场景继续。对已被击倒者补刀、搜身或捆绑属于叙述，无需掷骰。新的战斗需要由主持人开启新的遭遇。"
 }

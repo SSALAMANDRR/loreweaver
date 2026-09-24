@@ -449,3 +449,133 @@ def test_dh2_marks_the_roll_off_repeat_as_an_implementation_choice_not_canon():
     assert data["initiative"]["tie_breakers"][-1] == {"roll": "1d10", "repeat_on_tie": True}
     assert "initiative_roll_off_repeat" in data["provenance"]["implementation_choices"]
     assert data["provenance"]["standard_attack_modifier"] == "CH07_H051"
+
+
+# --- burst action economy (CH07_H033 Table 7-1, CH07_H048, CH07_H035, CH07_H019) -------------
+
+
+@pytest.mark.parametrize("mode", ["semi", "full"])
+def test_a_burst_is_a_half_attack_action_leaving_a_non_attack_half_action(mode):
+    from gateway.combat_actions import available_actions
+
+    pack = load_rulepack("dh2")
+    catalog = load_item_catalog(pack)
+    pc, npc = _pc(pack, catalog), _npc(pack, catalog)
+    pc.equipment.append(ItemInstance.create(catalog.resolve("autogun"), state={"current_ammo": 30}))
+    state, _ = start_encounter(
+        [EncounterCombatant(pc, "u1"), EncounterCombatant(npc, KEEPER_CONTROLLER)], pack=pack, dice=ScriptedDice([9, 3]),
+    )
+    autogun = _weapon(pc, "autogun").instance_id
+    npc.attributes["Dodge"] = 0
+    state.combatants["Cultist"].reactions_remaining = 0
+    burst = ActionRequest(pc, npc, autogun, mode=mode, attack_roll=99)
+    result = resolve_first_shot(burst, combat_state=state, pack=pack)
+    assert result.ok and result.state_delta.action_cost == 1
+    apply_state_delta(burst, result, combat_state=state, pack=pack)
+    assert state.combatants["Ada"].action_budget == 1
+    offered = {action["id"] for action in available_actions(pack, pc, ["Cultist"], "en", state)}
+    # One Attack action per turn: no second attack of any kind, but Aim (Concentration) remains.
+    assert "ranged_attack" not in offered and "melee_attack" not in offered
+    assert "aim" in offered
+
+
+def test_aim_then_burst_in_one_turn_and_aim_after_an_attack_carries_to_the_next_attack():
+    pack = load_rulepack("dh2")
+    catalog = load_item_catalog(pack)
+    pc, npc = _pc(pack, catalog), _npc(pack, catalog)
+    pc.equipment.append(ItemInstance.create(catalog.resolve("autogun"), state={"current_ammo": 30}))
+    state, _ = start_encounter(
+        [EncounterCombatant(pc, "u1"), EncounterCombatant(npc, KEEPER_CONTROLLER)], pack=pack, dice=ScriptedDice([9, 3]),
+    )
+    state.combatants["Cultist"].reactions_remaining = 0
+    autogun = _weapon(pc, "autogun").instance_id
+    aim = ActionRequest(pc, None, autogun, mode="half")
+    apply_state_delta(aim, resolve_aim(aim, combat_state=state, pack=pack), combat_state=state, pack=pack)
+    burst = resolve_first_shot(ActionRequest(pc, npc, autogun, mode="semi", attack_roll=99), combat_state=state, pack=pack)
+    assert burst.ok and burst.attack_target == 50 + 10  # BS 50, Short Burst +0, half Aim +10
+
+    # Attack first, then Aim with the other half action: the bonus waits for the next attack.
+    pack, pc2 = pack, _pc(pack, catalog, name="Bo")
+    state2, _ = start_encounter(
+        [EncounterCombatant(pc2, "u2"), EncounterCombatant(npc, KEEPER_CONTROLLER)], pack=pack, dice=ScriptedDice([9, 3]),
+    )
+    state2.combatants["Cultist"].reactions_remaining = 0
+    lasgun = _weapon(pc2, "lasgun").instance_id
+    shot = ActionRequest(pc2, npc, lasgun, attack_roll=99)
+    apply_state_delta(shot, resolve_first_shot(shot, combat_state=state2, pack=pack), combat_state=state2, pack=pack)
+    aim2 = ActionRequest(pc2, None, lasgun, mode="half")
+    apply_state_delta(aim2, resolve_aim(aim2, combat_state=state2, pack=pack), combat_state=state2, pack=pack)
+    apply_combat_state_delta(state2, resolve_end_turn(state2, pack=pack))
+    apply_combat_state_delta(state2, resolve_end_turn(state2, pack=pack))
+    next_shot = resolve_first_shot(ActionRequest(pc2, npc, lasgun, attack_roll=99), combat_state=state2, pack=pack)
+    assert next_shot.attack_target == 50 + 10 + 10  # Standard +10, carried half Aim +10
+
+
+# --- canonical attack details (Глава VII с. 278-284; CH07_H043, CH07_H059, CH07_H064) --------
+
+
+def test_short_range_is_strictly_below_half_the_weapon_range():
+    pack, pc, npc, state, _ = _encounter()
+    lasgun = _weapon(pc, "lasgun").instance_id  # range 100 m
+    exactly_half = resolve_first_shot(ActionRequest(pc, npc, lasgun, attack_roll=99, distance=50), combat_state=state, pack=pack)
+    under_half = resolve_first_shot(ActionRequest(pc, npc, lasgun, attack_roll=99, distance=49), combat_state=state, pack=pack)
+    assert (exactly_half.attack_target, under_half.attack_target) == (60, 70)
+
+
+def test_total_situational_modifier_is_capped_at_the_pack_limit(monkeypatch):
+    import core.combat as combat
+
+    pack, pc, npc, state, _ = _encounter()
+    data = dict(combat._combat_data(pack))
+    data["modifier_limit"] = 25
+    monkeypatch.setattr(combat, "_combat_data", lambda _pack: data)
+    shot = resolve_first_shot(ActionRequest(pc, npc, _weapon(pc, "lasgun").instance_id, attack_roll=99, distance=1), combat_state=state, pack=pack)
+    assert shot.attack_target == 50 + 25  # +10 Standard +30 point blank, capped at +25
+
+
+@pytest.mark.parametrize(
+    ("first_roll", "expected"),
+    [
+        # hits 1..6 on one target; the 6th uses the table's "further hits" column
+        (1, ["head", "head", "right_arm", "body", "right_arm", "body"]),          # 01 -> 10 head
+        (51, ["right_arm", "right_arm", "body", "head", "body", "right_arm"]),    # 51 -> 15 right arm
+        (72, ["left_arm", "left_arm", "body", "head", "body", "left_arm"]),      # 72 -> 27 left arm
+        (4, ["body", "body", "right_arm", "head", "right_arm", "body"]),          # 04 -> 40 body
+        (97, ["right_leg", "right_leg", "body", "right_arm", "head", "body"]),    # 97 -> 79 right leg
+    ],
+)
+def test_additional_hits_follow_table_7_2(first_roll, expected):
+    from core.combat import _additional_hit_location, _location, _location_roll
+
+    pack = load_rulepack("dh2")
+    first = _location(pack, _location_roll(pack, first_roll))
+    assert [_additional_hit_location(pack, first, index) for index in range(6)] == expected
+    assert _additional_hit_location(pack, first, 11) == expected[-1]
+
+
+def test_a_burst_spreads_hits_by_table_7_2_not_on_one_location():
+    pack = load_rulepack("dh2")
+    catalog = load_item_catalog(pack)
+    pc, npc = _pc(pack, catalog), _npc(pack, catalog)
+    pc.attributes["BS"] = 100
+    pc.equipment.append(ItemInstance.create(catalog.resolve("autogun"), state={"current_ammo": 30}))
+    state, _ = start_encounter([EncounterCombatant(pc, "u1"), EncounterCombatant(npc, KEEPER_CONTROLLER)], pack=pack, dice=ScriptedDice([9, 3]))
+    state.combatants["Cultist"].reactions_remaining = 0
+    burst = resolve_first_shot(
+        ActionRequest(pc, npc, _weapon(pc, "autogun").instance_id, mode="full", attack_roll=4),
+        combat_state=state, pack=pack, dice=DiceRoller(),
+    )
+    assert len(burst.hits) >= 5  # 04 vs 90: nine degrees, one hit per degree
+    assert [hit.location for hit in burst.hits][:6] == ["body", "body", "right_arm", "head", "right_arm", "body"]
+    assert sum(hit.degrees_substituted for hit in burst.hits) <= 1
+
+
+def test_one_damage_die_takes_the_degrees_of_success_when_that_is_higher():
+    pack, pc, npc, state, _ = _encounter()
+    state.combatants["Cultist"].reactions_remaining = 0
+    pc.attributes["BS"] = 100
+    # Roll 5 vs 110: 11 degrees. Supplied lasgun totals 4 and (for the second hit) none.
+    shot = resolve_first_shot(ActionRequest(pc, npc, _weapon(pc, "lasgun").instance_id, attack_roll=5, damage_roll=4), combat_state=state, pack=pack)
+    assert shot.hits[0].raw_damage == 4 - 1 + 11 and shot.hits[0].degrees_substituted
+    low = resolve_first_shot(ActionRequest(pc, npc, _weapon(pc, "lasgun").instance_id, attack_roll=99, damage_roll=13), combat_state=state, pack=pack)
+    assert low.hits[0].raw_damage == 13 and not low.hits[0].degrees_substituted  # 2 degrees < die 10

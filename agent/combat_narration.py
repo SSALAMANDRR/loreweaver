@@ -18,7 +18,11 @@ from infra.model_call_trace import lane_scope
 
 
 async def _scene_context(
-    services: Services, chat_key: str, result: dict[str, Any], encounter: dict[str, Any] | None
+    services: Services,
+    chat_key: str,
+    result: dict[str, Any],
+    encounter: dict[str, Any] | None,
+    encounter_ended: bool = False,
 ) -> dict[str, Any]:
     from agent.npc import NPC_DOC_TYPE, list_npcs
 
@@ -34,6 +38,8 @@ async def _scene_context(
             "round": encounter.get("round_number"),
             "order": [entry.get("name") for entry in encounter.get("order") or []],
         }
+    if encounter_ended:
+        context["encounter_ended"] = True
     involved = {str(result.get("actor") or ""), str(result.get("target") or "")} - {""}
     try:
         people = []
@@ -69,9 +75,10 @@ async def narrate_combat(
     locale: str,
     *,
     encounter: dict[str, Any] | None = None,
+    encounter_ended: bool = False,
 ) -> str:
     """`outcome` and `encounter` must already be player-grade projections."""
-    context = await _scene_context(services, chat_key, outcome, encounter)
+    context = await _scene_context(services, chat_key, outcome, encounter, encounter_ended)
     with lane_scope("combat_narration", chat_key=chat_key):
         response = await services.llm.chat(_messages(outcome, context, locale), tools=None)
     return (response.content or "").strip()

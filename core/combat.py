@@ -23,9 +23,16 @@ from core.yaml_safety import safe_load_no_aliases
 
 # The room_state row holding the serialized encounter (written by gateway.combat_actions).
 COMBAT_STATE_KEY = "combat_state"
+# The keeper-grade room_state row recording how the last encounter ended (written by
+# gateway.combat_actions when the encounter row is deleted; read by the Keeper prompt).
+COMBAT_AFTERMATH_KEY = "combat_aftermath"
 # The opaque controller token for keeper-run combatants; any other non-empty
 # controller is the member id that owns the combatant's sheet.
 KEEPER_CONTROLLER = "keeper"
+# The two sides of an encounter. A combatant fights for the party unless the keeper
+# runs it, and a keeper-run ally joins the party side explicitly (`EncounterCombatant.side`).
+PARTY_SIDE = "party"
+OPPOSITION_SIDE = "opposition"
 DECLINE_REACTION = "decline"
 # Engine lifecycle action ids; a rulepack may not declare actions with these names.
 END_TURN_ACTION = "end_turn"
@@ -54,6 +61,9 @@ class CombatantState:
     hidden: bool = False
     # Out of the fight by a pack-declared defeat rule: no further turns, not a target.
     defeated: bool = False
+    # PARTY_SIDE / OPPOSITION_SIDE; "" (encounters stored before sides existed) means
+    # the side follows the controller, see `combatant_side`.
+    side: str = ""
 
 
 @dataclass
@@ -194,6 +204,8 @@ class HitResult:
     armour_after_penetration: int
     tb_reduction: int
     final_damage: int
+    # This hit's damage die was replaced by the attack's degrees of success.
+    degrees_substituted: bool = False
 
 
 def combat_state_from_json(raw: str) -> CombatState:
@@ -316,6 +328,17 @@ def _defeated_by(pack: Any, target: Any, damage_before: int, damage_after: int) 
     if damage_after <= sheet_value(target, pack, contract.wounds_value):
         return False
     return any(_sheet_field(target, pack, rule.field) == rule.equals for rule in contract.rules)
+
+
+def sheet_is_defeated(pack: Any, sheet: Any) -> bool:
+    """Whether the sheet's stored damage already puts it out of the fight under a declared
+    defeat rule (so a defeated NPC cannot be brought back into a new encounter)."""
+    contract = _defeat_contract(pack)
+    if contract is None:
+        return False
+    if sheet_value(sheet, pack, contract.damage_value) <= sheet_value(sheet, pack, contract.wounds_value):
+        return False
+    return any(_sheet_field(sheet, pack, rule.field) == rule.equals for rule in contract.rules)
 
 
 def _action_contract(pack: Any, action: str, mode: str) -> _ActionContract:
@@ -467,6 +490,8 @@ class EncounterCombatant:
     sheet: Any
     controller: str
     hidden: bool = False
+    # "" = by controller: keeper-run combatants oppose the party, member-run ones are it.
+    side: str = ""
 
 
 def _initiative_contract(pack: Any) -> list[Mapping[str, Any]]:
@@ -567,7 +592,23 @@ def start_encounter(
         combatant.initiative = entry.total
         combatant.controller = member.controller
         combatant.hidden = member.hidden
+        combatant.side = member.side or combatant_side(combatant)
     return state, ordered
+
+
+def combatant_side(combatant: CombatantState) -> str:
+    if combatant.side:
+        return combatant.side
+    return OPPOSITION_SIDE if combatant.controller == KEEPER_CONTROLLER else PARTY_SIDE
+
+
+def encounter_concluded(state: CombatState) -> bool:
+    """True once at most one side still has a combatant in the fight and no attack is
+    waiting on a reaction: nobody is left to fight, so the encounter is over."""
+    if state.pending_reaction is not None:
+        return False
+    standing = {combatant_side(combatant) for combatant in state.combatants.values() if not combatant.defeated}
+    return len(standing) <= 1
 
 
 def resolve_end_turn(state: CombatState, *, pack: Any) -> StateDelta:
@@ -682,6 +723,8 @@ def _range_modifier(pack: Any, distance: int | None, profile: Any) -> int:
     for band in _combat_data(pack).get("range_bands", []):
         if "max_distance" in band and distance <= int(band["max_distance"]):
             return _required_int(band["modifier"], where="range modifier", minimum=-100)
+        if "below_multiple" in band and ratio < float(band["below_multiple"]):
+            return _required_int(band["modifier"], where="range modifier", minimum=-100)
         if "max_multiple" in band and ratio <= float(band["max_multiple"]):
             return _required_int(band["modifier"], where="range modifier", minimum=-100)
     raise CombatValidationError("target is out of weapon range")  # i18n-exempt: internal validation diagnostic
@@ -726,6 +769,48 @@ def _reaction_choices(
     ]
 
 
+def _limited_modifier(pack: Any, total: int) -> int:
+    """Clamp a summed situational modifier to the pack's declared limit, if any."""
+    raw = _combat_data(pack).get("modifier_limit")
+    if raw is None:
+        return total
+    limit = _required_int(raw, where="modifier_limit", minimum=0)
+    return max(-limit, min(limit, total))
+
+
+def _additional_hit_location(pack: Any, first: str, index: int) -> str:
+    """Location of hit ``index`` (0-based) on the same target from the pack's sequence."""
+    raw = _combat_data(pack).get("additional_hit_locations")
+    if index == 0 or not isinstance(raw, Mapping):
+        return first
+    groups = raw.get("groups") or {}
+    sequence = (raw.get("sequence") or {}).get(groups.get(first))
+    if not sequence:
+        raise CombatValidationError("additional hit locations are not declared for this location")  # i18n-exempt: internal validation diagnostic
+    group = str(sequence[min(index, len(sequence)) - 1])
+    sides = (raw.get("sides") or {}).get(group)
+    if not sides:
+        return group
+    return first if first in sides else str(sides[0])
+
+
+def _damage_faces(expression: str, rolled_total: int | None, roller: DiceRoller) -> tuple[int, list[int] | None]:
+    """A hit's damage roll as (total, natural die faces); faces are None when a supplied
+    total cannot be split back into its dice."""
+    from core.manual_roll import ManualRollError, parse_manual_dice_expression
+
+    if rolled_total is None:
+        result = roller.roll_expression(expression)
+        return int(result.total), [int(face) for face in result.rolls]
+    try:
+        spec = parse_manual_dice_expression(expression)
+    except ManualRollError:
+        return rolled_total, None
+    if spec.count != 1 or spec.keep:
+        return rolled_total, None
+    return rolled_total, [rolled_total - spec.modifier]
+
+
 def _damage_hits(
     *,
     pack: Any,
@@ -740,6 +825,7 @@ def _damage_hits(
     damage_rolls: tuple[int, ...] = (),
     location_rolls: tuple[int, ...] = (),
     damage_roll: int | None = None,
+    degrees: int | None = None,
 ) -> list[HitResult]:
     if profile.damage_expression is None or profile.penetration is None:
         raise CombatValidationError("weapon damage profile is incomplete")
@@ -747,16 +833,31 @@ def _damage_hits(
         raise CombatValidationError("damage rolls do not match hit count")  # i18n-exempt: internal validation diagnostic
     if location_rolls and len(location_rolls) != hit_count:
         raise CombatValidationError("location rolls do not match hit count")  # i18n-exempt: internal validation diagnostic
+    expression = _dice_expression(profile.damage_expression)
+    rolled: list[tuple[int, list[int] | None]] = []
+    for index in range(hit_count):
+        supplied = damage_rolls[index] if damage_rolls else damage_roll if index == 0 and damage_roll is not None else None
+        if supplied is not None and (isinstance(supplied, bool) or not isinstance(supplied, int) or supplied < 0):
+            raise CombatValidationError("damage roll must be non-negative")  # i18n-exempt: internal validation diagnostic
+        rolled.append(_damage_faces(expression, supplied, roller))
+    # One damage die across the whole attack may take the attack's degrees of success.
+    substituted: int | None = None
+    if degrees and _combat_data(pack).get("damage_degrees_substitution") is True:
+        candidates = [(min(faces), index) for index, (_total, faces) in enumerate(rolled) if faces]
+        if candidates:
+            lowest, index = min(candidates)
+            if degrees > lowest:
+                total, faces = rolled[index]
+                rolled[index] = (total + degrees - lowest, faces)
+                substituted = index
     hits: list[HitResult] = []
     for index in range(hit_count):
-        hit_location = _location(pack, location_rolls[index]) if location_rolls else location
-        hit_damage = (
-            damage_rolls[index] if damage_rolls else
-            damage_roll if index == 0 and damage_roll is not None else
-            roller.roll_expression(_dice_expression(profile.damage_expression)).total
+        hit_location = (
+            _location(pack, location_rolls[index]) if location_rolls
+            else _additional_hit_location(pack, location, index) if location is not None
+            else location
         )
-        if isinstance(hit_damage, bool) or not isinstance(hit_damage, int) or hit_damage < 0:
-            raise CombatValidationError("damage roll must be non-negative")  # i18n-exempt: internal validation diagnostic
+        hit_damage = rolled[index][0]
         if action_contract.damage_bonus_value is not None:
             hit_damage += sheet_value(attacker, pack, action_contract.damage_bonus_value)
         hit_armour = 0
@@ -769,8 +870,28 @@ def _damage_hits(
         reduced_armour = max(0, hit_armour - hit_penetration)
         hit_tb = sheet_value(target, pack, action_contract.toughness_value)
         hit_final = max(0, int(hit_damage) - reduced_armour - hit_tb)
-        hits.append(HitResult(hit_location, hit_damage, hit_penetration, hit_armour, reduced_armour, hit_tb, hit_final))
+        hits.append(HitResult(
+            hit_location, hit_damage, hit_penetration, hit_armour, reduced_armour, hit_tb, hit_final,
+            degrees_substituted=index == substituted,
+        ))
     return hits
+
+
+def attack_values(pack: Any) -> frozenset[str]:
+    """The sheet values the pack's combat actions attack with (empty without combat data).
+
+    While an encounter is open, a check against one of these IS an attack, so it belongs
+    to the encounter's action lane rather than to a free-standing check."""
+    if not _data_path(pack).is_file():
+        return frozenset()
+    values: set[str] = set()
+    actions = _combat_data(pack).get("actions")
+    for action in actions.values() if isinstance(actions, Mapping) else ():
+        modes = action.get("modes") if isinstance(action, Mapping) else None
+        for mode in modes.values() if isinstance(modes, Mapping) else ():
+            if isinstance(mode, Mapping) and isinstance(mode.get("attack_value"), str):
+                values.add(mode["attack_value"])
+    return frozenset(values)
 
 
 def accepts_distance(action: str) -> bool:
@@ -868,9 +989,8 @@ def _resolve_attack(
         reaction_cost = 0
         ammo_before = weapon.current_ammo if action_contract.consumes_ammo else None
         aim_bonus = actor_state.aim_bonus if actor_state.aimed_weapon_instance_id == weapon.instance_id else 0
-        target_value = (
-            sheet_value(request.actor, pack, action_contract.attack_value)
-            + action_contract.attack_modifier + range_modifier + aim_bonus
+        target_value = sheet_value(request.actor, pack, action_contract.attack_value) + _limited_modifier(
+            pack, action_contract.attack_modifier + range_modifier + aim_bonus
         )
         state_after.combatants[actor_name].aim_bonus = 0
         state_after.combatants[actor_name].aimed_weapon_instance_id = None
@@ -982,6 +1102,7 @@ def _resolve_attack(
                     attacker=request.actor, target=request.target, hit_count=hit_count,
                     location=location, roller=roller, damage_rolls=request.damage_rolls,
                     location_rolls=request.location_rolls, damage_roll=request.damage_roll,
+                    degrees=degrees,
                 )
                 first = hits[0]
                 raw_damage, penetration, armour, armour_after, tb = (
@@ -1334,6 +1455,7 @@ def resolve_reaction(
             pack=pack, catalog=catalog, profile=profile, action_contract=action_contract,
             attacker=attacker, target=defender, hit_count=hit_count, location=pending.get("location"),
             roller=roller, damage_rolls=damage_rolls, location_rolls=location_rolls,
+            degrees=pending.get("degrees"),
         ) if hit_count else []
         final = sum(hit.final_damage for hit in hits)
         target_defeated = _defeated_by(pack, defender, damage_before, damage_before + final)

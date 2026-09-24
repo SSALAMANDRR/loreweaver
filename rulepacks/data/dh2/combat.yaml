@@ -52,6 +52,23 @@ defeat:
     # of action (which of the two is left to the GM's narration).
     - {when: critical_damage, field: NpcType, equals: troop, status: defeated}
 margin_unit: degrees
+# The summed situational bonus/penalty on a test never exceeds +60 / -60.
+modifier_limit: 60
+# The attacker may replace one damage die (across all hits) with the attack's degrees
+# of success; the engine takes that option whenever it raises the damage.
+damage_degrees_substitution: true
+# Table 7-2: locations of the 2nd, 3rd, 4th, 5th hit on one target by the first hit's
+# group; the last entry repeats for every further hit.
+additional_hit_locations:
+  groups: {head: head, right_arm: arm, left_arm: arm, body: body, right_leg: leg, left_leg: leg}
+  sequence:
+    head: [head, arm, body, arm, body]
+    arm: [arm, body, head, body, arm]
+    body: [body, arm, head, arm, body]
+    leg: [leg, body, arm, head, body]
+  # The table names a limb without a side. Engine policy (not in the source): the
+  # side of the first hit when it was a limb, otherwise the first listed side.
+  sides: {arm: [right_arm, left_arm], leg: [right_leg, left_leg]}
 actions:
   ranged_attack:
     modes:
@@ -68,8 +85,10 @@ actions:
         reactions:
           basic: {cost: 1, spend_on: attempt}
           dodge: {cost: 1, spend_on: attempt, target_value: DodgeTarget, hits_avoided_per_degree: 1}
+      # Short Burst: half action, Attack/Ranged, Challenging (+0).
       semi:
-        action_cost: 2
+        action_cost: 1
+        subtypes: [attack]
         attack_value: BS
         damage_value: Damage
         toughness_value: TB
@@ -78,8 +97,10 @@ actions:
         extra_hit_degrees: 2
         reactions:
           dodge: {cost: 1, spend_on: attempt, target_value: DodgeTarget, hits_avoided_per_degree: 1}
+      # Long Burst: half action, Attack/Ranged, -10.
       full:
-        action_cost: 2
+        action_cost: 1
+        subtypes: [attack]
         attack_value: BS
         damage_value: Damage
         toughness_value: TB
@@ -132,11 +153,16 @@ provenance:
   critical_damage: [CH07_H098, CH07_H099, CH07_H101]
   # Chapter XII is not in the Neon corpus; cited from the source PDF page.
   troop_defeat: "Глава XII, с. 469, «Типы НИП — Рядовой: Эффектная Гибель»"
-  range_modifiers: null
-  fire_mode_modifiers: null
-  extra_hit_locations: null
+  range_modifiers: [CH07_H092, CH07_H090, CH07_H079, "Глава VII с. 283 «Дальняя дистанция»", "Глава V с. 175 «Дальн.»: не более 4× дальности"]
+  modifier_limit: CH07_H059
+  damage_degrees_substitution: CH07_H064
+  fire_mode_modifiers: [CH07_H048, CH07_H035]
+  burst_action_type: [CH07_H033, CH07_H048, CH07_H035]
+  extra_hit_locations: CH07_H043
   # Engine policies for edge cases the source leaves unspecified — NOT canon.
   implementation_choices:
+    additional_hit_side: "Table 7-2 names Arm/Leg without a side; the engine uses the first hit's side when it was a limb, otherwise the right side."
+    damage_degrees_substitution: "The source makes it the attacker's option; with Righteous Fury unimplemented it never lowers damage, so the engine always applies it to the lowest die when it helps."
     initiative_roll_off_repeat: "CH07_H011 orders a 1d10 roll-off for equal initiative and Agility but is silent on a repeated tie; the still-tied combatants roll again."
 hit_locations:
   - {max: 10, id: head}
@@ -146,9 +172,11 @@ hit_locations:
   - {max: 85, id: right_leg}
   - {max: 100, id: left_leg}
 hit_location_roll: reverse_digits
+# Point blank (<= 2 m) +30; Short range is strictly under half the weapon range (+10);
+# Long range beyond double (-10); Extreme beyond triple (-30); no shot beyond four times.
 range_bands:
   - {max_distance: 2, modifier: 30}
-  - {max_multiple: 0.5, modifier: 10}
+  - {below_multiple: 0.5, modifier: 10}
   - {max_multiple: 2, modifier: 0}
   - {max_multiple: 3, modifier: -10}
   - {max_multiple: 4, modifier: -30}
